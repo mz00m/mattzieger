@@ -35,11 +35,13 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
 
   const SPACING = 28;
   const DOT_BASE = 1.1;
-  const C = 180;
-  const DAMPING = 0.997;
+  const WAVE_SPEED = 120;
+  const FREQUENCY = 3.5;
+  const WAVELENGTH = WAVE_SPEED / FREQUENCY;
   const TWO_PI = Math.PI * 2;
 
   let letterMask = null;
+  let waves = [];
 
   function buildLetterMask() {
     const offscreen = document.createElement('canvas');
@@ -89,22 +91,15 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
     dots = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        dots.push({ x: ox + c * SPACING, y: oy + r * SPACING, z: 0, vz: 0 });
+        dots.push({ x: ox + c * SPACING, y: oy + r * SPACING, z: 0, prevZ: 0 });
       }
     }
     buildLetterMask();
   }
 
   function spawnWave(x, y) {
-    const radius = 60, amp = 12;
-    for (let i = 0; i < dots.length; i++) {
-      if (letterMask[i]) continue;
-      const dx = dots[i].x - x, dy = dots[i].y - y;
-      const d2 = dx * dx + dy * dy;
-      if (d2 < radius * radius) {
-        dots[i].vz += amp * Math.exp(-d2 / (radius * 12));
-      }
-    }
+    waves.push({ x, y, t0: performance.now() / 1000, amplitude: 10 });
+    if (waves.length > 12) waves.shift();
   }
 
   canvas.addEventListener('click', e => spawnWave(e.clientX, e.clientY));
@@ -118,43 +113,53 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
 
   function waveFrame(now) {
     now /= 1000;
-    const dt = Math.min(now - lastTime, 0.033);
     lastTime = now;
 
     ctx.fillStyle = '#0a0e1a';
     ctx.fillRect(0, 0, W, H);
 
-    const subSteps = 3;
-    const sdt = dt / subSteps;
-    const c2 = (C * C) / (SPACING * SPACING);
+    waves = waves.filter(w => (now - w.t0) < 10);
 
-    for (let s = 0; s < subSteps; s++) {
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const i = r * cols + c;
-          if (letterMask[i]) continue;
-          const z = dots[i].z;
-          const zL = c > 0 ? dots[i - 1].z : z;
-          const zR = c < cols - 1 ? dots[i + 1].z : z;
-          const zU = r > 0 ? dots[i - cols].z : z;
-          const zD = r < rows - 1 ? dots[i + cols].z : z;
-          dots[i].vz += c2 * (zL + zR + zU + zD - 4 * z) * sdt;
-          dots[i].vz *= DAMPING;
-        }
+    for (const dot of dots) {
+      dot.prevZ = dot.z;
+      let z = 0;
+
+      for (const wave of waves) {
+        const dx = dot.x - wave.x;
+        const dy = dot.y - wave.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        const elapsed = now - wave.t0;
+        const wavefront = elapsed * WAVE_SPEED;
+
+        if (dist > wavefront + WAVELENGTH * 0.5) continue;
+
+        const localT = elapsed - dist / WAVE_SPEED;
+        if (localT < 0) continue;
+
+        const spatialFalloff = 1 / Math.max(1, Math.sqrt(dist / 30));
+        const timeDamping = Math.exp(-localT * 1.6);
+        const envelope = wave.amplitude * spatialFalloff * timeDamping;
+        const edgeFade = Math.min(1, localT * FREQUENCY * 1.5);
+
+        z += envelope * edgeFade * Math.sin(TWO_PI * FREQUENCY * localT);
       }
-      for (let i = 0; i < dots.length; i++) {
-        if (letterMask[i]) { dots[i].z = 0; dots[i].vz = 0; continue; }
-        dots[i].z += dots[i].vz * sdt;
-      }
+
+      dot.z = z;
+    }
+
+    // Zero out letter-masked dots
+    for (let i = 0; i < dots.length; i++) {
+      if (letterMask[i]) dots[i].z = 0;
     }
 
     for (let i = 0; i < dots.length; i++) {
       if (letterMask[i]) continue;
       const dot = dots[i];
       const absZ = Math.abs(dot.z);
-      const size = DOT_BASE + absZ * 0.1;
-      const drawY = dot.y - dot.z * 0.5;
-      const intensity = Math.min(1, absZ / 10);
+      const size = DOT_BASE + absZ * 0.12;
+      const drawY = dot.y - dot.z * 0.6;
+      const intensity = Math.min(1, absZ / 12);
       const r = Math.round(30 + intensity * 100);
       const g = Math.round(55 + intensity * 180);
       const b = Math.round(90 + intensity * 165);
@@ -165,10 +170,10 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
       ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
       ctx.fill();
 
-      if (absZ > 3) {
+      if (absZ > 4) {
         ctx.beginPath();
-        ctx.arc(dot.x, drawY, size + absZ * 0.18, 0, TWO_PI);
-        ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, absZ / 10) * 0.12})`;
+        ctx.arc(dot.x, drawY, size + absZ * 0.2, 0, TWO_PI);
+        ctx.fillStyle = `rgba(${r},${g},${b},${intensity * 0.15})`;
         ctx.fill();
       }
     }
@@ -186,8 +191,8 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
           if (Math.abs(dr.z) >= threshold) {
             const lineAlpha = Math.min(0.25, (Math.abs(d.z) + Math.abs(dr.z)) / 80);
             ctx.beginPath();
-            ctx.moveTo(d.x, d.y - d.z * 0.5);
-            ctx.lineTo(dr.x, dr.y - dr.z * 0.5);
+            ctx.moveTo(d.x, d.y - d.z * 0.6);
+            ctx.lineTo(dr.x, dr.y - dr.z * 0.6);
             ctx.strokeStyle = `rgba(60,130,200,${lineAlpha})`;
             ctx.lineWidth = 0.5;
             ctx.stroke();
@@ -198,8 +203,8 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
           if (Math.abs(dd.z) >= threshold) {
             const lineAlpha = Math.min(0.25, (Math.abs(d.z) + Math.abs(dd.z)) / 80);
             ctx.beginPath();
-            ctx.moveTo(d.x, d.y - d.z * 0.5);
-            ctx.lineTo(dd.x, dd.y - dd.z * 0.5);
+            ctx.moveTo(d.x, d.y - d.z * 0.6);
+            ctx.lineTo(dd.x, dd.y - dd.z * 0.6);
             ctx.strokeStyle = `rgba(60,130,200,${lineAlpha})`;
             ctx.lineWidth = 0.5;
             ctx.stroke();
@@ -214,9 +219,6 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
   initWave();
   addEventListener('resize', initWave);
   requestAnimationFrame(waveFrame);
-
-  // Expose initWave for the Three.js resize handler
-  window._waveResize = initWave;
 })();
 </script>
 
