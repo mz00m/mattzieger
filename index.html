@@ -3,1186 +3,1019 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Matt Zieger — Interactive Blueprint</title>
+<title>Matt Zieger</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: #e8e0d0;
-    overflow: hidden;
-    font-family: 'Courier New', monospace;
-    cursor: crosshair;
-  }
-  canvas { display: block; width: 100vw; height: 100vh; }
-  #ui {
-    position: fixed;
-    bottom: 18px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: rgba(25, 55, 100, 0.4);
-    font-size: 9px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    pointer-events: none;
-    user-select: none;
-    text-align: center;
-  }
-  .btn {
-    position: fixed;
-    top: 18px;
-    background: none;
-    border: 1.5px solid rgba(25, 55, 100, 0.35);
-    color: rgba(25, 55, 100, 0.55);
-    font-family: 'Courier New', monospace;
-    font-size: 10px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    padding: 8px 18px;
-    cursor: pointer;
-    transition: all 0.3s;
-  }
-  .btn:hover {
-    background: rgba(25, 55, 100, 0.07);
-    border-color: rgba(25, 55, 100, 0.6);
-  }
-  #startBtn { right: 18px; }
-  #resetBtn { right: 130px; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#eae6dc;overflow:hidden;font-family:'Courier New',monospace;cursor:crosshair}
+canvas{display:block;width:100vw;height:100vh}
+#startBtn{position:fixed;top:16px;right:16px;background:none;border:1px solid rgba(30,55,95,0.3);
+color:rgba(30,55,95,0.5);font:10px/1 'Courier New',monospace;letter-spacing:3px;text-transform:uppercase;
+padding:8px 20px;cursor:pointer;transition:all .3s;z-index:10}
+#startBtn:hover{background:rgba(30,55,95,0.06);border-color:rgba(30,55,95,0.5)}
+#resetBtn{position:fixed;top:16px;right:130px;background:none;border:1px solid rgba(30,55,95,0.2);
+color:rgba(30,55,95,0.35);font:9px/1 'Courier New',monospace;letter-spacing:2px;text-transform:uppercase;
+padding:7px 14px;cursor:pointer;transition:all .3s;z-index:10}
+#resetBtn:hover{background:rgba(30,55,95,0.05)}
+#info{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);color:rgba(30,55,95,0.3);
+font:8px/1 'Courier New',monospace;letter-spacing:2px;text-transform:uppercase;pointer-events:none;user-select:none}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<button class="btn" id="startBtn">&#9654; START</button>
-<button class="btn" id="resetBtn">&#8634; RESET</button>
-<div id="ui">click start to begin the chain reaction &middot; drag objects to interact &middot; scroll to zoom</div>
-
+<button id="startBtn">&#9654; start</button>
+<button id="resetBtn">&#8634; reset</button>
+<div id="info">drag to interact &middot; scroll to zoom &middot; right-click pan</div>
 <script>
-// ══════════════════════════════════════════════════════════════
-//  MATTER.JS
-// ══════════════════════════════════════════════════════════════
-const { Engine, Bodies, Body, Composite, Constraint, Events, Mouse, MouseConstraint, Vector } = Matter;
+// ════════════════════════════════════════════════════════════════
+//  SETUP
+// ════════════════════════════════════════════════════════════════
+const {Engine,Bodies,Body,Composite,Constraint,Events,Mouse,MouseConstraint,Vector}=Matter;
+const C=document.getElementById('c'), X=C.getContext('2d');
+let W,H,dpr;
+function resize(){dpr=devicePixelRatio||1;W=innerWidth;H=innerHeight;C.width=W*dpr;C.height=H*dpr;X.setTransform(dpr,0,0,dpr,0,0)}
+resize(); addEventListener('resize',()=>{resize();if(mouse)mouse.pixelRatio=dpr});
 
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-let W, H, dpr;
+const engine=Engine.create({gravity:{x:0,y:0.9}});
+const world=engine.world;
+let camX=0,camY=0,zoom=1,tZoom=1,time=0;
+let balls=[],statics=[],dominoes=[],gears=[],pends=[],pegs=[],particles=[];
+let started=false,startBall=null,weightBody=null;
+let mouse=null,mConstraint=null;
 
-function resize() {
-  dpr = window.devicePixelRatio || 1;
-  W = window.innerWidth;
-  H = window.innerHeight;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+// ════════════════════════════════════════════════════════════════
+//  INK RENDERING SYSTEM — Dense pen-stroke aesthetic
+// ════════════════════════════════════════════════════════════════
+const I0='rgba(22,48,88,';   // darkest ink
+const I1='rgba(35,65,115,';  // medium ink
+const I2='rgba(50,85,140,';  // lighter ink
+const I3='rgba(70,105,160,'; // faint ink
+const I4='rgba(90,125,175,'; // very faint
+const IR='rgba(140,45,35,';  // red accent
+
+// Seeded random for consistent decorative elements
+function seeded(s){return function(){s=Math.sin(s*127.1+311.7)*43758.5453;return s-Math.floor(s)}}
+let rng=seeded(42);
+
+// ─── Hatching: the core of the blueprint look ───
+function hatch(ctx,pts,angle,spacing,alpha,lw){
+  // pts = polygon points [{x,y}], angle in radians, spacing in px
+  ctx.save();
+  ctx.beginPath();
+  for(let i=0;i<pts.length;i++){
+    if(i===0)ctx.moveTo(pts[i].x,pts[i].y);else ctx.lineTo(pts[i].x,pts[i].y);
+  }
+  ctx.closePath();ctx.clip();
+  // Find bounding box
+  let mnx=Infinity,mny=Infinity,mxx=-Infinity,mxy=-Infinity;
+  for(const p of pts){mnx=Math.min(mnx,p.x);mny=Math.min(mny,p.y);mxx=Math.max(mxx,p.x);mxy=Math.max(mxy,p.y)}
+  const cx=(mnx+mxx)/2,cy=(mny+mxy)/2;
+  const diag=Math.hypot(mxx-mnx,mxy-mny)+20;
+  const ca=Math.cos(angle),sa=Math.sin(angle);
+  ctx.beginPath();
+  for(let d=-diag;d<diag;d+=spacing){
+    ctx.moveTo(cx+ca*diag+sa*d, cy+sa*diag-ca*d);
+    ctx.lineTo(cx-ca*diag+sa*d, cy-sa*diag-ca*d);
+  }
+  ctx.strokeStyle=I1+(alpha||0.12)+')';
+  ctx.lineWidth=lw||0.4;
+  ctx.stroke();
+  ctx.restore();
 }
-resize();
-window.addEventListener('resize', () => {
-  resize();
-  if (mouse) mouse.pixelRatio = dpr;
-});
 
-// ── Colors ──
-const INK = 'rgba(20, 50, 95, ';
-const INK_L = 'rgba(40, 80, 140, ';
-const INK_D = 'rgba(30, 60, 110, ';
-const INK_F = 'rgba(25, 55, 100, ';
-const RED = 'rgba(160, 40, 30, ';
-const GREEN = 'rgba(30, 100, 60, ';
-const PAPER = '#e8e0d0';
+function crosshatch(ctx,pts,sp,a1,a2){
+  hatch(ctx,pts,a1||0.5,sp||5,a1===undefined?0.08:0.06);
+  hatch(ctx,pts,(a2===undefined?-0.8:a2),sp||5,0.05);
+}
 
-// ── Engine ──
-const engine = Engine.create({ gravity: { x: 0, y: 1.0 } });
-const world = engine.world;
+// ─── 3D Isometric primitives ───
+const ISO=Math.PI/6;
+const DX=Math.cos(ISO), DY=-Math.sin(ISO); // isometric offset direction
 
-// ── Camera ──
-let camX = 0, camY = 0, zoom = 1, targetZoom = 1;
+function isoBox(ctx,x,y,w,h,d,opts){
+  opts=opts||{};
+  const depth=d||14;
+  const ex=depth*DX, ey=depth*DY;
+  const a=opts.alpha||1;
+  const heavy=opts.heavy||false;
 
-// ── State ──
-let balls = [], staticBodies = [], dominoes = [], gears = [];
-let pendulums = [], pegs = [], impactParticles = [];
-let started = false, startBall = null, weightBody = null;
-let S = 1, time = 0;
-let mouse = null, mouseConstraint = null;
+  // Front face
+  const ff=[{x,y},{x:x+w,y},{x:x+w,y:y+h},{x,y:y+h}];
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.lineTo(x+w,y+h);ctx.lineTo(x,y+h);ctx.closePath();
+  ctx.fillStyle=I3+(0.015*a)+')';ctx.fill();
+  ctx.strokeStyle=I0+(0.5*a)+')';ctx.lineWidth=heavy?1.4:0.9;ctx.stroke();
+  if(opts.hatch!==false) hatch(ctx,ff,0.6,opts.hatchSpacing||5,0.07*a,0.3);
 
-// ══════════════════════════════════════════════════════════════
-//  3D ISOMETRIC LETTER SYSTEM
-// ══════════════════════════════════════════════════════════════
-// Each letter is defined as a set of 2D box segments { x, y, w, h }
-// These get rendered as 3D isometric blocks and also become physics colliders
+  // Top face
+  const tf=[{x,y},{x:x+ex,y:y+ey},{x:x+w+ex,y:y+ey},{x:x+w,y}];
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+ex,y+ey);ctx.lineTo(x+w+ex,y+ey);ctx.lineTo(x+w,y);ctx.closePath();
+  ctx.fillStyle=I4+(0.02*a)+')';ctx.fill();
+  ctx.strokeStyle=I0+(0.4*a)+')';ctx.lineWidth=heavy?1.1:0.7;ctx.stroke();
+  hatch(ctx,tf,1.2,4,0.06*a,0.25);
 
-const ISO_ANGLE = Math.PI / 6; // 30° isometric
-const ISO_DEPTH = 18;          // extrusion depth
-const LETTER_SCALE = 2.8;
+  // Right face
+  const rf=[{x:x+w,y},{x:x+w+ex,y:y+ey},{x:x+w+ex,y:y+h+ey},{x:x+w,y:y+h}];
+  ctx.beginPath();ctx.moveTo(x+w,y);ctx.lineTo(x+w+ex,y+ey);ctx.lineTo(x+w+ex,y+h+ey);ctx.lineTo(x+w,y+h);ctx.closePath();
+  ctx.fillStyle=I2+(0.04*a)+')';ctx.fill();
+  ctx.strokeStyle=I0+(0.45*a)+')';ctx.lineWidth=heavy?1.1:0.7;ctx.stroke();
+  hatch(ctx,rf,-0.3,3.5,0.09*a,0.3);
 
-// Letter definitions (relative coordinates, will be scaled)
-function getLetterBoxes(char) {
-  const B = 8; // block unit
-  switch(char) {
-    case 'M': return [
-      { x: 0, y: 0, w: B, h: B*5 },           // left pillar
-      { x: B, y: 0, w: B, h: B*2 },            // left top
-      { x: B*2, y: B, w: B, h: B*2 },          // center V
-      { x: B*3, y: 0, w: B, h: B*2 },          // right top
-      { x: B*4, y: 0, w: B, h: B*5 },          // right pillar
-    ];
-    case 'A': return [
-      { x: 0, y: B, w: B, h: B*4 },            // left pillar
-      { x: B, y: 0, w: B*2, h: B },             // top bar
-      { x: B*3, y: B, w: B, h: B*4 },           // right pillar
-      { x: B, y: B*2, w: B*2, h: B },           // cross bar
-    ];
-    case 'T': return [
-      { x: 0, y: 0, w: B*4, h: B },             // top bar
-      { x: B*1.5, y: B, w: B, h: B*4 },         // stem
-    ];
-    case 'Z': return [
-      { x: 0, y: 0, w: B*4, h: B },             // top bar
-      { x: B*2.5, y: B, w: B*1.5, h: B },       // upper diagonal part
-      { x: B, y: B*2, w: B*2, h: B },           // middle
-      { x: 0, y: B*3, w: B*1.5, h: B },         // lower diagonal part
-      { x: 0, y: B*4, w: B*4, h: B },           // bottom bar
-    ];
-    case '.': return [
-      { x: 0, y: B*3.5, w: B, h: B*1.5 },      // dot
-    ];
+  // Hidden edges (dashed)
+  ctx.setLineDash([2.5,2.5]);
+  ctx.strokeStyle=I2+(0.1*a)+')';ctx.lineWidth=0.35;
+  ctx.beginPath();ctx.moveTo(x+ex,y+ey);ctx.lineTo(x+ex,y+h+ey);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x+ex,y+h+ey);ctx.lineTo(x,y+h);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x+ex,y+h+ey);ctx.lineTo(x+w+ex,y+h+ey);ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function isoCylinder(ctx,cx,cy,rx,ry,h,opts){
+  opts=opts||{};
+  const a=opts.alpha||1;
+  const ex=h*DX*0.6,ey=h*DY*0.6;
+
+  // Back ellipse
+  ctx.beginPath();ctx.ellipse(cx+ex,cy+ey,rx,ry,0,0,Math.PI*2);
+  ctx.strokeStyle=I2+(0.15*a)+')';ctx.lineWidth=0.4;
+  ctx.setLineDash([2,2]);ctx.stroke();ctx.setLineDash([]);
+
+  // Side lines
+  ctx.beginPath();
+  ctx.moveTo(cx-rx,cy);ctx.lineTo(cx-rx+ex,cy+ey);
+  ctx.moveTo(cx+rx,cy);ctx.lineTo(cx+rx+ex,cy+ey);
+  ctx.strokeStyle=I0+(0.35*a)+')';ctx.lineWidth=0.7;ctx.stroke();
+
+  // Hatching on cylinder body
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx-rx,cy);ctx.lineTo(cx-rx+ex,cy+ey);
+  ctx.ellipse(cx+ex,cy+ey,rx,ry,0,Math.PI,0,true);
+  ctx.lineTo(cx+rx,cy);
+  ctx.ellipse(cx,cy,rx,ry,0,0,Math.PI);
+  ctx.closePath();ctx.clip();
+  for(let i=-rx*3;i<rx*3;i+=3){
+    ctx.beginPath();
+    ctx.moveTo(cx+i,cy-ry*2);ctx.lineTo(cx+i+ex,cy+ry*2+ey);
+    ctx.strokeStyle=I2+(0.06*a)+')';ctx.lineWidth=0.3;ctx.stroke();
+  }
+  ctx.restore();
+
+  // Front ellipse
+  ctx.beginPath();ctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);
+  ctx.fillStyle=I4+(0.02*a)+')';ctx.fill();
+  ctx.strokeStyle=I0+(0.45*a)+')';ctx.lineWidth=0.8;ctx.stroke();
+
+  // Cross center
+  ctx.beginPath();ctx.moveTo(cx-3,cy);ctx.lineTo(cx+3,cy);ctx.moveTo(cx,cy-3);ctx.lineTo(cx,cy+3);
+  ctx.strokeStyle=I1+(0.3*a)+')';ctx.lineWidth=0.5;ctx.stroke();
+}
+
+function isoPipe(ctx,x1,y1,x2,y2,r,opts){
+  opts=opts||{};
+  const a=opts.alpha||1;
+  const ang=Math.atan2(y2-y1,x2-x1);
+  const px=-Math.sin(ang)*r, py=Math.cos(ang)*r;
+
+  // Pipe body lines
+  ctx.beginPath();
+  ctx.moveTo(x1+px,y1+py);ctx.lineTo(x2+px,y2+py);
+  ctx.moveTo(x1-px,y1-py);ctx.lineTo(x2-px,y2-py);
+  ctx.strokeStyle=I0+(0.4*a)+')';ctx.lineWidth=0.7;ctx.stroke();
+
+  // Center line (dashed)
+  ctx.setLineDash([4,3]);
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);
+  ctx.strokeStyle=I3+(0.15*a)+')';ctx.lineWidth=0.3;ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Hatching along pipe
+  const len=Math.hypot(x2-x1,y2-y1);
+  const steps=Math.floor(len/3);
+  ctx.beginPath();
+  for(let i=0;i<steps;i++){
+    const t=i/steps;
+    const mx=x1+(x2-x1)*t, my=y1+(y2-y1)*t;
+    ctx.moveTo(mx+px*0.8,my+py*0.8);ctx.lineTo(mx-px*0.8,my-py*0.8);
+  }
+  ctx.strokeStyle=I3+(0.05*a)+')';ctx.lineWidth=0.25;ctx.stroke();
+
+  // Flanges at ends
+  for(const [fx,fy] of [[x1,y1],[x2,y2]]){
+    ctx.beginPath();
+    ctx.moveTo(fx+px*1.4,fy+py*1.4);ctx.lineTo(fx-px*1.4,fy-py*1.4);
+    ctx.strokeStyle=I0+(0.35*a)+')';ctx.lineWidth=1;ctx.stroke();
+    // Bolts
+    for(const s of [-1,1]){
+      ctx.beginPath();ctx.arc(fx+px*s*1.2,fy+py*s*1.2,1.2,0,Math.PI*2);
+      ctx.fillStyle=I1+(0.3*a)+')';ctx.fill();
+    }
+  }
+}
+
+function drawBolt(ctx,x,y,r){
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.strokeStyle=I0+'0.35)';ctx.lineWidth=0.6;ctx.stroke();
+  ctx.beginPath();ctx.arc(x,y,r*0.4,0,Math.PI*2);
+  ctx.fillStyle=I1+'0.25)';ctx.fill();
+}
+
+function drawIBeam(ctx,x,y,w,h,opts){
+  opts=opts||{};
+  const a=opts.alpha||1;
+  const flangeH=h*0.25;
+  const webW=w*0.3;
+
+  // Top flange
+  isoBox(ctx,x,y,w,flangeH,8,{alpha:a*0.9,hatchSpacing:3});
+  // Web
+  isoBox(ctx,x+w/2-webW/2,y+flangeH,webW,h-flangeH*2,8,{alpha:a*0.7,hatchSpacing:4});
+  // Bottom flange
+  isoBox(ctx,x,y+h-flangeH,w,flangeH,8,{alpha:a*0.9,hatchSpacing:3});
+}
+
+function drawBracket(ctx,x,y,size,opts){
+  opts=opts||{};
+  const a=opts.alpha||1;
+  const s=size;
+
+  // L-shaped bracket
+  isoBox(ctx,x,y,s*0.3,s,6,{alpha:a*0.8});
+  isoBox(ctx,x,y+s*0.7,s,s*0.3,6,{alpha:a*0.8});
+
+  // Bolt holes
+  drawBolt(ctx,x+s*0.15,y+s*0.15,2);
+  drawBolt(ctx,x+s*0.15,y+s*0.45,2);
+  drawBolt(ctx,x+s*0.5,y+s*0.85,2);
+  drawBolt(ctx,x+s*0.8,y+s*0.85,2);
+}
+
+// ─── Gear drawing (detailed) ───
+function drawGear(ctx,g){
+  ctx.save();ctx.translate(g.x,g.y);ctx.rotate(g.angle);
+  const r=g.radius;
+
+  // Outer ring with tooth profile
+  for(let i=0;i<g.teeth;i++){
+    const a1=(i/g.teeth)*Math.PI*2;
+    const a2=((i+0.35)/g.teeth)*Math.PI*2;
+    const a3=((i+0.5)/g.teeth)*Math.PI*2;
+    const r2=r+5;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a1)*r,Math.sin(a1)*r);
+    ctx.lineTo(Math.cos(a1)*r2,Math.sin(a1)*r2);
+    ctx.lineTo(Math.cos(a2)*r2,Math.sin(a2)*r2);
+    ctx.lineTo(Math.cos(a3)*r,Math.sin(a3)*r);
+    ctx.strokeStyle=I0+'0.4)';ctx.lineWidth=0.7;ctx.stroke();
+    // Tooth face hatching
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a1)*r2,Math.sin(a1)*r2);
+    ctx.lineTo(Math.cos(a2)*r2,Math.sin(a2)*r2);
+    ctx.strokeStyle=I2+'0.15)';ctx.lineWidth=0.3;ctx.stroke();
+  }
+
+  // Outer circle
+  ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);
+  ctx.strokeStyle=I0+'0.45)';ctx.lineWidth=1;ctx.stroke();
+
+  // Inner circles
+  ctx.beginPath();ctx.arc(0,0,r*0.7,0,Math.PI*2);
+  ctx.strokeStyle=I1+'0.2)';ctx.lineWidth=0.5;ctx.stroke();
+  ctx.beginPath();ctx.arc(0,0,r*0.4,0,Math.PI*2);
+  ctx.strokeStyle=I1+'0.25)';ctx.lineWidth=0.5;ctx.stroke();
+
+  // Spokes with detail
+  for(let i=0;i<6;i++){
+    const sa=i/6*Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(sa)*r*0.15,Math.sin(sa)*r*0.15);
+    ctx.lineTo(Math.cos(sa)*r*0.65,Math.sin(sa)*r*0.65);
+    ctx.strokeStyle=I1+'0.2)';ctx.lineWidth=0.6;ctx.stroke();
+  }
+
+  // Hub
+  ctx.beginPath();ctx.arc(0,0,r*0.15,0,Math.PI*2);
+  ctx.strokeStyle=I0+'0.5)';ctx.lineWidth=1;ctx.stroke();
+  ctx.beginPath();ctx.arc(0,0,2,0,Math.PI*2);
+  ctx.fillStyle=I0+'0.35)';ctx.fill();
+
+  // Hub cross
+  ctx.beginPath();ctx.moveTo(-r*0.1,0);ctx.lineTo(r*0.1,0);
+  ctx.moveTo(0,-r*0.1);ctx.lineTo(0,r*0.1);
+  ctx.strokeStyle=I0+'0.3)';ctx.lineWidth=0.5;ctx.stroke();
+
+  // Radial hatching between inner rings
+  ctx.save();
+  ctx.beginPath();ctx.arc(0,0,r*0.7,0,Math.PI*2);
+  ctx.arc(0,0,r*0.4,0,Math.PI*2,true);ctx.clip();
+  for(let i=0;i<36;i++){
+    const la=i/36*Math.PI*2;
+    ctx.beginPath();ctx.moveTo(Math.cos(la)*r*0.4,Math.sin(la)*r*0.4);
+    ctx.lineTo(Math.cos(la)*r*0.7,Math.sin(la)*r*0.7);
+    ctx.strokeStyle=I3+'0.08)';ctx.lineWidth=0.25;ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// ════════════════════════════════════════════════════════════════
+//  3D LETTER SYSTEM — Dense architectural letterforms
+// ════════════════════════════════════════════════════════════════
+const LSCALE=3.2;
+const LDEPTH=16;
+
+function getLetterBoxes(ch){
+  const B=8;
+  switch(ch){
+    case 'M': return [{x:0,y:0,w:B,h:B*5},{x:B,y:0,w:B,h:B*2},{x:B*2,y:B,w:B,h:B*2},{x:B*3,y:0,w:B,h:B*2},{x:B*4,y:0,w:B,h:B*5}];
+    case 'A': return [{x:0,y:B,w:B,h:B*4},{x:B,y:0,w:B*2,h:B},{x:B*3,y:B,w:B,h:B*4},{x:B,y:B*2,w:B*2,h:B}];
+    case 'T': return [{x:0,y:0,w:B*4,h:B},{x:B*1.5,y:B,w:B,h:B*4}];
+    case 'Z': return [{x:0,y:0,w:B*4,h:B},{x:B*2.5,y:B,w:B*1.5,h:B},{x:B,y:B*2,w:B*2,h:B},{x:0,y:B*3,w:B*1.5,h:B},{x:0,y:B*4,w:B*4,h:B}];
+    case '.': return [{x:0,y:B*3.5,w:B*1.2,h:B*1.5}];
     default: return [];
   }
 }
 
-// ── Draw a single 3D isometric block ──
-function drawIsoBlock(ctx, x, y, w, h, depth, alpha) {
-  const d = depth || ISO_DEPTH;
-  const dx = d * Math.cos(ISO_ANGLE);
-  const dy = -d * Math.sin(ISO_ANGLE);
-  const a = alpha || 1;
+const letterData=[];
 
-  // Front face
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.fillStyle = INK_F + (0.03 * a) + ')';
-  ctx.fill();
-  ctx.strokeStyle = INK + (0.45 * a) + ')';
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
+function buildLetters(){
+  const text='MATT Z.';
+  const spacing=42*LSCALE;
+  const total=text.length*spacing;
+  const sx=-total/2, sy=-50;
 
-  // Front face crosshatch
-  ctx.save();
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];if(ch===' ')continue;
+    const boxes=getLetterBoxes(ch);
+    const ox=sx+i*spacing, oy=sy;
+    const scaled=[];
+    for(const b of boxes){
+      const bx=ox+b.x*LSCALE, by=oy+b.y*LSCALE;
+      const bw=b.w*LSCALE, bh=b.h*LSCALE;
+      scaled.push({x:bx,y:by,w:bw,h:bh});
+      const body=Bodies.rectangle(bx+bw/2,by+bh/2,bw,bh,{isStatic:true,friction:0.3,restitution:0.2,label:'letter'});
+      Composite.add(world,body);statics.push(body);
+    }
+    letterData.push({char:ch,boxes:scaled,ox,oy});
+  }
+}
+
+function drawLetters(ctx){
+  for(const ld of letterData){
+    for(const b of ld.boxes){
+      isoBox(ctx,b.x,b.y,b.w,b.h,LDEPTH,{heavy:true,hatchSpacing:4});
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  DECORATIVE STRUCTURES — Dense mechanical details
+// ════════════════════════════════════════════════════════════════
+let decorations=[];
+
+function buildDecorations(){
+  decorations=[];
+  if(letterData.length<6)return;
+  const r=rng;
+
+  // Generate dense mechanical structures around and between letters
+  for(let li=0;li<letterData.length;li++){
+    const ld=letterData[li];
+
+    // Vertical I-beams at letter corners
+    for(const b of ld.boxes){
+      if(r()>0.4) decorations.push({type:'ibeam',x:b.x-12,y:b.y-8,w:10,h:b.h+16});
+      if(r()>0.5) decorations.push({type:'ibeam',x:b.x+b.w+3,y:b.y-5,w:8,h:b.h+10});
+    }
+
+    // Brackets at connections
+    for(let bi=0;bi<ld.boxes.length-1;bi++){
+      const b1=ld.boxes[bi],b2=ld.boxes[bi+1];
+      decorations.push({type:'bracket',x:(b1.x+b2.x)/2,y:(b1.y+b2.y)/2,size:16+r()*10});
+    }
+
+    // Cylinders on top of letter blocks
+    for(const b of ld.boxes){
+      if(r()>0.55){
+        decorations.push({type:'cylinder',cx:b.x+b.w/2,cy:b.y-8,rx:b.w*0.3,ry:b.w*0.12,h:12+r()*8});
+      }
+    }
+
+    // Pipes connecting to next letter
+    if(li<letterData.length-1){
+      const next=letterData[li+1];
+      const b1=ld.boxes[ld.boxes.length-1];
+      const b2=next.boxes[0];
+      const py=Math.min(b1.y,b2.y)+r()*30;
+      decorations.push({type:'pipe',x1:b1.x+b1.w,y1:py,x2:b2.x,y2:py+r()*15-7,r:3+r()*2});
+      // Second pipe at different height
+      if(r()>0.3){
+        const py2=Math.max(b1.y+b1.h,b2.y+b2.h)-r()*20;
+        decorations.push({type:'pipe',x1:b1.x+b1.w,y1:py2,x2:b2.x,y2:py2+r()*10-5,r:2+r()*2});
+      }
+    }
+
+    // Boxes/modules attached to letters
+    for(const b of ld.boxes){
+      if(r()>0.65){
+        const bw=12+r()*18, bh=8+r()*14;
+        const side=r()>0.5?1:-1;
+        decorations.push({type:'box',x:side>0?b.x+b.w+2:b.x-bw-2,y:b.y+r()*b.h*0.5,w:bw,h:bh,depth:6+r()*6});
+      }
+    }
+
+    // Bolts along letter edges
+    for(const b of ld.boxes){
+      const count=Math.floor(b.w/12);
+      for(let i=0;i<count;i++){
+        decorations.push({type:'bolt',x:b.x+6+i*12+r()*4,y:b.y+2,r:1.5});
+        decorations.push({type:'bolt',x:b.x+6+i*12+r()*4,y:b.y+b.h-2,r:1.5});
+      }
+      const vcount=Math.floor(b.h/14);
+      for(let i=0;i<vcount;i++){
+        decorations.push({type:'bolt',x:b.x+2,y:b.y+7+i*14+r()*4,r:1.3});
+      }
+    }
+  }
+
+  // ── Surrounding infrastructure ──
+  const M=letterData[0],Z=letterData[4],DOT=letterData[5];
+
+  // Large cylinders (tanks) flanking the name
+  decorations.push({type:'cylinder',cx:M.ox-70,cy:M.oy+30,rx:22,ry:9,h:35});
+  decorations.push({type:'cylinder',cx:M.ox-70,cy:M.oy+90,rx:18,ry:7,h:28});
+  decorations.push({type:'cylinder',cx:DOT.ox+100,cy:DOT.oy+10,rx:20,ry:8,h:30});
+
+  // Pipe network across bottom
+  const baseY=M.oy+LSCALE*8*5+20;
+  for(let i=0;i<4;i++){
+    const py=baseY+i*12;
+    decorations.push({type:'pipe',x1:M.ox-80,y1:py,x2:DOT.ox+120,y2:py+(r()-0.5)*8,r:2+r()*1.5});
+  }
+
+  // Pipe network across top
+  const topY=M.oy-25;
+  for(let i=0;i<3;i++){
+    const py=topY-i*10;
+    decorations.push({type:'pipe',x1:M.ox-60,y1:py,x2:DOT.ox+90,y2:py+(r()-0.5)*6,r:1.5+r()*1.5});
+  }
+
+  // Vertical pipes/columns
+  for(let i=0;i<8;i++){
+    const px=M.ox-80+i*75+r()*30;
+    if(r()>0.4) decorations.push({type:'pipe',x1:px,y1:topY-20,x2:px+(r()-0.5)*8,y2:baseY+40,r:2+r()*2});
+  }
+
+  // Large I-beams as structural frame
+  decorations.push({type:'ibeam',x:M.ox-90,y:M.oy-20,w:14,h:LSCALE*8*5+60});
+  decorations.push({type:'ibeam',x:DOT.ox+85,y:DOT.oy-20,w:14,h:LSCALE*8*5+60});
+
+  // Boxes/modules around perimeter
+  for(let i=0;i<6;i++){
+    const px=M.ox-60+i*90+r()*40;
+    if(r()>0.35) decorations.push({type:'box',x:px,y:baseY+15+r()*20,w:15+r()*20,h:10+r()*12,depth:6+r()*5});
+    if(r()>0.45) decorations.push({type:'box',x:px,y:topY-30-r()*15,w:12+r()*18,h:8+r()*10,depth:5+r()*5});
+  }
+
+  // Extra brackets scattered
+  for(let i=0;i<12;i++){
+    const px=M.ox-80+r()*600;
+    const py=M.oy-30+r()*200;
+    if(r()>0.5) decorations.push({type:'bracket',x:px,y:py,size:10+r()*12});
+  }
+}
+
+function drawDecorations(ctx){
+  for(const d of decorations){
+    switch(d.type){
+      case 'ibeam': drawIBeam(ctx,d.x,d.y,d.w,d.h); break;
+      case 'bracket': drawBracket(ctx,d.x,d.y,d.size); break;
+      case 'cylinder': isoCylinder(ctx,d.cx,d.cy,d.rx,d.ry,d.h); break;
+      case 'pipe': isoPipe(ctx,d.x1,d.y1,d.x2,d.y2,d.r); break;
+      case 'bolt': drawBolt(ctx,d.x,d.y,d.r); break;
+      case 'box': isoBox(ctx,d.x,d.y,d.w,d.h,d.depth||8,{hatchSpacing:3}); break;
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ANNOTATIONS — Scattered technical callouts
+// ════════════════════════════════════════════════════════════════
+let annotations=[];
+
+function buildAnnotations(){
+  annotations=[];
+  if(letterData.length<6)return;
+  const M=letterData[0],A=letterData[1],Z=letterData[4],DOT=letterData[5];
+  const r2=seeded(77);
+
+  // Technical labels
+  const labels=[
+    {x:M.ox-85,y:M.oy-50,t:'SECTION A-A',s:7},
+    {x:M.ox-85,y:M.oy-40,t:'SCALE 1:1',s:6},
+    {x:M.ox-85,y:M.oy-30,t:'REV 06  MAR 2026',s:5},
+    {x:M.ox-40,y:M.oy-70,t:'STRUCTURAL FRAMEWORK — ISOMETRIC',s:6},
+    {x:A.ox,y:A.oy-55,t:'DOMINO CHAIN STAGE',s:5},
+    {x:Z.ox-10,y:Z.oy+LSCALE*8*5+45,t:'GALTON BOARD SECTION',s:5},
+    {x:DOT.ox+15,y:DOT.oy-40,t:'DETAIL C',s:6},
+    {x:M.ox+20,y:M.oy+LSCALE*8*5+50,t:'GEAR REDUCTION 3:1',s:5},
+    {x:Z.ox+60,y:Z.oy-55,t:'PENDULUM L=130',s:5},
+  ];
+
+  // Random dimension-like annotations
+  for(let i=0;i<15;i++){
+    const px=M.ox-70+r2()*600;
+    const py=M.oy-40+r2()*240;
+    const val=Math.floor(r2()*500+50);
+    labels.push({x:px,y:py,t:val+'mm',s:4.5,dim:true});
+  }
+
+  // Random notes
+  const notes=['TYP.','(REF)','2x','4x','THRU','M6','Ø12','R8','45°','CL','SYM','NTS'];
+  for(let i=0;i<20;i++){
+    const px=M.ox-60+r2()*580;
+    const py=M.oy-30+r2()*220;
+    labels.push({x:px,y:py,t:notes[Math.floor(r2()*notes.length)],s:4,note:true});
+  }
+
+  annotations=labels;
+}
+
+function drawAnnotations(ctx){
+  for(const a of annotations){
+    ctx.font=(a.s||6)+'px Courier New';
+    const alpha=a.dim?0.15:a.note?0.12:0.22;
+    ctx.fillStyle=I2+(alpha)+')';
+    ctx.fillText(a.t,a.x,a.y);
+    // Leader line
+    if(!a.dim&&!a.note){
+      ctx.beginPath();ctx.moveTo(a.x,a.y+2);ctx.lineTo(a.x+10,a.y+7);
+      ctx.strokeStyle=I3+'0.1)';ctx.lineWidth=0.3;ctx.stroke();
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  DIMENSION LINES
+// ════════════════════════════════════════════════════════════════
+function dimLine(ctx,x1,y1,x2,y2,label,off){
+  off=off||14;
+  const dx=x2-x1,dy=y2-y1,ang=Math.atan2(dy,dx);
+  const px=-Math.sin(ang)*off,py=Math.cos(ang)*off;
   ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
-  for (let i = -h; i < w + h; i += 6) {
+  ctx.moveTo(x1,y1);ctx.lineTo(x1+px,y1+py);
+  ctx.moveTo(x2,y2);ctx.lineTo(x2+px,y2+py);
+  ctx.moveTo(x1+px,y1+py);ctx.lineTo(x2+px,y2+py);
+  ctx.strokeStyle=I2+'0.18)';ctx.lineWidth=0.35;ctx.stroke();
+  const as=3;
+  for(const[sx,sy,dir]of[[x1+px,y1+py,1],[x2+px,y2+py,-1]]){
     ctx.beginPath();
-    ctx.moveTo(x + i, y);
-    ctx.lineTo(x + i - h * 0.7, y + h);
-    ctx.strokeStyle = INK_F + (0.06 * a) + ')';
-    ctx.lineWidth = 0.3;
+    ctx.moveTo(sx,sy);ctx.lineTo(sx+Math.cos(ang+0.4)*as*dir,sy+Math.sin(ang+0.4)*as*dir);
+    ctx.moveTo(sx,sy);ctx.lineTo(sx+Math.cos(ang-0.4)*as*dir,sy+Math.sin(ang-0.4)*as*dir);
     ctx.stroke();
   }
+  ctx.save();ctx.translate((x1+x2)/2+px,(y1+y2)/2+py);
+  let ta=ang;if(ta>Math.PI/2||ta<-Math.PI/2)ta+=Math.PI;
+  ctx.rotate(ta);ctx.font='5px Courier New';ctx.fillStyle=I2+'0.25)';
+  ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(label,0,-2);
   ctx.restore();
+}
 
-  // Top face
+// ════════════════════════════════════════════════════════════════
+//  CONSTRUCTION LINES & GRID
+// ════════════════════════════════════════════════════════════════
+function drawGrid(ctx){
+  const gs=50,sgs=10;
+  const sx=Math.floor((camX-W/2/zoom)/gs)*gs;
+  const sy=Math.floor((camY-H/2/zoom)/gs)*gs;
+  const ex=camX+W/2/zoom+gs,ey=camY+H/2/zoom+gs;
+  const ssx=Math.floor((camX-W/2/zoom)/sgs)*sgs;
+  const ssy=Math.floor((camY-H/2/zoom)/sgs)*sgs;
   ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + dx, y + dy);
-  ctx.lineTo(x + w + dx, y + dy);
-  ctx.lineTo(x + w, y);
-  ctx.closePath();
-  ctx.fillStyle = INK_F + (0.02 * a) + ')';
-  ctx.fill();
-  ctx.strokeStyle = INK + (0.35 * a) + ')';
-  ctx.lineWidth = 0.8;
-  ctx.stroke();
+  for(let x=ssx;x<ex;x+=sgs){ctx.moveTo(x,camY-H/2/zoom);ctx.lineTo(x,ey)}
+  for(let y=ssy;y<ey;y+=sgs){ctx.moveTo(camX-W/2/zoom,y);ctx.lineTo(ex,y)}
+  ctx.strokeStyle='rgba(100,120,150,0.04)';ctx.lineWidth=0.25;ctx.stroke();
+  ctx.beginPath();
+  for(let x=sx;x<ex;x+=gs){ctx.moveTo(x,camY-H/2/zoom);ctx.lineTo(x,ey)}
+  for(let y=sy;y<ey;y+=gs){ctx.moveTo(camX-W/2/zoom,y);ctx.lineTo(ex,y)}
+  ctx.strokeStyle='rgba(100,120,150,0.07)';ctx.lineWidth=0.35;ctx.stroke();
+}
 
-  // Top face hatching
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + dx, y + dy);
-  ctx.lineTo(x + w + dx, y + dy);
-  ctx.lineTo(x + w, y);
-  ctx.closePath();
-  ctx.clip();
-  for (let i = 0; i < w + d; i += 5) {
-    ctx.beginPath();
-    ctx.moveTo(x + i, y);
-    ctx.lineTo(x + i + dx, y + dy);
-    ctx.strokeStyle = INK_F + (0.05 * a) + ')';
-    ctx.lineWidth = 0.3;
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // Right face
-  ctx.beginPath();
-  ctx.moveTo(x + w, y);
-  ctx.lineTo(x + w + dx, y + dy);
-  ctx.lineTo(x + w + dx, y + h + dy);
-  ctx.lineTo(x + w, y + h);
-  ctx.closePath();
-  ctx.fillStyle = INK_F + (0.05 * a) + ')';
-  ctx.fill();
-  ctx.strokeStyle = INK + (0.4 * a) + ')';
-  ctx.lineWidth = 0.8;
-  ctx.stroke();
-
-  // Right face hatching
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(x + w, y);
-  ctx.lineTo(x + w + dx, y + dy);
-  ctx.lineTo(x + w + dx, y + h + dy);
-  ctx.lineTo(x + w, y + h);
-  ctx.closePath();
-  ctx.clip();
-  for (let i = 0; i < h + d; i += 4) {
-    ctx.beginPath();
-    ctx.moveTo(x + w, y + i);
-    ctx.lineTo(x + w + dx, y + i + dy);
-    ctx.strokeStyle = INK_F + (0.08 * a) + ')';
-    ctx.lineWidth = 0.3;
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // Hidden edge (dashed)
-  ctx.setLineDash([3, 3]);
-  ctx.beginPath();
-  ctx.moveTo(x + dx, y + dy);
-  ctx.lineTo(x + dx, y + h + dy);
-  ctx.strokeStyle = INK_D + (0.12 * a) + ')';
-  ctx.lineWidth = 0.4;
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x + dx, y + h + dy);
-  ctx.lineTo(x, y + h);
-  ctx.stroke();
+function drawConstructionLines(ctx){
+  if(letterData.length<6)return;
+  const M=letterData[0],DOT=letterData[5];
+  ctx.setLineDash([6,5]);ctx.strokeStyle=I4+'0.04)';ctx.lineWidth=0.25;
+  for(let y=-300;y<=400;y+=50){ctx.beginPath();ctx.moveTo(-700,y);ctx.lineTo(700,y);ctx.stroke()}
+  for(let x=-700;x<=700;x+=50){ctx.beginPath();ctx.moveTo(x,-300);ctx.lineTo(x,400);ctx.stroke()}
   ctx.setLineDash([]);
 }
 
-// ── Build all letters as physics + visual ──
-const letterData = []; // { char, boxes: [{ x,y,w,h }], originX, originY }
+// ════════════════════════════════════════════════════════════════
+//  BORDER / TITLE BLOCK
+// ════════════════════════════════════════════════════════════════
+function drawBorder(ctx){
+  const bx=-640,by=-340,bw=1280,bh=780;
+  ctx.strokeStyle=I2+'0.1)';ctx.lineWidth=1.5;ctx.strokeRect(bx,by,bw,bh);
+  ctx.strokeStyle=I3+'0.05)';ctx.lineWidth=0.4;ctx.strokeRect(bx+6,by+6,bw-12,bh-12);
 
-function buildLetters() {
-  const text = 'MATT Z.';
-  const spacing = 40 * LETTER_SCALE;
-  const totalWidth = text.length * spacing;
-  const startX = -totalWidth / 2;
-  const startY = -60;
+  const c=14;ctx.strokeStyle=I2+'0.15)';ctx.lineWidth=0.8;
+  for(const[cx2,cy2]of[[bx,by],[bx+bw,by],[bx,by+bh],[bx+bw,by+bh]]){
+    const dx2=cx2===bx?1:-1,dy2=cy2===by?1:-1;
+    ctx.beginPath();ctx.moveTo(cx2,cy2+c*dy2);ctx.lineTo(cx2,cy2);ctx.lineTo(cx2+c*dx2,cy2);ctx.stroke();
+  }
 
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (ch === ' ') continue;
-    const boxes = getLetterBoxes(ch);
-    const ox = startX + i * spacing;
-    const oy = startY;
-    const scaledBoxes = [];
+  // Title block
+  const tbx=bx+bw-190,tby=by+bh-55,tbw=190,tbh=55;
+  ctx.strokeStyle=I2+'0.15)';ctx.lineWidth=0.6;ctx.strokeRect(tbx,tby,tbw,tbh);
+  ctx.beginPath();ctx.moveTo(tbx,tby+18);ctx.lineTo(tbx+tbw,tby+18);
+  ctx.moveTo(tbx,tby+36);ctx.lineTo(tbx+tbw,tby+36);ctx.stroke();
 
-    for (const b of boxes) {
-      const sx = ox + b.x * LETTER_SCALE;
-      const sy = oy + b.y * LETTER_SCALE;
-      const sw = b.w * LETTER_SCALE;
-      const sh = b.h * LETTER_SCALE;
-      scaledBoxes.push({ x: sx, y: sy, w: sw, h: sh });
+  ctx.font='6px Courier New';ctx.fillStyle=I2+'0.25)';
+  ctx.fillText('INTERACTIVE BLUEPRINT — RUBE GOLDBERG',tbx+5,tby+12);
+  ctx.font='9px Courier New';ctx.fillStyle=I0+'0.3)';
+  ctx.fillText('MATT ZIEGER',tbx+5,tby+30);
+  ctx.font='5px Courier New';ctx.fillStyle=I2+'0.2)';
+  ctx.fillText('SCALE 1:1   SHEET 1/1   REV 06   2026-03-17',tbx+5,tby+48);
+}
 
-      // Physics collider
-      const body = Bodies.rectangle(sx + sw/2, sy + sh/2, sw, sh, {
-        isStatic: true, friction: 0.3, restitution: 0.2, label: 'letter'
-      });
-      Composite.add(world, body);
-      staticBodies.push(body);
+// ════════════════════════════════════════════════════════════════
+//  PHYSICS BODY DRAWING
+// ════════════════════════════════════════════════════════════════
+function drawPhysBody(ctx,body){
+  const v=body.vertices;if(!v||v.length<2)return;
+  const lbl=body.label||'';
+  if(lbl==='wall'||lbl==='letter')return;
+
+  if(lbl==='ball'){
+    const r=body.circleRadius||10;
+    const bx=body.position.x,by=body.position.y;
+
+    // Outer ring
+    ctx.beginPath();ctx.arc(bx,by,r,0,Math.PI*2);
+    ctx.strokeStyle=I0+'0.55)';ctx.lineWidth=1.2;ctx.stroke();
+
+    // Inner hatching (circular clip)
+    ctx.save();ctx.beginPath();ctx.arc(bx,by,r,0,Math.PI*2);ctx.clip();
+    for(let i=-r*2;i<r*2;i+=2.5){
+      ctx.beginPath();ctx.moveTo(bx+i,by-r);ctx.lineTo(bx+i-r*0.7,by+r);
+      ctx.strokeStyle=I2+'0.09)';ctx.lineWidth=0.3;ctx.stroke();
     }
+    for(let i=-r*2;i<r*2;i+=3){
+      ctx.beginPath();ctx.moveTo(bx+i,by-r);ctx.lineTo(bx+i+r*0.5,by+r);
+      ctx.strokeStyle=I3+'0.06)';ctx.lineWidth=0.2;ctx.stroke();
+    }
+    ctx.restore();
 
-    letterData.push({ char: ch, boxes: scaledBoxes, originX: ox, originY: oy });
+    // Center crosshair
+    ctx.beginPath();ctx.moveTo(bx-r*0.5,by);ctx.lineTo(bx+r*0.5,by);
+    ctx.moveTo(bx,by-r*0.5);ctx.lineTo(bx,by+r*0.5);
+    ctx.strokeStyle=I1+'0.2)';ctx.lineWidth=0.35;ctx.stroke();
+    ctx.beginPath();ctx.arc(bx,by,1.5,0,Math.PI*2);ctx.fillStyle=I0+'0.4)';ctx.fill();
+    return;
+  }
+
+  if(lbl==='peg'){
+    const r=body.circleRadius||3.5;
+    ctx.beginPath();ctx.arc(body.position.x,body.position.y,r,0,Math.PI*2);
+    ctx.fillStyle=I1+'0.25)';ctx.fill();
+    ctx.strokeStyle=I0+'0.4)';ctx.lineWidth=0.6;ctx.stroke();
+    return;
+  }
+
+  let sA=0.45,lw=1,fA=0,color=I0;
+  if(lbl==='ramp'||lbl==='platform'){lw=1.2;fA=0.02;
+    // Draw as 3D box
+    const cx2=body.position.x,cy2=body.position.y;
+    const pts=v.map(v2=>({x:v2.x,y:v2.y}));
+    ctx.beginPath();for(let i=0;i<v.length;i++){if(i===0)ctx.moveTo(v[i].x,v[i].y);else ctx.lineTo(v[i].x,v[i].y)}ctx.closePath();
+    ctx.fillStyle=I3+'0.02)';ctx.fill();
+    ctx.strokeStyle=I0+'0.4)';ctx.lineWidth=1.2;ctx.stroke();
+    hatch(ctx,pts,0.5,4,0.06);
+    // 3D extrusion lines
+    const d=6;
+    for(const vt of v){
+      ctx.beginPath();ctx.moveTo(vt.x,vt.y);ctx.lineTo(vt.x+d*DX,vt.y+d*DY);
+      ctx.strokeStyle=I1+'0.2)';ctx.lineWidth=0.4;ctx.stroke();
+    }
+    return;
+  }
+  if(lbl==='domino'){sA=0.5;lw=0.9;fA=0.04;
+    ctx.beginPath();for(let i=0;i<v.length;i++){if(i===0)ctx.moveTo(v[i].x,v[i].y);else ctx.lineTo(v[i].x,v[i].y)}ctx.closePath();
+    const pts=v.map(v2=>({x:v2.x,y:v2.y}));
+    ctx.fillStyle=I2+'0.04)';ctx.fill();
+    ctx.strokeStyle=I0+'0.5)';ctx.lineWidth=0.9;ctx.stroke();
+    hatch(ctx,pts,0.8,3,0.08);
+    return;
+  }
+  if(lbl==='seesaw'){lw=1.5;}
+  if(lbl==='weight'){sA=0.55;lw=1.3;fA=0.06;}
+  if(lbl==='base'){color=I1;sA=0.3;}
+  if(lbl==='trampoline'){color=IR;sA=0.45;lw=1.8;}
+
+  ctx.beginPath();for(let i=0;i<v.length;i++){if(i===0)ctx.moveTo(v[i].x,v[i].y);else ctx.lineTo(v[i].x,v[i].y)}ctx.closePath();
+  if(fA>0){ctx.fillStyle=color+fA+')';ctx.fill()}
+  ctx.strokeStyle=color+sA+')';ctx.lineWidth=lw;ctx.stroke();
+
+  if(lbl==='weight'){
+    const pts=v.map(v2=>({x:v2.x,y:v2.y}));
+    crosshatch(ctx,pts,3.5);
   }
 }
 
-function drawLetters(ctx) {
-  for (const ld of letterData) {
-    for (const b of ld.boxes) {
-      drawIsoBlock(ctx, b.x, b.y, b.w, b.h, ISO_DEPTH * LETTER_SCALE * 0.7);
-    }
+function drawConstraint(ctx,con){
+  if(!con.bodyA||!con.pointB)return;
+  const pA=con.bodyA.position,pB=con.pointB;
+  ctx.beginPath();ctx.moveTo(pA.x,pA.y);ctx.lineTo(pB.x,pB.y);
+  ctx.strokeStyle=I0+'0.2)';ctx.lineWidth=0.6;ctx.setLineDash([3,2.5]);ctx.stroke();ctx.setLineDash([]);
+  // Anchor
+  ctx.beginPath();ctx.arc(pB.x,pB.y,2.5,0,Math.PI*2);
+  ctx.strokeStyle=I0+'0.35)';ctx.lineWidth=0.6;ctx.stroke();
+  ctx.beginPath();ctx.arc(pB.x,pB.y,1,0,Math.PI*2);ctx.fillStyle=I0+'0.3)';ctx.fill();
+  // Mount
+  ctx.beginPath();ctx.moveTo(pB.x-6,pB.y);ctx.lineTo(pB.x+6,pB.y);
+  ctx.strokeStyle=I1+'0.25)';ctx.lineWidth=1.2;ctx.stroke();
+  for(let i=-6;i<=6;i+=2.5){
+    ctx.beginPath();ctx.moveTo(pB.x+i,pB.y);ctx.lineTo(pB.x+i-2.5,pB.y-3.5);
+    ctx.strokeStyle=I2+'0.12)';ctx.lineWidth=0.3;ctx.stroke();
   }
 }
 
-// ══════════════════════════════════════════════════════════════
-//  BUILD RUBE GOLDBERG MACHINE AROUND LETTERS
-// ══════════════════════════════════════════════════════════════
-function buildScene() {
-  Composite.clear(world, false);
-  // Re-add mouse constraint if it was already created
-  if (mouseConstraint) Composite.add(world, mouseConstraint);
-  balls = []; staticBodies = []; dominoes = []; gears = [];
-  pendulums = []; pegs = []; impactParticles = [];
-  started = false; startBall = null; weightBody = null;
-  letterData.length = 0;
+// ════════════════════════════════════════════════════════════════
+//  BUILD RUBE GOLDBERG MACHINE
+// ════════════════════════════════════════════════════════════════
+function buildScene(){
+  Composite.clear(world,false);
+  if(mConstraint)Composite.add(world,mConstraint);
+  balls=[];statics=[];dominoes=[];gears=[];pends=[];pegs=[];particles=[];
+  started=false;startBall=null;weightBody=null;letterData.length=0;
+  rng=seeded(42);
+  camX=0;camY=20;zoom=1;tZoom=1;
 
-  S = Math.min(W / 1600, H / 1000);
-  if (S < 0.45) S = 0.45;
-  camX = 0; camY = 30; zoom = 1; targetZoom = 1;
+  const R={isStatic:true,friction:0.3,restitution:0.15,label:'ramp'};
 
-  const rampOpts = { isStatic: true, friction: 0.3, restitution: 0.15, label: 'ramp' };
-
-  // ── Build the 3D letters ──
   buildLetters();
+  buildDecorations();
+  buildAnnotations();
 
-  // ── Boundaries ──
-  const wallOpts = { isStatic: true, friction: 0.4, restitution: 0.3, label: 'wall' };
-  const floor = Bodies.rectangle(0, 430, 2000, 20, wallOpts);
-  Composite.add(world, floor);
-  staticBodies.push(floor);
+  // Floor
+  Composite.add(world,Bodies.rectangle(0,430,2200,20,{isStatic:true,friction:0.4,restitution:0.3,label:'wall'}));
 
-  // ════════════════════════════════════════════════
-  // STAGE 1: Ball release — high above the "M"
-  // ════════════════════════════════════════════════
-  const mLetter = letterData[0]; // M
-  const mTopY = mLetter.originY - 30;
-  const mLeftX = mLetter.originX - 20;
+  if(letterData.length<6)return;
+  const M=letterData[0],A=letterData[1],T1=letterData[2],T2=letterData[3],Z=letterData[4],DOT=letterData[5];
 
-  // Starting platform
-  const startPlat = Bodies.rectangle(mLeftX - 60, mTopY - 100, 100, 6, { ...rampOpts, angle: 0.05 });
-  Composite.add(world, startPlat);
-  staticBodies.push(startPlat);
+  // ── STAGE 1: Ball release above M ──
+  const mTop=M.oy-30, mLeft=M.ox-20;
+  const sp=Bodies.rectangle(mLeft-60,mTop-100,100,5,{...R,angle:0.05});
+  Composite.add(world,sp);statics.push(sp);
+  startBall=Bodies.circle(mLeft-90,mTop-115,10,{restitution:0.5,friction:0.3,density:0.004,label:'ball',isStatic:true});
+  Composite.add(world,startBall);balls.push(startBall);
 
-  // Start ball
-  startBall = Bodies.circle(mLeftX - 90, mTopY - 115, 10, {
-    restitution: 0.5, friction: 0.3, density: 0.004, label: 'ball', isStatic: true
-  });
-  Composite.add(world, startBall);
-  balls.push(startBall);
+  // Ramps down M
+  const mTopR=M.boxes[M.boxes.length-1];
+  Composite.add(world,Bodies.rectangle(mLeft+10,mTop-55,140,5,{...R,angle:0.4}));
+  Composite.add(world,Bodies.rectangle(mTopR.x+mTopR.w+30,mTop+5,80,5,{...R,angle:0.3}));
 
-  // Ramp from start down to M top
-  const r1 = Bodies.rectangle(mLeftX + 10, mTopY - 55, 140, 5, { ...rampOpts, angle: 0.4 });
-  Composite.add(world, r1); staticBodies.push(r1);
+  // ── STAGE 2: Ramps M→A ──
+  Composite.add(world,Bodies.rectangle(A.ox-30,mTop+55,100,5,{...R,angle:-0.3}));
+  Composite.add(world,Bodies.rectangle(A.ox+40,mTop+110,110,5,{...R,angle:0.25}));
 
-  // Ramp across M top (ball rolls right)
-  const mTopRight = mLetter.boxes[mLetter.boxes.length - 1];
-  const r2 = Bodies.rectangle(mTopRight.x + mTopRight.w + 30, mTopY + 5, 80, 5, { ...rampOpts, angle: 0.3 });
-  Composite.add(world, r2); staticBodies.push(r2);
-
-  // ════════════════════════════════════════════════
-  // STAGE 2: Ramp cascade between M and A
-  // ════════════════════════════════════════════════
-  const aLetter = letterData[1]; // A
-  const r3 = Bodies.rectangle(aLetter.originX - 30, mTopY + 55, 100, 5, { ...rampOpts, angle: -0.3 });
-  Composite.add(world, r3); staticBodies.push(r3);
-
-  const r4 = Bodies.rectangle(aLetter.originX + 40, mTopY + 110, 110, 5, { ...rampOpts, angle: 0.25 });
-  Composite.add(world, r4); staticBodies.push(r4);
-
-  // ════════════════════════════════════════════════
-  // STAGE 3: Dominoes on top of A's crossbar area
-  // ════════════════════════════════════════════════
-  const aCrossbar = aLetter.boxes[3]; // crossbar of A
-  const domPlatY = aCrossbar.y - 15;
-
-  const domPlat = Bodies.rectangle(aCrossbar.x + aCrossbar.w / 2, domPlatY + 2, 120, 5, rampOpts);
-  Composite.add(world, domPlat); staticBodies.push(domPlat);
-
-  for (let i = 0; i < 7; i++) {
-    const d = Bodies.rectangle(aCrossbar.x + 10 + i * 15, domPlatY - 14, 5, 28, {
-      friction: 0.6, restitution: 0.05, density: 0.003, label: 'domino'
-    });
-    Composite.add(world, d);
-    dominoes.push(d);
+  // ── STAGE 3: Dominoes on A crossbar ──
+  const aCross=A.boxes[3];
+  const dpy=aCross.y-15;
+  Composite.add(world,Bodies.rectangle(aCross.x+aCross.w/2,dpy+2,120,5,R));
+  for(let i=0;i<7;i++){
+    const d=Bodies.rectangle(aCross.x+10+i*15,dpy-14,5,28,{friction:0.6,restitution:0.05,density:0.003,label:'domino'});
+    Composite.add(world,d);dominoes.push(d);
   }
 
-  // ════════════════════════════════════════════════
-  // STAGE 4: Pendulum between A and first T
-  // ════════════════════════════════════════════════
-  const t1Letter = letterData[2]; // first T
-  const pendAnchorX = (aLetter.originX + t1Letter.originX) / 2 + 30;
-  const pendAnchorY = mTopY - 80;
-  const pendBob = Bodies.circle(pendAnchorX + 30, pendAnchorY + 120, 14, {
-    density: 0.005, restitution: 0.4, friction: 0.2, label: 'ball'
-  });
-  const pendCon = Constraint.create({
-    bodyA: pendBob,
-    pointB: { x: pendAnchorX, y: pendAnchorY },
-    length: 130, stiffness: 0.9, damping: 0.002, label: 'pendulum'
-  });
-  Composite.add(world, [pendBob, pendCon]);
-  pendulums.push({ bob: pendBob, constraint: pendCon, anchorX: pendAnchorX, anchorY: pendAnchorY });
-  balls.push(pendBob);
+  // ── STAGE 4: Pendulum A→T1 ──
+  const pax=(A.ox+T1.ox)/2+30, pay=mTop-80;
+  const pb=Bodies.circle(pax+30,pay+120,14,{density:0.005,restitution:0.4,friction:0.2,label:'ball'});
+  const pc=Constraint.create({bodyA:pb,pointB:{x:pax,y:pay},length:130,stiffness:0.9,damping:0.002});
+  Composite.add(world,[pb,pc]);pends.push({bob:pb,constraint:pc});balls.push(pb);
 
-  // ════════════════════════════════════════════════
-  // STAGE 5: Ramps around the T's
-  // ════════════════════════════════════════════════
-  const t1Top = t1Letter.boxes[0]; // T top bar
-  const t2Letter = letterData[3]; // second T
+  // ── STAGE 5: Ramps through T's ──
+  const t1Top=T1.boxes[0];
+  Composite.add(world,Bodies.rectangle(T1.ox+50,t1Top.y+t1Top.h+30,80,5,{...R,angle:0.35}));
+  Composite.add(world,Bodies.rectangle((T1.ox+T2.ox)/2+30,t1Top.y+t1Top.h+80,100,5,{...R,angle:-0.2}));
 
-  // Ramp from pendulum area down through T1
-  const r5 = Bodies.rectangle(t1Letter.originX + 50, t1Top.y + t1Top.h + 30, 80, 5, { ...rampOpts, angle: 0.35 });
-  Composite.add(world, r5); staticBodies.push(r5);
+  // ── STAGE 6: Seesaw T→Z ──
+  const ssx=(T2.ox+Z.ox)/2+40, ssy=Z.oy+60;
+  const arm=Bodies.rectangle(ssx,ssy,160,6,{friction:0.5,density:0.002,label:'seesaw'});
+  const base=Bodies.polygon(ssx,ssy+16,3,18,{isStatic:true,label:'base',angle:Math.PI});
+  Composite.add(world,[arm,base,Constraint.create({bodyA:arm,pointB:{x:ssx,y:ssy},length:0,stiffness:0.9})]);
+  statics.push(base);
+  const lb=Bodies.circle(ssx+60,ssy-15,9,{restitution:0.6,friction:0.3,density:0.003,label:'ball'});
+  Composite.add(world,lb);balls.push(lb);
+  weightBody=Bodies.rectangle(ssx-50,ssy-120,24,24,{density:0.01,restitution:0.1,friction:0.5,label:'weight',isStatic:true});
+  Composite.add(world,weightBody);balls.push(weightBody);
+  Composite.add(world,Bodies.rectangle(ssx-60,ssy-35,90,5,{...R,angle:0.3}));
 
-  // Bridge between T's
-  const r6 = Bodies.rectangle((t1Letter.originX + t2Letter.originX) / 2 + 30, t1Top.y + t1Top.h + 80, 100, 5, { ...rampOpts, angle: -0.2 });
-  Composite.add(world, r6); staticBodies.push(r6);
-
-  // ════════════════════════════════════════════════
-  // STAGE 6: Seesaw at the space between T and Z
-  // ════════════════════════════════════════════════
-  const zLetter = letterData[4]; // Z
-  const seesawX = (t2Letter.originX + zLetter.originX) / 2 + 40;
-  const seesawY = zLetter.originY + 60;
-
-  const seesawArm = Bodies.rectangle(seesawX, seesawY, 160, 6, {
-    friction: 0.5, density: 0.002, label: 'seesaw'
-  });
-  const seesawBase = Bodies.polygon(seesawX, seesawY + 16, 3, 18, {
-    isStatic: true, label: 'base', angle: Math.PI
-  });
-  const seesawPin = Constraint.create({
-    bodyA: seesawArm, pointB: { x: seesawX, y: seesawY },
-    length: 0, stiffness: 0.9
-  });
-  Composite.add(world, [seesawArm, seesawBase, seesawPin]);
-  staticBodies.push(seesawBase);
-
-  // Launch ball on seesaw
-  const launchBall = Bodies.circle(seesawX + 60, seesawY - 15, 9, {
-    restitution: 0.6, friction: 0.3, density: 0.003, label: 'ball'
-  });
-  Composite.add(world, launchBall);
-  balls.push(launchBall);
-
-  // Weight to drop on seesaw
-  weightBody = Bodies.rectangle(seesawX - 50, seesawY - 120, 24, 24, {
-    density: 0.01, restitution: 0.1, friction: 0.5, label: 'weight', isStatic: true
-  });
-  Composite.add(world, weightBody);
-  balls.push(weightBody);
-
-  // Ramp leading to seesaw
-  const r7 = Bodies.rectangle(seesawX - 60, seesawY - 35, 90, 5, { ...rampOpts, angle: 0.3 });
-  Composite.add(world, r7); staticBodies.push(r7);
-
-  // ════════════════════════════════════════════════
-  // STAGE 7: Peg board beneath Z letter
-  // ════════════════════════════════════════════════
-  const zBottom = zLetter.boxes[zLetter.boxes.length - 1];
-  const pegStartX = zLetter.originX + 5;
-  const pegStartY = zBottom.y + zBottom.h + 20;
-
-  for (let row = 0; row < 5; row++) {
-    for (let col = 0; col < 4 + (row % 2); col++) {
-      const px = pegStartX + col * 22 - (row % 2 === 0 ? 11 : 0);
-      const py = pegStartY + row * 22;
-      const peg = Bodies.circle(px, py, 3.5, {
-        isStatic: true, restitution: 0.5, friction: 0.1, label: 'peg'
-      });
-      Composite.add(world, peg);
-      pegs.push(peg);
-    }
+  // ── STAGE 7: Pegs under Z ──
+  const zBot=Z.boxes[Z.boxes.length-1];
+  const pgx=Z.ox+5, pgy=zBot.y+zBot.h+20;
+  for(let row=0;row<5;row++)for(let col=0;col<4+(row%2);col++){
+    const p=Bodies.circle(pgx+col*22-(row%2===0?11:0),pgy+row*22,3.5,{isStatic:true,restitution:0.5,friction:0.1,label:'peg'});
+    Composite.add(world,p);pegs.push(p);
   }
 
-  // ════════════════════════════════════════════════
-  // STAGE 8: Funnel under dot → final ramps
-  // ════════════════════════════════════════════════
-  const dotLetter = letterData[5]; // "."
-  const dotBox = dotLetter.boxes[0];
+  // ── STAGE 8: Funnel under dot ──
+  const db=DOT.boxes[0];
+  Composite.add(world,Bodies.rectangle(db.x-25,db.y+db.h+40,50,5,{...R,angle:0.6}));
+  Composite.add(world,Bodies.rectangle(db.x+db.w+25,db.y+db.h+40,50,5,{...R,angle:-0.6}));
+  Composite.add(world,Bodies.rectangle(db.x,db.y+db.h+100,120,5,{...R,angle:-0.3}));
+  Composite.add(world,Bodies.rectangle(db.x-100,db.y+db.h+150,100,5,{...R,angle:0.25}));
 
-  // Funnel walls
-  const fL = Bodies.rectangle(dotBox.x - 25, dotBox.y + dotBox.h + 40, 50, 5, { ...rampOpts, angle: 0.6 });
-  const fR = Bodies.rectangle(dotBox.x + dotBox.w + 25, dotBox.y + dotBox.h + 40, 50, 5, { ...rampOpts, angle: -0.6 });
-  Composite.add(world, [fL, fR]); staticBodies.push(fL, fR);
-
-  // Final collection ramps
-  const r8 = Bodies.rectangle(dotBox.x, dotBox.y + dotBox.h + 100, 120, 5, { ...rampOpts, angle: -0.3 });
-  Composite.add(world, r8); staticBodies.push(r8);
-
-  const r9 = Bodies.rectangle(dotBox.x - 100, dotBox.y + dotBox.h + 150, 100, 5, { ...rampOpts, angle: 0.25 });
-  Composite.add(world, r9); staticBodies.push(r9);
-
-  // ════════════════════════════════════════════════
-  // STAGE 9: Newton's cradle (decorative, top right)
-  // ════════════════════════════════════════════════
-  for (let i = 0; i < 5; i++) {
-    const nbX = zLetter.originX + 50 + i * 18;
-    const nbY = mTopY - 130;
-    const nBob = Bodies.circle(nbX, nbY + 70, 8, {
-      density: 0.005, restitution: 0.99, friction: 0.01, label: 'ball'
-    });
-    const nCon = Constraint.create({
-      bodyA: nBob, pointB: { x: nbX, y: nbY },
-      length: 70, stiffness: 0.95, damping: 0.001
-    });
-    Composite.add(world, [nBob, nCon]);
-    pendulums.push({ bob: nBob, constraint: nCon, anchorX: nbX, anchorY: nbY });
-    balls.push(nBob);
+  // ── Newton's cradle (top right) ──
+  for(let i=0;i<5;i++){
+    const nx=Z.ox+50+i*18, ny=mTop-130;
+    const nb=Bodies.circle(nx,ny+70,8,{density:0.005,restitution:0.99,friction:0.01,label:'ball'});
+    const nc=Constraint.create({bodyA:nb,pointB:{x:nx,y:ny},length:70,stiffness:0.95,damping:0.001});
+    Composite.add(world,[nb,nc]);pends.push({bob:nb,constraint:nc});balls.push(nb);
   }
 
-  // ════════════════════════════════════════════════
-  // GEARS (decorative, bottom left)
-  // ════════════════════════════════════════════════
-  const gx = mLetter.originX - 30;
-  const gy = mLetter.originY + 160;
+  // ── Gears ──
+  const gx=M.ox-30, gy=M.oy+160;
   gears.push(
-    { x: gx, y: gy, radius: 38, teeth: 10, angle: 0, speed: 0.7 },
-    { x: gx + 60, y: gy, radius: 26, teeth: 7, angle: 0, speed: -0.7 * (38/26) },
-    { x: gx + 60 + 42, y: gy, radius: 18, teeth: 5, angle: 0, speed: 0.7 * (38/18) }
+    {x:gx,y:gy,radius:38,teeth:10,angle:0,speed:0.7},
+    {x:gx+60,y:gy,radius:26,teeth:7,angle:0,speed:-0.7*(38/26)},
+    {x:gx+102,y:gy,radius:18,teeth:5,angle:0,speed:0.7*(38/18)}
+  );
+  const gx2=Z.ox+60, gy2=Z.oy+200;
+  gears.push(
+    {x:gx2,y:gy2,radius:30,teeth:8,angle:0,speed:-1},
+    {x:gx2+48,y:gy2,radius:22,teeth:6,angle:0,speed:30/22}
   );
 
-  // Second gear set bottom right
-  const gx2 = zLetter.originX + 60;
-  const gy2 = zLetter.originY + 200;
-  gears.push(
-    { x: gx2, y: gy2, radius: 30, teeth: 8, angle: 0, speed: -1.0 },
-    { x: gx2 + 48, y: gy2, radius: 22, teeth: 6, angle: 0, speed: 1.0 * (30/22) }
-  );
+  // ── Bucket ──
+  const bkX=0,bkY=380;
+  Composite.add(world,[
+    Bodies.rectangle(bkX-30,bkY,6,50,R),
+    Bodies.rectangle(bkX+30,bkY,6,50,R),
+    Bodies.rectangle(bkX,bkY+22,66,6,R),
+    Bodies.rectangle(bkX-80,bkY-40,100,5,{...R,angle:0.3}),
+    Bodies.rectangle(bkX+130,bkY+10,60,8,{isStatic:true,restitution:0.92,friction:0.2,label:'trampoline'})
+  ]);
 
-  // ════════════════════════════════════════════════
-  // EXTRA: Bucket at bottom center
-  // ════════════════════════════════════════════════
-  const bkX = 0, bkY = 380;
-  const bkL = Bodies.rectangle(bkX - 30, bkY, 6, 50, rampOpts);
-  const bkR = Bodies.rectangle(bkX + 30, bkY, 6, 50, rampOpts);
-  const bkB = Bodies.rectangle(bkX, bkY + 22, 66, 6, rampOpts);
-  Composite.add(world, [bkL, bkR, bkB]);
-  staticBodies.push(bkL, bkR, bkB);
-
-  // Extra ramp feeding to bucket
-  const r10 = Bodies.rectangle(bkX - 80, bkY - 40, 100, 5, { ...rampOpts, angle: 0.3 });
-  Composite.add(world, r10); staticBodies.push(r10);
-
-  // ════════════════════════════════════════════════
-  // Trampoline
-  // ════════════════════════════════════════════════
-  const tramp = Bodies.rectangle(bkX + 130, bkY + 10, 60, 8, {
-    isStatic: true, restitution: 0.92, friction: 0.2, label: 'trampoline'
-  });
-  Composite.add(world, tramp);
-  staticBodies.push(tramp);
-
-  // Extra loose balls for fun
-  for (let i = 0; i < 3; i++) {
-    const eb = Bodies.circle(mLeftX + 160 + i * 50, mTopY - 140 - i * 20, 7, {
-      restitution: 0.5, friction: 0.3, density: 0.003, label: 'ball', isStatic: true
-    });
-    Composite.add(world, eb);
-    balls.push(eb);
+  // Extra balls
+  for(let i=0;i<3;i++){
+    const eb=Bodies.circle(mLeft+160+i*50,mTop-140-i*20,7,{restitution:0.5,friction:0.3,density:0.003,label:'ball',isStatic:true});
+    Composite.add(world,eb);balls.push(eb);
   }
 }
 
 buildScene();
 
-// ── Mouse ──
-mouse = Mouse.create(canvas);
-mouseConstraint = MouseConstraint.create(engine, {
-  mouse, constraint: { stiffness: 0.08, render: { visible: false } }
-});
-mouse.pixelRatio = dpr;
-Composite.add(world, mouseConstraint);
+// ── Mouse setup ──
+mouse=Mouse.create(C);
+mConstraint=MouseConstraint.create(engine,{mouse,constraint:{stiffness:0.08,render:{visible:false}}});
+mouse.pixelRatio=dpr;
+Composite.add(world,mConstraint);
 
-canvas.addEventListener('wheel', e => {
-  e.preventDefault();
-  targetZoom *= e.deltaY > 0 ? 0.93 : 1.07;
-  targetZoom = Math.max(0.3, Math.min(3, targetZoom));
-}, { passive: false });
+C.addEventListener('wheel',e=>{e.preventDefault();tZoom*=e.deltaY>0?0.93:1.07;tZoom=Math.max(0.3,Math.min(3,tZoom))},{passive:false});
 
-// ── Start / Reset ──
-document.getElementById('startBtn').addEventListener('click', () => {
-  if (!started && startBall) {
-    started = true;
-    Body.setStatic(startBall, false);
-    // Release extra balls
-    setTimeout(() => {
-      for (const b of balls) {
-        if (b.isStatic && b.label === 'ball') Body.setStatic(b, false);
-      }
-    }, 1200);
-    // Drop weight
-    setTimeout(() => {
-      if (weightBody) Body.setStatic(weightBody, false);
-    }, 3000);
+document.getElementById('startBtn').addEventListener('click',()=>{
+  if(!started&&startBall){
+    started=true;Body.setStatic(startBall,false);
+    setTimeout(()=>{for(const b of balls)if(b.isStatic&&b.label==='ball')Body.setStatic(b,false)},1200);
+    setTimeout(()=>{if(weightBody)Body.setStatic(weightBody,false)},3000);
   }
 });
-document.getElementById('resetBtn').addEventListener('click', buildScene);
+document.getElementById('resetBtn').addEventListener('click',buildScene);
 
-// ── Collision particles ──
-Events.on(engine, 'collisionStart', event => {
-  for (const pair of event.pairs) {
-    const speed = Vector.magnitude(Vector.sub(pair.bodyA.velocity, pair.bodyB.velocity));
-    if (speed > 2.5) {
-      const pt = pair.collision.supports?.[0] || pair.bodyA.position;
-      for (let i = 0; i < Math.min(speed * 1.5, 10); i++) {
-        impactParticles.push({
-          x: pt.x, y: pt.y,
-          vx: (Math.random() - 0.5) * speed * 1.2,
-          vy: (Math.random() - 0.5) * speed * 1.2 - 1,
-          life: 1, size: Math.random() * 2 + 0.5
-        });
-      }
+Events.on(engine,'collisionStart',e=>{
+  for(const pair of e.pairs){
+    const spd=Vector.magnitude(Vector.sub(pair.bodyA.velocity,pair.bodyB.velocity));
+    if(spd>2.5){
+      const pt=pair.collision.supports?.[0]||pair.bodyA.position;
+      for(let i=0;i<Math.min(spd*1.5,10);i++)
+        particles.push({x:pt.x,y:pt.y,vx:(Math.random()-0.5)*spd,vy:(Math.random()-0.5)*spd-1,life:1,size:Math.random()*1.5+0.3});
     }
   }
 });
 
-// ══════════════════════════════════════════════════════════════
-//  DRAWING HELPERS
-// ══════════════════════════════════════════════════════════════
-function drawGear(ctx, g) {
-  ctx.save();
-  ctx.translate(g.x, g.y);
-  ctx.rotate(g.angle);
-
-  ctx.beginPath();
-  ctx.arc(0, 0, g.radius, 0, Math.PI * 2);
-  ctx.strokeStyle = INK + '0.45)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(0, 0, g.radius * 0.55, 0, Math.PI * 2);
-  ctx.strokeStyle = INK + '0.18)';
-  ctx.lineWidth = 0.5;
-  ctx.stroke();
-
-  for (let i = 0; i < g.teeth; i++) {
-    const a1 = (i / g.teeth) * Math.PI * 2;
-    const a2 = ((i + 0.38) / g.teeth) * Math.PI * 2;
-    const r1 = g.radius, r2 = g.radius + 6;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a1)*r1, Math.sin(a1)*r1);
-    ctx.lineTo(Math.cos(a1)*r2, Math.sin(a1)*r2);
-    ctx.lineTo(Math.cos(a2)*r2, Math.sin(a2)*r2);
-    ctx.lineTo(Math.cos(a2)*r1, Math.sin(a2)*r1);
-    ctx.strokeStyle = INK + '0.35)';
-    ctx.lineWidth = 0.7;
-    ctx.stroke();
-  }
-
-  for (let i = 0; i < 4; i++) {
-    const a = (i/4) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a)*3, Math.sin(a)*3);
-    ctx.lineTo(Math.cos(a)*g.radius*0.5, Math.sin(a)*g.radius*0.5);
-    ctx.strokeStyle = INK_D + '0.2)';
-    ctx.lineWidth = 0.6;
-    ctx.stroke();
-  }
-
-  ctx.beginPath();
-  ctx.arc(0, 0, 3, 0, Math.PI * 2);
-  ctx.fillStyle = INK + '0.35)';
-  ctx.fill();
-
-  ctx.restore();
+// ════════════════════════════════════════════════════════════════
+//  PAPER TEXTURE
+// ════════════════════════════════════════════════════════════════
+const pC=document.createElement('canvas'),pX=pC.getContext('2d');
+pC.width=512;pC.height=512;
+pX.fillStyle='#eae6dc';pX.fillRect(0,0,512,512);
+for(let i=0;i<20000;i++){pX.fillStyle=`rgba(0,0,0,${Math.random()*0.025})`;pX.fillRect(Math.random()*512,Math.random()*512,1,1)}
+for(let i=0;i<15000;i++){pX.fillStyle=`rgba(255,255,240,${Math.random()*0.015})`;pX.fillRect(Math.random()*512,Math.random()*512,1,1)}
+// Subtle fiber lines
+for(let i=0;i<200;i++){
+  pX.beginPath();const fx=Math.random()*512,fy=Math.random()*512;
+  pX.moveTo(fx,fy);pX.lineTo(fx+Math.random()*30-15,fy+Math.random()*2-1);
+  pX.strokeStyle=`rgba(160,140,110,${Math.random()*0.03})`;pX.lineWidth=0.5;pX.stroke();
 }
-
-function drawBody(ctx, body) {
-  const v = body.vertices;
-  if (!v || v.length < 2) return;
-  const label = body.label || '';
-
-  if (label === 'wall' || label === 'letter') return;
-
-  // Circle bodies (balls, pegs)
-  if (label === 'ball' || label === 'pendulum-bob') {
-    const r = body.circleRadius || 10;
-    ctx.beginPath();
-    ctx.arc(body.position.x, body.position.y, r, 0, Math.PI * 2);
-    ctx.strokeStyle = INK + '0.6)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Crosshatch fill
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(body.position.x, body.position.y, r, 0, Math.PI * 2);
-    ctx.clip();
-    for (let i = -r*2; i < r*2; i += 3) {
-      ctx.beginPath();
-      ctx.moveTo(body.position.x + i, body.position.y - r);
-      ctx.lineTo(body.position.x + i - r*0.8, body.position.y + r);
-      ctx.strokeStyle = INK_F + '0.1)';
-      ctx.lineWidth = 0.3;
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // Center
-    ctx.beginPath();
-    ctx.arc(body.position.x, body.position.y, 1.5, 0, Math.PI * 2);
-    ctx.fillStyle = INK + '0.5)';
-    ctx.fill();
-    return;
-  }
-
-  if (label === 'peg') {
-    ctx.beginPath();
-    ctx.arc(body.position.x, body.position.y, body.circleRadius || 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = INK + '0.3)';
-    ctx.fill();
-    ctx.strokeStyle = INK + '0.5)';
-    ctx.lineWidth = 0.7;
-    ctx.stroke();
-    return;
-  }
-
-  // Color by type
-  let strokeA = 0.5, lw = 1.2, fillA = 0;
-  let color = INK;
-
-  if (label === 'ramp' || label === 'platform') { lw = 1.5; fillA = 0.03; }
-  if (label === 'domino') { strokeA = 0.5; lw = 1; fillA = 0.05; }
-  if (label === 'seesaw') { lw = 1.8; }
-  if (label === 'weight') { strokeA = 0.6; lw = 1.5; fillA = 0.07; }
-  if (label === 'base') { color = INK_D; strokeA = 0.35; }
-  if (label === 'trampoline') { color = RED; strokeA = 0.5; lw = 2; }
-
-  ctx.beginPath();
-  ctx.moveTo(v[0].x, v[0].y);
-  for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
-  ctx.closePath();
-  if (fillA > 0) { ctx.fillStyle = color + fillA + ')'; ctx.fill(); }
-  ctx.strokeStyle = color + strokeA + ')';
-  ctx.lineWidth = lw;
-  ctx.stroke();
-
-  // Weight crosshatch
-  if (label === 'weight') {
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(v[0].x, v[0].y);
-    for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
-    ctx.closePath(); ctx.clip();
-    for (let i = -50; i < 50; i += 4) {
-      ctx.beginPath();
-      ctx.moveTo(body.position.x + i, body.position.y - 30);
-      ctx.lineTo(body.position.x + i + 20, body.position.y + 30);
-      ctx.strokeStyle = INK_F + '0.08)';
-      ctx.lineWidth = 0.3;
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
+// Coffee stains
+for(let i=0;i<4;i++){
+  const gx=Math.random()*512,gy=Math.random()*512;
+  const gr=pX.createRadialGradient(gx,gy,0,gx,gy,30+Math.random()*50);
+  gr.addColorStop(0,'rgba(160,130,90,0.04)');gr.addColorStop(1,'rgba(160,130,90,0)');
+  pX.fillStyle=gr;pX.fillRect(0,0,512,512);
 }
+const paperPat=X.createPattern(pC,'repeat');
 
-function drawConstraintLine(ctx, con) {
-  if (!con.bodyA || !con.pointB) return;
-  const pA = con.bodyA.position;
-  const pB = con.pointB;
+// ════════════════════════════════════════════════════════════════
+//  MAIN RENDER LOOP
+// ════════════════════════════════════════════════════════════════
+let lastT=performance.now();
 
-  ctx.beginPath();
-  ctx.moveTo(pA.x, pA.y);
-  ctx.lineTo(pB.x, pB.y);
-  ctx.strokeStyle = INK + '0.25)';
-  ctx.lineWidth = 0.7;
-  ctx.setLineDash([4, 3]);
-  ctx.stroke();
-  ctx.setLineDash([]);
+function frame(now){
+  const dt=Math.min((now-lastT)/1000,0.033);lastT=now;time+=dt;
 
-  // Anchor
-  ctx.beginPath();
-  ctx.arc(pB.x, pB.y, 3, 0, Math.PI * 2);
-  ctx.fillStyle = INK + '0.35)';
-  ctx.fill();
+  if(mouse){mouse.scale.x=1/zoom;mouse.scale.y=1/zoom;mouse.offset.x=camX-W/(2*zoom);mouse.offset.y=camY-H/(2*zoom)}
+  Engine.update(engine,dt*1000);
+  for(const g of gears)g.angle+=g.speed*dt;
+  zoom+=(tZoom-zoom)*0.1;
 
-  // Mount bar
-  ctx.beginPath();
-  ctx.moveTo(pB.x - 7, pB.y); ctx.lineTo(pB.x + 7, pB.y);
-  ctx.strokeStyle = INK_D + '0.3)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  for (let i = -7; i <= 7; i += 3) {
-    ctx.beginPath();
-    ctx.moveTo(pB.x + i, pB.y);
-    ctx.lineTo(pB.x + i - 3, pB.y - 4);
-    ctx.strokeStyle = INK_D + '0.15)';
-    ctx.lineWidth = 0.4;
-    ctx.stroke();
-  }
-}
+  // Paper
+  X.fillStyle=paperPat||'#eae6dc';X.fillRect(0,0,W,H);
 
-function drawGrid(ctx) {
-  const gs = 50, sgs = 10;
-  const sx = Math.floor((camX - W/2/zoom) / gs) * gs;
-  const sy = Math.floor((camY - H/2/zoom) / gs) * gs;
-  const ex = camX + W/2/zoom + gs;
-  const ey = camY + H/2/zoom + gs;
+  // Camera
+  X.save();X.translate(W/2,H/2);X.scale(zoom,zoom);X.translate(-camX,-camY);
 
-  // Small
-  const ssx = Math.floor((camX - W/2/zoom) / sgs) * sgs;
-  const ssy = Math.floor((camY - H/2/zoom) / sgs) * sgs;
-  ctx.beginPath();
-  for (let x = ssx; x < ex; x += sgs) { ctx.moveTo(x, camY-H/2/zoom); ctx.lineTo(x, ey); }
-  for (let y = ssy; y < ey; y += sgs) { ctx.moveTo(camX-W/2/zoom, y); ctx.lineTo(ex, y); }
-  ctx.strokeStyle = 'rgba(120,140,160,0.05)';
-  ctx.lineWidth = 0.3;
-  ctx.stroke();
+  drawGrid(X);
+  drawConstructionLines(X);
+  drawBorder(X);
 
-  // Major
-  ctx.beginPath();
-  for (let x = sx; x < ex; x += gs) { ctx.moveTo(x, camY-H/2/zoom); ctx.lineTo(x, ey); }
-  for (let y = sy; y < ey; y += gs) { ctx.moveTo(camX-W/2/zoom, y); ctx.lineTo(ex, y); }
-  ctx.strokeStyle = 'rgba(100,120,150,0.09)';
-  ctx.lineWidth = 0.4;
-  ctx.stroke();
-}
-
-function drawDimLine(ctx, x1, y1, x2, y2, label, off) {
-  off = off || 16;
-  const dx = x2-x1, dy = y2-y1, ang = Math.atan2(dy,dx);
-  const px = -Math.sin(ang)*off, py = Math.cos(ang)*off;
-
-  ctx.beginPath();
-  ctx.moveTo(x1,y1); ctx.lineTo(x1+px,y1+py);
-  ctx.moveTo(x2,y2); ctx.lineTo(x2+px,y2+py);
-  ctx.moveTo(x1+px,y1+py); ctx.lineTo(x2+px,y2+py);
-  ctx.strokeStyle = INK_D + '0.2)';
-  ctx.lineWidth = 0.4;
-  ctx.stroke();
-
-  const as = 3.5;
-  for (const [sx2,sy2,dir] of [[x1+px,y1+py,1],[x2+px,y2+py,-1]]) {
-    ctx.beginPath();
-    ctx.moveTo(sx2,sy2);
-    ctx.lineTo(sx2+Math.cos(ang+0.4)*as*dir, sy2+Math.sin(ang+0.4)*as*dir);
-    ctx.moveTo(sx2,sy2);
-    ctx.lineTo(sx2+Math.cos(ang-0.4)*as*dir, sy2+Math.sin(ang-0.4)*as*dir);
-    ctx.stroke();
-  }
-
-  const lx = (x1+x2)/2+px, ly = (y1+y2)/2+py;
-  ctx.save();
-  ctx.translate(lx, ly);
-  let ta = ang; if (ta > Math.PI/2 || ta < -Math.PI/2) ta += Math.PI;
-  ctx.rotate(ta);
-  ctx.font = '6px Courier New';
-  ctx.fillStyle = INK_D + '0.3)';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(label, 0, -2);
-  ctx.restore();
-}
-
-function drawParticles(ctx, dt) {
-  for (let i = impactParticles.length - 1; i >= 0; i--) {
-    const p = impactParticles[i];
-    p.x += p.vx * dt * 60; p.y += p.vy * dt * 60;
-    p.vy += 0.15; p.life -= dt * 3;
-    if (p.life <= 0) { impactParticles.splice(i, 1); continue; }
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fillStyle = INK + (p.life * 0.35) + ')';
-    ctx.fill();
-  }
-}
-
-function drawBorder(ctx) {
-  const bx = -600, by = -350, bw = 1200, bh = 810;
-
-  ctx.strokeStyle = INK_D + '0.12)';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(bx, by, bw, bh);
-  ctx.strokeStyle = INK_D + '0.06)';
-  ctx.lineWidth = 0.5;
-  ctx.strokeRect(bx+7, by+7, bw-14, bh-14);
-
-  // Corner marks
-  const c = 16;
-  ctx.strokeStyle = INK_D + '0.18)';
-  ctx.lineWidth = 1;
-  for (const [cx2,cy2] of [[bx,by],[bx+bw,by],[bx,by+bh],[bx+bw,by+bh]]) {
-    const dx2 = cx2===bx?1:-1, dy2 = cy2===by?1:-1;
-    ctx.beginPath();
-    ctx.moveTo(cx2, cy2+c*dy2); ctx.lineTo(cx2,cy2); ctx.lineTo(cx2+c*dx2,cy2);
-    ctx.stroke();
-  }
-
-  // Title block
-  const tbx = bx+bw-200, tby = by+bh-60, tbw = 200, tbh = 60;
-  ctx.strokeStyle = INK_D + '0.18)';
-  ctx.lineWidth = 0.7;
-  ctx.strokeRect(tbx, tby, tbw, tbh);
-  ctx.beginPath();
-  ctx.moveTo(tbx, tby+20); ctx.lineTo(tbx+tbw, tby+20);
-  ctx.moveTo(tbx, tby+40); ctx.lineTo(tbx+tbw, tby+40);
-  ctx.stroke();
-
-  ctx.font = '7px Courier New';
-  ctx.fillStyle = INK_D + '0.3)';
-  ctx.fillText('RUBE GOLDBERG — INTERACTIVE', tbx+6, tby+14);
-  ctx.font = '8px Courier New';
-  ctx.fillStyle = INK + '0.35)';
-  ctx.fillText('MATT ZIEGER', tbx+6, tby+34);
-  ctx.font = '6px Courier New';
-  ctx.fillStyle = INK_D + '0.25)';
-  ctx.fillText('SCALE 1:1  REV 05  2026-03-17', tbx+6, tby+53);
-}
-
-function drawFlowArrows(ctx) {
-  const pulse = (Math.sin(time * 2) + 1) / 2;
-  const a = 0.08 + pulse * 0.08;
-
-  if (letterData.length < 5) return;
-
-  const arrows = [];
-  // Build flow path through letters
-  for (let i = 0; i < letterData.length - 1; i++) {
-    const cur = letterData[i], next = letterData[i+1];
-    const ax = (cur.originX + next.originX) / 2 + 30;
-    const ay = cur.originY + 50;
-    const angle = Math.atan2(next.originY - cur.originY, next.originX - cur.originX);
-    arrows.push({ x: ax, y: ay, angle });
-  }
-
-  for (const arr of arrows) {
-    ctx.save();
-    ctx.translate(arr.x, arr.y);
-    ctx.rotate(arr.angle);
-    ctx.beginPath();
-    ctx.moveTo(-10, 0); ctx.lineTo(10, 0);
-    ctx.moveTo(5, -4); ctx.lineTo(10, 0); ctx.lineTo(5, 4);
-    ctx.strokeStyle = GREEN + a + ')';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-    ctx.restore();
-  }
-}
-
-function drawAnnotations(ctx) {
-  if (letterData.length < 5) return;
-
-  ctx.font = '6px Courier New';
-  ctx.fillStyle = INK_D + '0.25)';
-
-  const labels = [
-    { txt: 'STAGE 1 — BALL RELEASE', x: letterData[0].originX - 50, y: letterData[0].originY - 140 },
-    { txt: 'STAGE 2 — RAMP CASCADE', x: letterData[0].originX + 60, y: letterData[0].originY - 20 },
-    { txt: 'STAGE 3 — DOMINO CHAIN', x: letterData[1].originX, y: letterData[1].originY - 50 },
-    { txt: 'STAGE 4 — PENDULUM', x: (letterData[1].originX+letterData[2].originX)/2-10, y: letterData[1].originY - 120 },
-    { txt: 'STAGE 5 — SEESAW LAUNCH', x: letterData[3].originX + 50, y: letterData[3].originY - 80 },
-    { txt: 'STAGE 6 — GALTON BOARD', x: letterData[4].originX - 10, y: letterData[4].originY + 140 },
-    { txt: "NEWTON'S CRADLE", x: letterData[4].originX + 40, y: letterData[0].originY - 155 },
-    { txt: 'GEAR TRAIN — 3-STAGE', x: letterData[0].originX - 50, y: letterData[0].originY + 145 },
-    { txt: 'COLLECTION BUCKET', x: -40, y: 340 },
-  ];
-
-  for (const l of labels) {
-    ctx.fillText(l.txt, l.x, l.y);
-    // Leader tick
-    ctx.beginPath();
-    ctx.moveTo(l.x, l.y + 2);
-    ctx.lineTo(l.x + 12, l.y + 8);
-    ctx.strokeStyle = INK_D + '0.12)';
-    ctx.lineWidth = 0.3;
-    ctx.stroke();
-  }
-
-  // Section circles
-  const sections = 'ABCDEF';
-  const sectionPos = [
-    { x: letterData[0].originX - 80, y: letterData[0].originY - 100 },
-    { x: letterData[1].originX + 20, y: letterData[1].originY - 30 },
-    { x: (letterData[2].originX+letterData[3].originX)/2, y: letterData[2].originY - 100 },
-    { x: letterData[4].originX + 20, y: letterData[4].originY + 80 },
-    { x: 0, y: 360 },
-    { x: letterData[4].originX + 50, y: letterData[0].originY - 140 },
-  ];
-
-  for (let i = 0; i < sectionPos.length; i++) {
-    const sp = sectionPos[i];
-    ctx.beginPath();
-    ctx.arc(sp.x, sp.y, 10, 0, Math.PI * 2);
-    ctx.strokeStyle = RED + '0.25)';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-    ctx.font = '8px Courier New';
-    ctx.fillStyle = RED + '0.35)';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(sections[i], sp.x, sp.y + 1);
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-  }
-
-  // Dimension lines on letters
-  if (letterData.length > 0) {
-    const m = letterData[0];
-    const lastBox = m.boxes[m.boxes.length - 1];
-    drawDimLine(ctx, m.boxes[0].x, m.boxes[0].y + m.boxes[0].h + 5,
-      lastBox.x + lastBox.w, lastBox.y + lastBox.h + 5,
-      Math.round(lastBox.x + lastBox.w - m.boxes[0].x) + 'mm', 12);
-  }
-}
-
-// ── Paper texture ──
-const paperCvs = document.createElement('canvas');
-const paperCtx = paperCvs.getContext('2d');
-paperCvs.width = 256; paperCvs.height = 256;
-paperCtx.fillStyle = PAPER;
-paperCtx.fillRect(0, 0, 256, 256);
-for (let i = 0; i < 6000; i++) {
-  paperCtx.fillStyle = `rgba(0,0,0,${Math.random()*0.035})`;
-  paperCtx.fillRect(Math.random()*256, Math.random()*256, 1, 1);
-}
-for (let i = 0; i < 3; i++) {
-  const gx = Math.random()*256, gy = Math.random()*256;
-  const grad = paperCtx.createRadialGradient(gx,gy,0,gx,gy,40+Math.random()*50);
-  grad.addColorStop(0, 'rgba(170,150,120,0.05)');
-  grad.addColorStop(1, 'rgba(170,150,120,0)');
-  paperCtx.fillStyle = grad;
-  paperCtx.fillRect(0,0,256,256);
-}
-const paperPat = ctx.createPattern(paperCvs, 'repeat');
-
-// ══════════════════════════════════════════════════════════════
-//  MAIN LOOP
-// ══════════════════════════════════════════════════════════════
-let lastTime = performance.now();
-
-function frame(now) {
-  const dt = Math.min((now - lastTime) / 1000, 0.033);
-  lastTime = now;
-  time += dt;
-
-  // Update mouse for camera transform so dragging works in world space
-  if (mouse) {
-    mouse.scale.x = 1 / zoom;
-    mouse.scale.y = 1 / zoom;
-    mouse.offset.x = camX - W / (2 * zoom);
-    mouse.offset.y = camY - H / (2 * zoom);
-  }
-
-  Engine.update(engine, dt * 1000);
-  for (const g of gears) g.angle += g.speed * dt;
-  zoom += (targetZoom - zoom) * 0.1;
-
-  // ── Paper background ──
-  ctx.fillStyle = paperPat || PAPER;
-  ctx.fillRect(0, 0, W, H);
-
-  // ── Camera ──
-  ctx.save();
-  ctx.translate(W/2, H/2);
-  ctx.scale(zoom, zoom);
-  ctx.translate(-camX, -camY);
-
-  drawGrid(ctx);
-
-  // Construction lines (faint dashed)
-  ctx.setLineDash([5, 4]);
-  ctx.strokeStyle = INK_F + '0.05)';
-  ctx.lineWidth = 0.3;
-  for (let y = -300; y <= 400; y += 100) {
-    ctx.beginPath(); ctx.moveTo(-600,y); ctx.lineTo(600,y); ctx.stroke();
-  }
-  for (let x = -600; x <= 600; x += 100) {
-    ctx.beginPath(); ctx.moveTo(x,-350); ctx.lineTo(x,460); ctx.stroke();
-  }
-  ctx.setLineDash([]);
-
-  drawBorder(ctx);
-  drawFlowArrows(ctx);
+  // ── Decorative structures (behind letters) ──
+  drawDecorations(X);
 
   // ── 3D Letters ──
-  drawLetters(ctx);
+  drawLetters(X);
 
   // ── Gears ──
-  for (const g of gears) drawGear(ctx, g);
+  for(const g of gears)drawGear(X,g);
 
   // ── Physics bodies ──
-  const allBodies = Matter.Composite.allBodies(world);
-  for (const b of allBodies) drawBody(ctx, b);
+  const allB=Composite.allBodies(world);
+  for(const b of allB)drawPhysBody(X,b);
 
   // ── Constraints ──
-  for (const p of pendulums) drawConstraintLine(ctx, p.constraint);
-
-  // ── Seesaw pivot ──
-  // find seesaw pin (it's a constraint with pointB)
-  const allCons = Matter.Composite.allConstraints(world);
-  for (const con of allCons) {
-    if (con.label === 'seesaw-pin' || con.label === 'constraint') {
-      // skip mouse constraint
-    }
-  }
+  for(const p of pends)drawConstraint(X,p.constraint);
 
   // ── Annotations ──
-  drawAnnotations(ctx);
+  drawAnnotations(X);
 
-  // ── Particles ──
-  drawParticles(ctx, dt);
-
-  // Bucket flag
-  ctx.beginPath();
-  ctx.moveTo(0, 350); ctx.lineTo(0, 320);
-  ctx.lineTo(25, 325); ctx.lineTo(0, 330);
-  ctx.strokeStyle = RED + '0.25)';
-  ctx.lineWidth = 0.7;
-  ctx.stroke();
-  ctx.font = '7px Courier New';
-  ctx.fillStyle = RED + '0.3)';
-  ctx.fillText('FINISH', 5, 315);
-
-  // Spring coils under trampoline
-  const trampBodies = staticBodies.filter(b => b.label === 'trampoline');
-  for (const t of trampBodies) {
-    for (let i = 0; i < 3; i++) {
-      const sx = t.position.x - 15 + i * 15;
-      ctx.beginPath();
-      for (let j = 0; j <= 8; j++) {
-        const tt = j/8;
-        const px = sx + Math.sin(tt * Math.PI * 4) * 3;
-        const py = t.position.y + 4 + tt * 16;
-        if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.strokeStyle = RED + '0.2)';
-      ctx.lineWidth = 0.6;
-      ctx.stroke();
-    }
+  // ── Dimension lines ──
+  if(letterData.length>0){
+    const m=letterData[0],lb=m.boxes[m.boxes.length-1];
+    dimLine(X,m.boxes[0].x,m.boxes[0].y+m.boxes[0].h+5,lb.x+lb.w,lb.y+lb.h+5,Math.round(lb.x+lb.w-m.boxes[0].x)+'mm',14);
+  }
+  if(letterData.length>=6){
+    const m=letterData[0],d=letterData[5];
+    dimLine(X,m.ox,m.oy-20,d.ox+60,d.oy-20,'780mm',-20);
   }
 
-  ctx.restore();
+  // ── Particles ──
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];p.x+=p.vx*dt*60;p.y+=p.vy*dt*60;p.vy+=0.12;p.life-=dt*3;
+    if(p.life<=0){particles.splice(i,1);continue}
+    X.beginPath();X.arc(p.x,p.y,p.size,0,Math.PI*2);X.fillStyle=I1+(p.life*0.3)+')';X.fill();
+  }
 
-  // ── Vignette ──
-  const vig = ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.3,W/2,H/2,Math.max(W,H)*0.75);
-  vig.addColorStop(0, 'rgba(0,0,0,0)');
-  vig.addColorStop(1, 'rgba(0,0,0,0.1)');
-  ctx.fillStyle = vig;
-  ctx.fillRect(0, 0, W, H);
+  // Finish flag
+  X.beginPath();X.moveTo(0,350);X.lineTo(0,318);X.lineTo(22,323);X.lineTo(0,328);
+  X.strokeStyle=IR+'0.2)';X.lineWidth=0.6;X.stroke();
+  X.font='6px Courier New';X.fillStyle=IR+'0.25)';X.fillText('FINISH',4,313);
+
+  X.restore();
+
+  // Vignette
+  const vig=X.createRadialGradient(W/2,H/2,Math.min(W,H)*0.35,W/2,H/2,Math.max(W,H)*0.7);
+  vig.addColorStop(0,'rgba(0,0,0,0)');vig.addColorStop(1,'rgba(0,0,0,0.08)');
+  X.fillStyle=vig;X.fillRect(0,0,W,H);
 
   // Subtle scanlines
-  ctx.fillStyle = 'rgba(0,0,0,0.012)';
-  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  X.fillStyle='rgba(0,0,0,0.008)';
+  for(let y=0;y<H;y+=2)X.fillRect(0,y,W,1);
 
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-canvas.addEventListener('contextmenu', e => e.preventDefault());
+C.addEventListener('contextmenu',e=>e.preventDefault());
 
-// ── Pan ──
-let panning = false, psx = 0, psy = 0, pcx = 0, pcy = 0;
-canvas.addEventListener('mousedown', e => {
-  if (e.button === 1 || e.button === 2) {
-    panning = true; psx = e.clientX; psy = e.clientY; pcx = camX; pcy = camY;
-  }
-});
-canvas.addEventListener('mousemove', e => {
-  if (panning) { camX = pcx - (e.clientX - psx)/zoom; camY = pcy - (e.clientY - psy)/zoom; }
-});
-canvas.addEventListener('mouseup', e => { if (e.button===1||e.button===2) panning = false; });
+// Pan
+let panning=false,psx=0,psy=0,pcx=0,pcy=0;
+C.addEventListener('mousedown',e=>{if(e.button===1||e.button===2){panning=true;psx=e.clientX;psy=e.clientY;pcx=camX;pcy=camY}});
+C.addEventListener('mousemove',e=>{if(panning){camX=pcx-(e.clientX-psx)/zoom;camY=pcy-(e.clientY-psy)/zoom}});
+C.addEventListener('mouseup',e=>{if(e.button===1||e.button===2)panning=false});
 
-let lastTD = 0;
-canvas.addEventListener('touchstart', e => {
-  if (e.touches.length === 2) {
-    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-    lastTD = d; panning = true;
-    psx = (e.touches[0].clientX+e.touches[1].clientX)/2;
-    psy = (e.touches[0].clientY+e.touches[1].clientY)/2;
-    pcx = camX; pcy = camY;
-  }
-}, {passive:false});
-canvas.addEventListener('touchmove', e => {
-  if (e.touches.length === 2) {
-    e.preventDefault();
-    const mx2 = (e.touches[0].clientX+e.touches[1].clientX)/2;
-    const my2 = (e.touches[0].clientY+e.touches[1].clientY)/2;
-    camX = pcx-(mx2-psx)/zoom; camY = pcy-(my2-psy)/zoom;
-    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-    if (lastTD > 0) { targetZoom *= d/lastTD; targetZoom = Math.max(0.3, Math.min(3, targetZoom)); }
-    lastTD = d;
-  }
-}, {passive:false});
-canvas.addEventListener('touchend', () => { panning = false; lastTD = 0; });
+let lastTD=0;
+C.addEventListener('touchstart',e=>{if(e.touches.length===2){
+  lastTD=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+  panning=true;psx=(e.touches[0].clientX+e.touches[1].clientX)/2;psy=(e.touches[0].clientY+e.touches[1].clientY)/2;pcx=camX;pcy=camY;
+}},{passive:false});
+C.addEventListener('touchmove',e=>{if(e.touches.length===2){e.preventDefault();
+  const mx2=(e.touches[0].clientX+e.touches[1].clientX)/2,my2=(e.touches[0].clientY+e.touches[1].clientY)/2;
+  camX=pcx-(mx2-psx)/zoom;camY=pcy-(my2-psy)/zoom;
+  const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+  if(lastTD>0){tZoom*=d/lastTD;tZoom=Math.max(0.3,Math.min(3,tZoom))}lastTD=d;
+}},{passive:false});
+C.addEventListener('touchend',()=>{panning=false;lastTD=0});
 </script>
 </body>
 </html>
