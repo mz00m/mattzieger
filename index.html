@@ -7,24 +7,51 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
-canvas { display: block; }
+#wave-canvas {
+  display: block;
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+}
+#three-canvas {
+  display: block;
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
-<script>
-const canvas = document.getElementById('c');
+<canvas id="wave-canvas"></canvas>
+<canvas id="three-canvas"></canvas>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+
+// ─── 2D Wave Canvas ───────────────────────────────────────────
+const canvas = document.getElementById('wave-canvas');
 const ctx = canvas.getContext('2d');
 let W, H, cols, rows, dots;
 
 const SPACING = 28;
 const DOT_BASE = 1.1;
-const C = 180;                // wave propagation speed (px/s)
-const DAMPING = 0.997;        // per-step velocity damping
+const C = 180;
+const DAMPING = 0.997;
 const TWO_PI = Math.PI * 2;
 
-let letterMask = null; // boolean grid: true = inside letter (pinned boundary)
-let letterFontSize, letterCx, letterCy, letterMWidth, letterZWidth, letterTotalWidth, letterGap;
+let letterMask = null;
 
 function buildLetterMask() {
   const offscreen = document.createElement('canvas');
@@ -32,26 +59,21 @@ function buildLetterMask() {
   offscreen.height = H;
   const octx = offscreen.getContext('2d');
 
-  letterFontSize = Math.min(H * 0.28, W * 0.22);
-  const font = `900 ${letterFontSize}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
-  octx.font = font;
+  const fontSize = Math.min(H * 0.28, W * 0.22);
+  octx.font = `900 ${fontSize}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
   octx.textAlign = 'center';
   octx.textBaseline = 'middle';
   octx.fillStyle = '#fff';
 
-  letterGap = letterFontSize * 0.15;
-  letterMWidth = octx.measureText('M').width;
-  letterZWidth = octx.measureText('Z').width;
-  letterTotalWidth = letterMWidth + letterGap + letterZWidth;
+  const gap = fontSize * 0.15;
+  const mW = octx.measureText('M').width;
+  const zW = octx.measureText('Z').width;
+  const total = mW + gap + zW;
+  const cx = W / 2, cy = H / 2;
 
-  letterCx = W / 2;
-  letterCy = H / 2;
+  octx.fillText('M', cx - total / 2 + mW / 2, cy);
+  octx.fillText('Z', cx + total / 2 - zW / 2, cy);
 
-  octx.fillText('M', letterCx - letterTotalWidth / 2 + letterMWidth / 2, letterCy);
-  octx.fillText('Z', letterCx + letterTotalWidth / 2 - letterZWidth / 2, letterCy);
-
-  // Sample the mask at each dot position — expand by half-spacing so waves
-  // don't clip into the letter edges
   const imageData = octx.getImageData(0, 0, W, H);
   const data = imageData.data;
 
@@ -60,88 +82,14 @@ function buildLetterMask() {
     const px = Math.round(dots[i].x);
     const py = Math.round(dots[i].y);
     if (px >= 0 && px < W && py >= 0 && py < H) {
-      const idx = (py * W + px) * 4;
-      letterMask[i] = data[idx + 3] > 128;
+      letterMask[i] = data[(py * W + px) * 4 + 3] > 128;
     } else {
       letterMask[i] = false;
     }
   }
 }
 
-function drawLetters3D(time) {
-  const font = `900 ${letterFontSize}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
-  const mX = letterCx - letterTotalWidth / 2 + letterMWidth / 2;
-  const zX = letterCx + letterTotalWidth / 2 - letterZWidth / 2;
-  const baseY = letterCy;
-
-  // Subtle float animation
-  const floatY = Math.sin(time * 0.8) * 3;
-  const y = baseY + floatY;
-
-  ctx.save();
-  ctx.font = font;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  // --- Layer 1: Drop shadow ---
-  ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.45)';
-  ctx.shadowBlur = 25;
-  ctx.shadowOffsetX = 6;
-  ctx.shadowOffsetY = 10 - floatY * 0.3;
-  ctx.fillStyle = 'rgba(0,0,0,0)'; // invisible fill, shadow still draws
-  // Need visible fill for shadow to render — use a dark base
-  ctx.fillStyle = 'rgba(8,12,28,1)';
-  ctx.fillText('M', mX, y);
-  ctx.fillText('Z', zX, y);
-  ctx.restore();
-
-  // --- Layer 2: Extruded sides (fake 3D depth) ---
-  const extrudeDepth = 6;
-  for (let d = extrudeDepth; d > 0; d--) {
-    const shade = 0.08 + (d / extrudeDepth) * 0.12;
-    ctx.fillStyle = `rgba(20,35,65,${shade + 0.6})`;
-    ctx.fillText('M', mX + d * 0.3, y + d);
-    ctx.fillText('Z', zX + d * 0.3, y + d);
-  }
-
-  // --- Layer 3: Main face with gradient ---
-  const grad = ctx.createLinearGradient(0, y - letterFontSize * 0.4, 0, y + letterFontSize * 0.4);
-  grad.addColorStop(0, '#2a4a7a');   // lighter top
-  grad.addColorStop(0.3, '#1e3a62');
-  grad.addColorStop(0.7, '#15294a');
-  grad.addColorStop(1, '#0f1f38');   // darker bottom
-  ctx.fillStyle = grad;
-  ctx.fillText('M', mX, y);
-  ctx.fillText('Z', zX, y);
-
-  // --- Layer 4: Top edge highlight ---
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const highlightGrad = ctx.createLinearGradient(0, y - letterFontSize * 0.45, 0, y - letterFontSize * 0.1);
-  highlightGrad.addColorStop(0, 'rgba(100,160,220,0.35)');
-  highlightGrad.addColorStop(1, 'rgba(100,160,220,0)');
-  ctx.fillStyle = highlightGrad;
-  ctx.fillText('M', mX, y);
-  ctx.fillText('Z', zX, y);
-  ctx.restore();
-
-  // --- Layer 5: Subtle inner glow / specular ---
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.shadowColor = 'rgba(80,140,220,0.15)';
-  ctx.shadowBlur = 15;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = -2;
-  ctx.fillStyle = 'rgba(60,120,200,0.06)';
-  ctx.fillText('M', mX, y);
-  ctx.fillText('Z', zX, y);
-  ctx.restore();
-
-  ctx.restore();
-}
-
-function init() {
+function initWave() {
   W = canvas.width = innerWidth;
   H = canvas.height = innerHeight;
   cols = Math.ceil(W / SPACING) + 2;
@@ -153,38 +101,26 @@ function init() {
   dots = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      dots.push({
-        x: ox + c * SPACING,
-        y: oy + r * SPACING,
-        z: 0,
-        vz: 0,
-        prevZ: 0,
-      });
+      dots.push({ x: ox + c * SPACING, y: oy + r * SPACING, z: 0, vz: 0 });
     }
   }
-
   buildLetterMask();
 }
 
 function spawnWave(x, y) {
-  // Inject a Gaussian pulse into the grid
-  const radius = 60;
-  const amp = 12;
+  const radius = 60, amp = 12;
   for (let i = 0; i < dots.length; i++) {
     if (letterMask[i]) continue;
-    const dx = dots[i].x - x;
-    const dy = dots[i].y - y;
+    const dx = dots[i].x - x, dy = dots[i].y - y;
     const d2 = dx * dx + dy * dy;
     if (d2 < radius * radius) {
-      const falloff = Math.exp(-d2 / (radius * 12));
-      dots[i].vz += amp * falloff;
+      dots[i].vz += amp * Math.exp(-d2 / (radius * 12));
     }
   }
 }
 
 canvas.addEventListener('click', e => spawnWave(e.clientX, e.clientY));
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   for (const t of e.changedTouches) spawnWave(t.clientX, t.clientY);
@@ -192,61 +128,46 @@ canvas.addEventListener('touchstart', e => {
 
 let lastTime = performance.now() / 1000;
 
-function frame(now) {
+function waveFrame(now) {
   now /= 1000;
-  let dt = Math.min(now - lastTime, 0.033);
+  const dt = Math.min(now - lastTime, 0.033);
   lastTime = now;
 
   ctx.fillStyle = '#0a0e1a';
   ctx.fillRect(0, 0, W, H);
 
-  // --- Wave equation simulation ---
-  // Sub-step for stability
+  // Wave simulation
   const subSteps = 3;
   const sdt = dt / subSteps;
   const c2 = (C * C) / (SPACING * SPACING);
 
   for (let s = 0; s < subSteps; s++) {
-    // Compute Laplacian and update velocities
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const i = r * cols + c;
-        if (letterMask[i]) continue; // pinned boundary
-
+        if (letterMask[i]) continue;
         const z = dots[i].z;
-        // Neighbors (Neumann boundary: clamp at edges)
         const zL = c > 0 ? dots[i - 1].z : z;
         const zR = c < cols - 1 ? dots[i + 1].z : z;
         const zU = r > 0 ? dots[i - cols].z : z;
         const zD = r < rows - 1 ? dots[i + cols].z : z;
-
-        const laplacian = zL + zR + zU + zD - 4 * z;
-        dots[i].vz += c2 * laplacian * sdt;
+        dots[i].vz += c2 * (zL + zR + zU + zD - 4 * z) * sdt;
         dots[i].vz *= DAMPING;
       }
     }
-
-    // Update positions
     for (let i = 0; i < dots.length; i++) {
-      if (letterMask[i]) {
-        dots[i].z = 0;
-        dots[i].vz = 0;
-        continue;
-      }
+      if (letterMask[i]) { dots[i].z = 0; dots[i].vz = 0; continue; }
       dots[i].z += dots[i].vz * sdt;
     }
   }
 
-  // --- Render dots (skip letter-masked dots) ---
+  // Render dots
   for (let i = 0; i < dots.length; i++) {
     if (letterMask[i]) continue;
     const dot = dots[i];
-    const z = dot.z;
-    const absZ = Math.abs(z);
-
+    const absZ = Math.abs(dot.z);
     const size = DOT_BASE + absZ * 0.1;
-    const drawY = dot.y - z * 0.5;
-
+    const drawY = dot.y - dot.z * 0.5;
     const intensity = Math.min(1, absZ / 10);
     const r = Math.round(30 + intensity * 100);
     const g = Math.round(55 + intensity * 180);
@@ -266,10 +187,7 @@ function frame(now) {
     }
   }
 
-  // --- Draw 3D floating letters on top ---
-  drawLetters3D(now);
-
-  // Connection lines between displaced neighbors
+  // Connection lines
   const threshold = 2.0;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -281,8 +199,7 @@ function frame(now) {
       if (c < cols - 1 && !letterMask[i + 1]) {
         const dr = dots[i + 1];
         if (Math.abs(dr.z) >= threshold) {
-          const avgZ = (Math.abs(d.z) + Math.abs(dr.z)) / 2;
-          const lineAlpha = Math.min(0.25, avgZ / 40);
+          const lineAlpha = Math.min(0.25, (Math.abs(d.z) + Math.abs(dr.z)) / 80);
           ctx.beginPath();
           ctx.moveTo(d.x, d.y - d.z * 0.5);
           ctx.lineTo(dr.x, dr.y - dr.z * 0.5);
@@ -294,8 +211,7 @@ function frame(now) {
       if (r < rows - 1 && !letterMask[i + cols]) {
         const dd = dots[i + cols];
         if (Math.abs(dd.z) >= threshold) {
-          const avgZ = (Math.abs(d.z) + Math.abs(dd.z)) / 2;
-          const lineAlpha = Math.min(0.25, avgZ / 40);
+          const lineAlpha = Math.min(0.25, (Math.abs(d.z) + Math.abs(dd.z)) / 80);
           ctx.beginPath();
           ctx.moveTo(d.x, d.y - d.z * 0.5);
           ctx.lineTo(dd.x, dd.y - dd.z * 0.5);
@@ -307,12 +223,159 @@ function frame(now) {
     }
   }
 
-  requestAnimationFrame(frame);
+  requestAnimationFrame(waveFrame);
 }
 
-init();
-addEventListener('resize', init);
-requestAnimationFrame(frame);
+// ─── Three.js 3D Letters ──────────────────────────────────────
+const threeCanvas = document.getElementById('three-canvas');
+const scene = new THREE.Scene();
+// No scene.background — stays transparent
+
+let camera, renderer, letterGroup;
+
+function initThree() {
+  camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 1, 2000);
+  camera.position.set(0, 0, 500);
+
+  renderer = new THREE.WebGLRenderer({
+    canvas: threeCanvas,
+    alpha: true,
+    antialias: true
+  });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  // Lighting
+  const ambient = new THREE.AmbientLight(0x4466aa, 0.6);
+  scene.add(ambient);
+
+  const keyLight = new THREE.DirectionalLight(0x88bbff, 1.8);
+  keyLight.position.set(100, 200, 300);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(1024, 1024);
+  keyLight.shadow.camera.near = 10;
+  keyLight.shadow.camera.far = 1000;
+  keyLight.shadow.camera.left = -300;
+  keyLight.shadow.camera.right = 300;
+  keyLight.shadow.camera.top = 200;
+  keyLight.shadow.camera.bottom = -200;
+  scene.add(keyLight);
+
+  const rimLight = new THREE.DirectionalLight(0x6699cc, 0.8);
+  rimLight.position.set(-150, -50, 200);
+  scene.add(rimLight);
+
+  const bottomLight = new THREE.DirectionalLight(0x223355, 0.4);
+  bottomLight.position.set(0, -200, 100);
+  scene.add(bottomLight);
+
+  // Shadow-receiving plane (invisible, just catches shadows)
+  const planeGeo = new THREE.PlaneGeometry(2000, 2000);
+  const planeMat = new THREE.ShadowMaterial({ opacity: 0.35 });
+  const plane = new THREE.Mesh(planeGeo, planeMat);
+  plane.position.z = -30;
+  plane.receiveShadow = true;
+  scene.add(plane);
+
+  letterGroup = new THREE.Group();
+  scene.add(letterGroup);
+}
+
+function loadLetters() {
+  const loader = new FontLoader();
+  loader.load(
+    'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_bold.typeface.json',
+    function(font) {
+      const matFront = new THREE.MeshPhongMaterial({
+        color: 0x1a3055,
+        specular: 0x5588bb,
+        shininess: 60,
+        flatShading: false,
+      });
+      const matSide = new THREE.MeshPhongMaterial({
+        color: 0x0f1f38,
+        specular: 0x334466,
+        shininess: 30,
+      });
+
+      const textParams = {
+        font: font,
+        size: 100,
+        depth: 30,
+        curveSegments: 16,
+        bevelEnabled: true,
+        bevelThickness: 4,
+        bevelSize: 3,
+        bevelOffset: 0,
+        bevelSegments: 8,
+      };
+
+      // Create M
+      const mGeo = new TextGeometry('M', textParams);
+      mGeo.computeBoundingBox();
+      const mMesh = new THREE.Mesh(mGeo, [matFront, matSide]);
+      mMesh.castShadow = true;
+
+      // Create Z
+      const zGeo = new TextGeometry('Z', textParams);
+      zGeo.computeBoundingBox();
+      const zMesh = new THREE.Mesh(zGeo, [matFront, matSide]);
+      zMesh.castShadow = true;
+
+      // Center both letters as a group
+      const mBox = mGeo.boundingBox;
+      const zBox = zGeo.boundingBox;
+      const mWidth = mBox.max.x - mBox.min.x;
+      const zWidth = zBox.max.x - zBox.min.x;
+      const gap = 30;
+      const totalWidth = mWidth + gap + zWidth;
+      const mHeight = mBox.max.y - mBox.min.y;
+
+      mMesh.position.set(-totalWidth / 2, -mHeight / 2, 0);
+      zMesh.position.set(-totalWidth / 2 + mWidth + gap, -mHeight / 2, 0);
+
+      letterGroup.add(mMesh);
+      letterGroup.add(zMesh);
+    }
+  );
+}
+
+let threeTime = 0;
+
+function threeFrame(now) {
+  threeTime = now / 1000;
+
+  // Gentle floating animation
+  letterGroup.position.y = Math.sin(threeTime * 0.8) * 6;
+  letterGroup.position.z = Math.sin(threeTime * 0.5) * 4;
+
+  // Very subtle rotation for 3D feel
+  letterGroup.rotation.x = Math.sin(threeTime * 0.6) * 0.04;
+  letterGroup.rotation.y = Math.sin(threeTime * 0.4) * 0.03;
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(threeFrame);
+}
+
+function onResize() {
+  initWave();
+
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+
+// ─── Boot ─────────────────────────────────────────────────────
+initWave();
+initThree();
+loadLetters();
+
+addEventListener('resize', onResize);
+requestAnimationFrame(waveFrame);
+requestAnimationFrame(threeFrame);
 </script>
 </body>
 </html>
