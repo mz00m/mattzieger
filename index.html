@@ -13,7 +13,7 @@
     font-family: 'Courier New', monospace;
     cursor: crosshair;
   }
-  canvas { display: block; }
+  canvas { display: block; width: 100vw; height: 100vh; }
   #ui {
     position: fixed;
     bottom: 18px;
@@ -74,7 +74,10 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 resize();
-window.addEventListener('resize', resize);
+window.addEventListener('resize', () => {
+  resize();
+  if (mouse) mouse.pixelRatio = dpr;
+});
 
 // ── Colors ──
 const INK = 'rgba(20, 50, 95, ';
@@ -97,6 +100,7 @@ let balls = [], staticBodies = [], dominoes = [], gears = [];
 let pendulums = [], pegs = [], impactParticles = [];
 let started = false, startBall = null, weightBody = null;
 let S = 1, time = 0;
+let mouse = null, mouseConstraint = null;
 
 // ══════════════════════════════════════════════════════════════
 //  3D ISOMETRIC LETTER SYSTEM
@@ -303,6 +307,8 @@ function drawLetters(ctx) {
 // ══════════════════════════════════════════════════════════════
 function buildScene() {
   Composite.clear(world, false);
+  // Re-add mouse constraint if it was already created
+  if (mouseConstraint) Composite.add(world, mouseConstraint);
   balls = []; staticBodies = []; dominoes = []; gears = [];
   pendulums = []; pegs = []; impactParticles = [];
   started = false; startBall = null; weightBody = null;
@@ -558,8 +564,8 @@ function buildScene() {
 buildScene();
 
 // ── Mouse ──
-const mouse = Mouse.create(canvas);
-const mouseConstraint = MouseConstraint.create(engine, {
+mouse = Mouse.create(canvas);
+mouseConstraint = MouseConstraint.create(engine, {
   mouse, constraint: { stiffness: 0.08, render: { visible: false } }
 });
 mouse.pixelRatio = dpr;
@@ -1027,6 +1033,14 @@ function frame(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.033);
   lastTime = now;
   time += dt;
+
+  // Update mouse for camera transform so dragging works in world space
+  if (mouse) {
+    mouse.scale.x = 1 / zoom;
+    mouse.scale.y = 1 / zoom;
+    mouse.offset.x = camX - W / (2 * zoom);
+    mouse.offset.y = camY - H / (2 * zoom);
+  }
 
   Engine.update(engine, dt * 1000);
   for (const g of gears) g.angle += g.speed * dt;
