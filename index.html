@@ -24,34 +24,34 @@ const DAMPING = 0.997;        // per-step velocity damping
 const TWO_PI = Math.PI * 2;
 
 let letterMask = null; // boolean grid: true = inside letter (pinned boundary)
+let letterFontSize, letterCx, letterCy, letterMWidth, letterZWidth, letterTotalWidth, letterGap;
 
 function buildLetterMask() {
-  // Render "M Z" to offscreen canvas and sample at dot positions
   const offscreen = document.createElement('canvas');
   offscreen.width = W;
   offscreen.height = H;
   const octx = offscreen.getContext('2d');
 
-  // Size letters to ~quarter of page height
-  const fontSize = Math.min(H * 0.28, W * 0.22);
-  octx.font = `900 ${fontSize}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  letterFontSize = Math.min(H * 0.28, W * 0.22);
+  const font = `900 ${letterFontSize}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  octx.font = font;
   octx.textAlign = 'center';
   octx.textBaseline = 'middle';
   octx.fillStyle = '#fff';
 
-  // Measure and draw M and Z with a gap
-  const gap = fontSize * 0.15;
-  const mWidth = octx.measureText('M').width;
-  const zWidth = octx.measureText('Z').width;
-  const totalWidth = mWidth + gap + zWidth;
+  letterGap = letterFontSize * 0.15;
+  letterMWidth = octx.measureText('M').width;
+  letterZWidth = octx.measureText('Z').width;
+  letterTotalWidth = letterMWidth + letterGap + letterZWidth;
 
-  const cx = W / 2;
-  const cy = H / 2;
+  letterCx = W / 2;
+  letterCy = H / 2;
 
-  octx.fillText('M', cx - totalWidth / 2 + mWidth / 2, cy);
-  octx.fillText('Z', cx + totalWidth / 2 - zWidth / 2, cy);
+  octx.fillText('M', letterCx - letterTotalWidth / 2 + letterMWidth / 2, letterCy);
+  octx.fillText('Z', letterCx + letterTotalWidth / 2 - letterZWidth / 2, letterCy);
 
-  // Sample the mask at each dot position
+  // Sample the mask at each dot position — expand by half-spacing so waves
+  // don't clip into the letter edges
   const imageData = octx.getImageData(0, 0, W, H);
   const data = imageData.data;
 
@@ -61,11 +61,84 @@ function buildLetterMask() {
     const py = Math.round(dots[i].y);
     if (px >= 0 && px < W && py >= 0 && py < H) {
       const idx = (py * W + px) * 4;
-      letterMask[i] = data[idx + 3] > 128; // alpha threshold
+      letterMask[i] = data[idx + 3] > 128;
     } else {
       letterMask[i] = false;
     }
   }
+}
+
+function drawLetters3D(time) {
+  const font = `900 ${letterFontSize}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  const mX = letterCx - letterTotalWidth / 2 + letterMWidth / 2;
+  const zX = letterCx + letterTotalWidth / 2 - letterZWidth / 2;
+  const baseY = letterCy;
+
+  // Subtle float animation
+  const floatY = Math.sin(time * 0.8) * 3;
+  const y = baseY + floatY;
+
+  ctx.save();
+  ctx.font = font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // --- Layer 1: Drop shadow ---
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.45)';
+  ctx.shadowBlur = 25;
+  ctx.shadowOffsetX = 6;
+  ctx.shadowOffsetY = 10 - floatY * 0.3;
+  ctx.fillStyle = 'rgba(0,0,0,0)'; // invisible fill, shadow still draws
+  // Need visible fill for shadow to render — use a dark base
+  ctx.fillStyle = 'rgba(8,12,28,1)';
+  ctx.fillText('M', mX, y);
+  ctx.fillText('Z', zX, y);
+  ctx.restore();
+
+  // --- Layer 2: Extruded sides (fake 3D depth) ---
+  const extrudeDepth = 6;
+  for (let d = extrudeDepth; d > 0; d--) {
+    const shade = 0.08 + (d / extrudeDepth) * 0.12;
+    ctx.fillStyle = `rgba(20,35,65,${shade + 0.6})`;
+    ctx.fillText('M', mX + d * 0.3, y + d);
+    ctx.fillText('Z', zX + d * 0.3, y + d);
+  }
+
+  // --- Layer 3: Main face with gradient ---
+  const grad = ctx.createLinearGradient(0, y - letterFontSize * 0.4, 0, y + letterFontSize * 0.4);
+  grad.addColorStop(0, '#2a4a7a');   // lighter top
+  grad.addColorStop(0.3, '#1e3a62');
+  grad.addColorStop(0.7, '#15294a');
+  grad.addColorStop(1, '#0f1f38');   // darker bottom
+  ctx.fillStyle = grad;
+  ctx.fillText('M', mX, y);
+  ctx.fillText('Z', zX, y);
+
+  // --- Layer 4: Top edge highlight ---
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const highlightGrad = ctx.createLinearGradient(0, y - letterFontSize * 0.45, 0, y - letterFontSize * 0.1);
+  highlightGrad.addColorStop(0, 'rgba(100,160,220,0.35)');
+  highlightGrad.addColorStop(1, 'rgba(100,160,220,0)');
+  ctx.fillStyle = highlightGrad;
+  ctx.fillText('M', mX, y);
+  ctx.fillText('Z', zX, y);
+  ctx.restore();
+
+  // --- Layer 5: Subtle inner glow / specular ---
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.shadowColor = 'rgba(80,140,220,0.15)';
+  ctx.shadowBlur = 15;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = -2;
+  ctx.fillStyle = 'rgba(60,120,200,0.06)';
+  ctx.fillText('M', mX, y);
+  ctx.fillText('Z', zX, y);
+  ctx.restore();
+
+  ctx.restore();
 }
 
 function init() {
@@ -164,43 +237,37 @@ function frame(now) {
     }
   }
 
-  // --- Render dots ---
+  // --- Render dots (skip letter-masked dots) ---
   for (let i = 0; i < dots.length; i++) {
+    if (letterMask[i]) continue;
     const dot = dots[i];
-    const isLetter = letterMask[i];
     const z = dot.z;
     const absZ = Math.abs(z);
 
     const size = DOT_BASE + absZ * 0.1;
     const drawY = dot.y - z * 0.5;
 
-    let r, g, b, alpha;
-
-    if (isLetter) {
-      // Letter dots: subtle warm white, slightly larger
-      r = 160; g = 170; b = 190;
-      alpha = 0.18;
-    } else {
-      const intensity = Math.min(1, absZ / 10);
-      r = Math.round(30 + intensity * 100);
-      g = Math.round(55 + intensity * 180);
-      b = Math.round(90 + intensity * 165);
-      alpha = 0.35 + intensity * 0.65;
-    }
+    const intensity = Math.min(1, absZ / 10);
+    const r = Math.round(30 + intensity * 100);
+    const g = Math.round(55 + intensity * 180);
+    const b = Math.round(90 + intensity * 165);
+    const alpha = 0.35 + intensity * 0.65;
 
     ctx.beginPath();
-    ctx.arc(dot.x, drawY, isLetter ? DOT_BASE * 0.9 : size, 0, TWO_PI);
+    ctx.arc(dot.x, drawY, size, 0, TWO_PI);
     ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
     ctx.fill();
 
-    // Glow on high displacement (non-letter only)
-    if (!isLetter && absZ > 3) {
+    if (absZ > 3) {
       ctx.beginPath();
       ctx.arc(dot.x, drawY, size + absZ * 0.18, 0, TWO_PI);
       ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, absZ / 10) * 0.12})`;
       ctx.fill();
     }
   }
+
+  // --- Draw 3D floating letters on top ---
+  drawLetters3D(now);
 
   // Connection lines between displaced neighbors
   const threshold = 2.0;
