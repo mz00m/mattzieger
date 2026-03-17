@@ -6,7 +6,7 @@
 <title>Matt Zieger</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
+body { background: #2a2535; overflow: hidden; cursor: crosshair; }
 #wave-canvas {
   display: block;
   position: absolute;
@@ -93,41 +93,52 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
     buf2 = tmp;
   }
 
-  // --- Impressionist palette (Monet / Sargent water) ---
-  // Multiple broken-color hues that blend based on surface angle + position
-  // Deep shadows: indigo-violet, mid: cerulean-teal, highlights: warm gold-peach
-  const palette = [
-    // [R, G, B] — shadow tones (cool violets, deep blues)
-    { r: 18, g: 12, b: 48 },   // deep indigo
-    { r: 25, g: 28, b: 62 },   // ultramarine shadow
-    { r: 14, g: 30, b: 52 },   // prussian blue
-    // mid tones (broken greens, ceruleans)
-    { r: 28, g: 58, b: 82 },   // cerulean
-    { r: 22, g: 65, b: 70 },   // viridian-teal
-    { r: 38, g: 72, b: 64 },   // sage reflection
-    // light tones (lavender, warm sky reflections)
-    { r: 70, g: 90, b: 130 },  // reflected sky
-    { r: 85, g: 100, b: 145 }, // light lavender
-    { r: 100, g: 115, b: 140 },// Sargent grey-blue
+  // --- Sargent watercolor palette ---
+  // Merged from "Venetian Canal" + "In a Levantine Port":
+  //   Shadows: lavender, mauve, violet-grey (canal) + deep teal (port)
+  //   Mids: cerulean blue, teal-aquamarine (port) + ochre, sienna (canal)
+  //   Highlights: golden amber, warm cream (both)
+  //
+  // Shadow palette (cool: lavender, mauve, deep teal)
+  const shadowColors = [
+    { r: 80, g: 68, b: 100 },   // lavender shadow
+    { r: 55, g: 62, b: 80 },    // slate-violet
+    { r: 45, g: 70, b: 78 },    // deep teal shadow
+    { r: 65, g: 55, b: 75 },    // muted mauve
+    { r: 50, g: 65, b: 72 },    // dark aqua shadow
+  ];
+  // Mid palette (cerulean, teal-green, ochre, sienna — the full Sargent range)
+  const midColors = [
+    { r: 95, g: 140, b: 165 },  // cerulean blue
+    { r: 80, g: 130, b: 135 },  // teal-aquamarine
+    { r: 110, g: 145, b: 140 }, // sage-aqua
+    { r: 140, g: 115, b: 72 },  // raw sienna
+    { r: 120, g: 100, b: 65 },  // warm ochre
+  ];
+  // Highlight palette (golden, cream, pale cerulean — sunlit water)
+  const lightColors = [
+    { r: 210, g: 190, b: 130 }, // golden reflection
+    { r: 225, g: 205, b: 155 }, // warm cream
+    { r: 175, g: 195, b: 205 }, // pale cerulean light
+    { r: 240, g: 222, b: 175 }, // bright cream
+    { r: 195, g: 210, b: 195 }, // pale aqua highlight
   ];
 
-  // Warm highlight colors (golden sunlight on water)
-  const warmHighR = 255, warmHighG = 220, warmHighB = 160;
-  const coolHighR = 180, coolHighG = 210, coolHighB = 255;
-
   // Pre-compute a static noise texture for "brushstroke" variation
-  let noiseMap;
+  let noiseMap, noiseMap2;
   function buildNoise() {
     noiseMap = new Float32Array(simW * simH);
-    // Simple layered value noise
+    noiseMap2 = new Float32Array(simW * simH);
     for (let oct = 0; oct < 3; oct++) {
       const freq = (oct + 1) * 0.07;
       const amp = 1 / (oct + 1);
       for (let y = 0; y < simH; y++) {
         for (let x = 0; x < simW; x++) {
-          // Hash-based pseudo-noise
           const v = Math.sin(x * freq * 12.9898 + y * freq * 78.233 + oct * 43.12) * 43758.5453;
           noiseMap[y * simW + x] += (v - Math.floor(v)) * amp;
+          // Second noise layer offset for color variation
+          const v2 = Math.sin(x * freq * 7.31 + y * freq * 91.17 + oct * 67.5) * 23421.631;
+          noiseMap2[y * simW + x] += (v2 - Math.floor(v2)) * amp;
         }
       }
     }
@@ -141,13 +152,22 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
 
   let globalTime = 0;
 
+  // Helper: lerp between two palette colors
+  function lerpColor(a, b, t) {
+    return {
+      r: a.r + (b.r - a.r) * t,
+      g: a.g + (b.g - a.g) * t,
+      b: a.b + (b.b - a.b) * t,
+    };
+  }
+
   function render() {
     globalTime += 0.016;
 
-    // Slowly drifting light direction for gentle shimmer
-    const lt = globalTime * 0.3;
-    const lx = 0.25 + Math.sin(lt) * 0.05;
-    const ly = -0.45 + Math.cos(lt * 0.7) * 0.05;
+    // Slowly drifting light for gentle shimmer
+    const lt = globalTime * 0.25;
+    const lx = 0.3 + Math.sin(lt) * 0.06;
+    const ly = -0.4 + Math.cos(lt * 0.7) * 0.06;
     const lz = 0.86;
 
     // Half-vector for specular
@@ -155,21 +175,19 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
     const hlen = Math.sqrt(hx * hx + hy * hy + hz * hz);
     const nhx = hx / hlen, nhy = hy / hlen, nhz = hz / hlen;
 
-    const invSimW = 1 / simW;
     const invSimH = 1 / simH;
 
     for (let y = 1; y < simH - 1; y++) {
       const row = y * simW;
-      const vy = y * invSimH; // 0..1 vertical position
+      const vy = y * invSimH;
       for (let x = 1; x < simW - 1; x++) {
         const i = row + x;
         const pi = i << 2;
-        const vx = x * invSimW; // 0..1 horizontal position
 
-        // Height gradients → surface normal
+        // Surface normal from height gradients
         const dzdx = buf1[i + 1] - buf1[i - 1];
         const dzdy = buf1[i + simW] - buf1[i - simW];
-        const nscale = 3.5;
+        const nscale = 3.0;
         const nnx = -dzdx, nny = -dzdy, nnz = nscale;
         const invLen = 1 / Math.sqrt(nnx * nnx + nny * nny + nnz * nnz);
         const nx = nnx * invLen, ny = nny * invLen, nz = nnz * invLen;
@@ -177,72 +195,95 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
         // Diffuse
         const diffuse = Math.max(0, nx * lx + ny * ly + nz * lz);
 
-        // Specular — softer exponent (20) for broader, painterly highlights
+        // Broad specular (warm glow, like Sargent's golden reflections)
         const specDot = nx * nhx + ny * nhy + nz * nhz;
-        const spec = specDot > 0 ? Math.pow(specDot, 20) : 0;
-        // Also a tight sparkle for Sargent-like glints
-        const sparkle = specDot > 0 ? Math.pow(specDot, 80) : 0;
+        const spec = specDot > 0 ? Math.pow(specDot, 14) : 0;
+        // Tight sparkle glints (wet-on-wet bright strokes)
+        const sparkle = specDot > 0 ? Math.pow(specDot, 90) : 0;
 
-        // Noise-based "brushstroke" variation to break up color
-        const noise = noiseMap[i];
-        const brushShift = Math.sin(noise * 18.0 + globalTime * 0.5) * 0.5 + 0.5;
+        // Noise for broken color
+        const n1 = noiseMap[i];
+        const n2 = noiseMap2[i];
+        const brushShift = Math.sin(n1 * 14.0 + globalTime * 0.4) * 0.5 + 0.5;
 
-        // Palette index driven by diffuse + noise → broken color
-        const palIdx = (diffuse * 6 + noise * 3) % 9;
-        const palLow = palIdx | 0;
-        const palHigh = (palLow + 1) % 9;
-        const palT = palIdx - palLow;
-        const cLow = palette[palLow];
-        const cHigh = palette[palHigh];
-
-        // Interpolated base color from palette
-        let baseR = cLow.r + (cHigh.r - cLow.r) * palT;
-        let baseG = cLow.g + (cHigh.g - cLow.g) * palT;
-        let baseB = cLow.b + (cHigh.b - cLow.b) * palT;
-
-        // Vertical gradient: upper = sky reflection (lighter), lower = deeper
-        const depthGrad = 1 - vy * 0.3;
-        baseR *= depthGrad;
-        baseG *= depthGrad;
-        baseB *= depthGrad;
-
-        // Add diffuse lighting with warm/cool split
-        // Lit areas get warm, shadow areas stay cool (impressionist color theory)
-        const warmT = diffuse * 0.6 + brushShift * 0.15;
-        baseR += diffuse * (30 + warmT * 25);
-        baseG += diffuse * (40 + warmT * 15);
-        baseB += diffuse * (50 - warmT * 10);
-
-        // Height tint: peaks get warmer (golden), troughs get cooler (violet)
+        // Height value
         const h = buf1[i];
-        if (h > 0) {
-          const ht = Math.min(1, h * 0.008);
-          baseR += ht * 40;
-          baseG += ht * 25;
-          baseB -= ht * 10;
+
+        // --- Sargent broken-color mixing ---
+        // Map diffuse + noise into a warm-cool continuum:
+        //   dark/shadow → lavender-mauve (cool)
+        //   mid → ochre-sienna (warm)
+        //   light → golden-cream (warm)
+        const luminance = diffuse * 0.65 + 0.35; // base brightness
+
+        // Pick from shadow palette (5 colors)
+        const sIdx = n1 * 4.99;
+        const si = sIdx | 0;
+        const shadow = lerpColor(shadowColors[si], shadowColors[(si + 1) % 5], sIdx - si);
+
+        // Pick from mid palette (5 colors) — noise + brush shift for variety
+        const mIdx = (n2 + brushShift * 0.3) * 4.99 % 5;
+        const mi = mIdx | 0;
+        const mid = lerpColor(midColors[mi], midColors[(mi + 1) % 5], mIdx - mi);
+
+        // Pick from light palette (5 colors)
+        const lIdx = (n1 + n2) * 2.49 % 5;
+        const li = lIdx | 0;
+        const light = lerpColor(lightColors[li], lightColors[(li + 1) % 5], lIdx - li);
+
+        // Blend shadow → mid → light based on luminance
+        let baseR, baseG, baseB;
+        if (luminance < 0.5) {
+          const t = luminance * 2;
+          baseR = shadow.r + (mid.r - shadow.r) * t;
+          baseG = shadow.g + (mid.g - shadow.g) * t;
+          baseB = shadow.b + (mid.b - shadow.b) * t;
         } else {
-          const ht = Math.min(1, -h * 0.006);
-          baseR += ht * 8;
-          baseG += ht * 5;
-          baseB += ht * 25;
+          const t = (luminance - 0.5) * 2;
+          baseR = mid.r + (light.r - mid.r) * t;
+          baseG = mid.g + (light.g - mid.g) * t;
+          baseB = mid.b + (light.b - mid.b) * t;
         }
 
-        // Broad specular: warm golden highlight (Monet's sunlight on water)
-        const specWarmT = brushShift * 0.4 + 0.6;
-        baseR += spec * (warmHighR * specWarmT + coolHighR * (1 - specWarmT)) * 0.6;
-        baseG += spec * (warmHighG * specWarmT + coolHighG * (1 - specWarmT)) * 0.5;
-        baseB += spec * (warmHighB * specWarmT + coolHighB * (1 - specWarmT)) * 0.4;
+        // Vertical gradient: top slightly lighter (sky reflection), bottom deeper
+        const depthShift = (1 - vy) * 0.15;
+        baseR += depthShift * 20;
+        baseG += depthShift * 15;
+        baseB += depthShift * 25; // top gets a touch more lavender
 
-        // Tight sparkle: pure white glints (Sargent wet-on-wet strokes)
-        baseR += sparkle * 200;
-        baseG += sparkle * 200;
-        baseB += sparkle * 220;
+        // Wave height tint: peaks → warmer gold, troughs → cooler teal/lavender
+        if (h > 0) {
+          const ht = Math.min(1, h * 0.007);
+          baseR += ht * 50;  // push toward amber/gold
+          baseG += ht * 38;
+          baseB -= ht * 12;
+        } else {
+          const ht = Math.min(1, -h * 0.005);
+          // Alternate between teal and lavender in troughs based on noise
+          const tealBias = n2 > 0.5 ? 1 : 0;
+          baseR -= ht * 8 * tealBias;
+          baseG += ht * (15 + tealBias * 15);  // teal push
+          baseB += ht * (25 + tealBias * 8);   // blue push
+        }
 
-        // Subtle color noise to mimic visible brushstrokes
-        const strokeNoise = (noise - 0.5) * 12;
-        baseR += strokeNoise;
-        baseG += strokeNoise * 0.8;
-        baseB -= strokeNoise * 0.5;
+        // Broad specular: alternates warm gold ↔ pale cerulean based on position
+        const specWarm = 0.55 + brushShift * 0.45;
+        baseR += spec * (170 * specWarm + 60 * (1 - specWarm));
+        baseG += spec * (140 * specWarm + 120 * (1 - specWarm));
+        baseB += spec * (60 * specWarm + 150 * (1 - specWarm));
+
+        // Tight sparkle: warm cream glints
+        baseR += sparkle * 235;
+        baseG += sparkle * 225;
+        baseB += sparkle * 195;
+
+        // Brushstroke noise: slight per-pixel color variation
+        const strokeR = (n1 - 0.5) * 16;
+        const strokeG = (n2 - 0.5) * 12;
+        const strokeB = ((n1 + n2) * 0.5 - 0.5) * 10;
+        baseR += strokeR;
+        baseG += strokeG;
+        baseB += strokeB;
 
         pixels[pi]     = baseR > 255 ? 255 : baseR < 0 ? 0 : baseR | 0;
         pixels[pi + 1] = baseG > 255 ? 255 : baseG < 0 ? 0 : baseG | 0;
@@ -251,9 +292,8 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
       }
     }
 
-    // Write to simulation canvas, then scale up to main canvas
+    // Write to sim canvas, scale up — no smoothing for visible brushstroke quality
     simCtx.putImageData(imageData, 0, 0);
-    // No smoothing — keeps the painterly pixelation (like visible brushstrokes)
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(simCanvas, 0, 0, simW, simH, 0, 0, W, H);
   }
