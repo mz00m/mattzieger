@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matt Zieger — Blueprint</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a1628;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    cursor: crosshair;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+  }
+  #ui {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(120, 180, 255, 0.5);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    pointer-events: none;
+    user-select: none;
+    text-align: center;
+  }
+  #title {
+    position: fixed;
+    top: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(120, 180, 255, 0.35);
+    font-size: 13px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    pointer-events: none;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title">MATT ZIEGER</div>
+<div id="ui">click &amp; drag to interact &middot; scroll to zoom</div>
+<script>
+// ─── Canvas Setup ────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, dpr;
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─── Colors ──────────────────────────────────────────────────
+const BLUE = 'rgba(100, 160, 255, ';
+const LIGHT = 'rgba(140, 195, 255, ';
+const DIM = 'rgba(60, 110, 200, ';
+const GRID_COLOR = 'rgba(40, 75, 140, 0.12)';
+const GRID_COLOR2 = 'rgba(40, 75, 140, 0.06)';
+
+// ─── Camera ──────────────────────────────────────────────────
+let camX = 0, camY = 0, zoom = 1;
+
+// ─── Mouse ───────────────────────────────────────────────────
+let mx = 0, my = 0, mouseDown = false, dragging = null, dragOffset = {x:0,y:0};
+
+function worldMouse() {
+  return { x: (mx - W/2) / zoom + camX, y: (my - H/2) / zoom + camY };
+}
+
+canvas.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+canvas.addEventListener('touchmove', e => { e.preventDefault(); mx = e.touches[0].clientX; my = e.touches[0].clientY; }, {passive:false});
+
+canvas.addEventListener('mousedown', e => { mouseDown = true; tryGrab(); });
+canvas.addEventListener('touchstart', e => { mx = e.touches[0].clientX; my = e.touches[0].clientY; mouseDown = true; tryGrab(); }, {passive:false});
+
+canvas.addEventListener('mouseup', () => { mouseDown = false; release(); });
+canvas.addEventListener('touchend', () => { mouseDown = false; release(); });
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  zoom *= e.deltaY > 0 ? 0.95 : 1.05;
+  zoom = Math.max(0.3, Math.min(3, zoom));
+}, {passive:false});
+
+// ─── Physics Nodes ───────────────────────────────────────────
+class Node {
+  constructor(x, y, fixed = false) {
+    this.x = x; this.y = y;
+    this.px = x; this.py = y;
+    this.vx = 0; this.vy = 0;
+    this.fixed = fixed;
+    this.radius = 5;
+  }
+  update(dt) {
+    if (this.fixed) { this.vx = 0; this.vy = 0; return; }
+    this.vx *= 0.97;
+    this.vy *= 0.97;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+  }
+}
+
+class Spring {
+  constructor(a, b, stiffness = 0.4, restLength = null) {
+    this.a = a; this.b = b;
+    this.stiffness = stiffness;
+    this.rest = restLength ?? Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  solve() {
+    let dx = this.b.x - this.a.x;
+    let dy = this.b.y - this.a.y;
+    let dist = Math.hypot(dx, dy) || 0.01;
+    let force = (dist - this.rest) * this.stiffness;
+    let fx = (dx / dist) * force;
+    let fy = (dy / dist) * force;
+    if (!this.a.fixed) { this.a.vx += fx; this.a.vy += fy; }
+    if (!this.b.fixed) { this.b.vx -= fx; this.b.vy -= fy; }
+  }
+}
+
+// ─── Gear ────────────────────────────────────────────────────
+class Gear {
+  constructor(x, y, radius, teeth, speed = 1) {
+    this.x = x; this.y = y;
+    this.radius = radius;
+    this.teeth = teeth;
+    this.angle = 0;
+    this.speed = speed;
+    this.node = new Node(x, y, true);
+    this.targetSpeed = speed;
+    this.meshes = [];
+  }
+  update(dt) {
+    // Smooth speed transitions
+    this.speed += (this.targetSpeed - this.speed) * 0.05;
+    this.angle += this.speed * dt;
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+
+    // Outer ring
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.strokeStyle = BLUE + '0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Teeth
+    for (let i = 0; i < this.teeth; i++) {
+      let a = (i / this.teeth) * Math.PI * 2;
+      let a2 = ((i + 0.35) / this.teeth) * Math.PI * 2;
+      let r1 = this.radius;
+      let r2 = this.radius + 8;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+      ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+      ctx.lineTo(Math.cos(a2) * r2, Math.sin(a2) * r2);
+      ctx.lineTo(Math.cos(a2) * r1, Math.sin(a2) * r1);
+      ctx.strokeStyle = BLUE + '0.4)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Center hub
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+    ctx.strokeStyle = LIGHT + '0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Cross
+    ctx.beginPath();
+    ctx.moveTo(-4, 0); ctx.lineTo(4, 0);
+    ctx.moveTo(0, -4); ctx.lineTo(0, 4);
+    ctx.strokeStyle = LIGHT + '0.4)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+}
+
+// ─── Pulley ──────────────────────────────────────────────────
+class Pulley {
+  constructor(x, y, radius) {
+    this.x = x; this.y = y;
+    this.radius = radius;
+    this.angle = 0;
+    this.node = new Node(x, y, true);
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    // Wheel
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+    ctx.strokeStyle = BLUE + '0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Inner ring
+    ctx.beginPath();
+    ctx.arc(0, 0, this.radius * 0.3, 0, Math.PI * 2);
+    ctx.strokeStyle = DIM + '0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Spokes
+    ctx.rotate(this.angle);
+    for (let i = 0; i < 4; i++) {
+      let a = (i / 4) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * this.radius * 0.3, Math.sin(a) * this.radius * 0.3);
+      ctx.lineTo(Math.cos(a) * this.radius * 0.9, Math.sin(a) * this.radius * 0.9);
+      ctx.strokeStyle = DIM + '0.3)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+}
+
+// ─── Conveyor Belt ───────────────────────────────────────────
+class ConveyorBelt {
+  constructor(x1, y1, x2, y2, radius) {
+    this.p1 = new Pulley(x1, y1, radius);
+    this.p2 = new Pulley(x2, y2, radius);
+    this.radius = radius;
+    this.tickOffset = 0;
+    this.speed = 1.2;
+  }
+  update(dt) {
+    this.tickOffset += this.speed * dt * 30;
+    this.p1.angle += this.speed * dt;
+    this.p2.angle += this.speed * dt;
+  }
+  draw(ctx) {
+    let dx = this.p2.x - this.p1.x;
+    let dy = this.p2.y - this.p1.y;
+    let dist = Math.hypot(dx, dy);
+    let ang = Math.atan2(dy, dx);
+    let perpX = -Math.sin(ang) * this.radius;
+    let perpY = Math.cos(ang) * this.radius;
+
+    // Top belt line
+    ctx.beginPath();
+    ctx.moveTo(this.p1.x + perpX, this.p1.y + perpY);
+    ctx.lineTo(this.p2.x + perpX, this.p2.y + perpY);
+    ctx.strokeStyle = BLUE + '0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Bottom belt line
+    ctx.beginPath();
+    ctx.moveTo(this.p1.x - perpX, this.p1.y - perpY);
+    ctx.lineTo(this.p2.x - perpX, this.p2.y - perpY);
+    ctx.strokeStyle = BLUE + '0.35)';
+    ctx.stroke();
+
+    // Belt ticks (moving)
+    let ticks = Math.floor(dist / 15);
+    for (let i = 0; i < ticks; i++) {
+      let t = ((i / ticks) + (this.tickOffset % 15) / dist) % 1;
+      let tx = this.p1.x + dx * t + perpX;
+      let ty = this.p1.y + dy * t + perpY;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(tx - perpX * 2, ty - perpY * 2);
+      ctx.strokeStyle = DIM + '0.25)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    // Draw pulleys
+    this.p1.draw(ctx);
+    this.p2.draw(ctx);
+  }
+}
+
+// ─── Chain ───────────────────────────────────────────────────
+class Chain {
+  constructor(nodes) {
+    this.nodes = nodes;
+    this.springs = [];
+    for (let i = 0; i < nodes.length - 1; i++) {
+      this.springs.push(new Spring(nodes[i], nodes[i+1], 0.5));
+    }
+  }
+  solve() {
+    for (let s of this.springs) s.solve();
+  }
+  draw(ctx) {
+    // Links
+    for (let i = 0; i < this.nodes.length - 1; i++) {
+      let a = this.nodes[i], b = this.nodes[i+1];
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = BLUE + (i % 2 === 0 ? '0.5)' : '0.3)');
+      ctx.lineWidth = i % 2 === 0 ? 1.5 : 1;
+      ctx.stroke();
+
+      // Chain link ovals
+      let mx = (a.x + b.x) / 2;
+      let my = (a.y + b.y) / 2;
+      let ang = Math.atan2(b.y - a.y, b.x - a.x);
+      ctx.save();
+      ctx.translate(mx, my);
+      ctx.rotate(ang);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 6, 3, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = DIM + '0.35)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Joints
+    for (let n of this.nodes) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, 2, 0, Math.PI * 2);
+      ctx.fillStyle = n.fixed ? LIGHT + '0.6)' : BLUE + '0.4)';
+      ctx.fill();
+    }
+  }
+}
+
+// ─── Lever ───────────────────────────────────────────────────
+class Lever {
+  constructor(pivotX, pivotY, length, angle) {
+    this.pivot = new Node(pivotX, pivotY, true);
+    this.length = length;
+    this.angle = angle;
+    this.angularVel = 0;
+    this.endA = new Node(
+      pivotX + Math.cos(angle) * length/2,
+      pivotY + Math.sin(angle) * length/2
+    );
+    this.endB = new Node(
+      pivotX - Math.cos(angle) * length/2,
+      pivotY - Math.sin(angle) * length/2
+    );
+  }
+  update(dt) {
+    // Gravity torque
+    this.angularVel += Math.cos(this.angle) * 0.02;
+    this.angularVel *= 0.98; // damping
+    this.angle += this.angularVel * dt;
+
+    this.endA.x = this.pivot.x + Math.cos(this.angle) * this.length/2;
+    this.endA.y = this.pivot.y + Math.sin(this.angle) * this.length/2;
+    this.endB.x = this.pivot.x - Math.cos(this.angle) * this.length/2;
+    this.endB.y = this.pivot.y - Math.sin(this.angle) * this.length/2;
+  }
+  applyForce(worldPos, force) {
+    let dx = worldPos.x - this.pivot.x;
+    let dy = worldPos.y - this.pivot.y;
+    let perpForce = -dx * Math.sin(this.angle) + dy * Math.cos(this.angle);
+    // nope, simpler: torque from force
+    let armX = worldPos.x - this.pivot.x;
+    let armY = worldPos.y - this.pivot.y;
+    this.angularVel += (armX * force.y - armY * force.x) * 0.0001;
+  }
+  draw(ctx) {
+    // Beam
+    ctx.beginPath();
+    ctx.moveTo(this.endA.x, this.endA.y);
+    ctx.lineTo(this.endB.x, this.endB.y);
+    ctx.strokeStyle = BLUE + '0.6)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Pivot triangle
+    ctx.beginPath();
+    ctx.moveTo(this.pivot.x, this.pivot.y + 4);
+    ctx.lineTo(this.pivot.x - 10, this.pivot.y + 18);
+    ctx.lineTo(this.pivot.x + 10, this.pivot.y + 18);
+    ctx.closePath();
+    ctx.strokeStyle = DIM + '0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Pivot circle
+    ctx.beginPath();
+    ctx.arc(this.pivot.x, this.pivot.y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = LIGHT + '0.5)';
+    ctx.fill();
+
+    // End weights
+    for (let end of [this.endA, this.endB]) {
+      ctx.beginPath();
+      ctx.arc(end.x, end.y, 6, 0, Math.PI * 2);
+      ctx.strokeStyle = BLUE + '0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+}
+
+// ─── Pendulum ────────────────────────────────────────────────
+class Pendulum {
+  constructor(x, y, length, angle) {
+    this.anchorX = x; this.anchorY = y;
+    this.length = length;
+    this.angle = angle;
+    this.angularVel = 0;
+    this.bob = new Node(
+      x + Math.sin(angle) * length,
+      y + Math.cos(angle) * length
+    );
+  }
+  update(dt) {
+    let gravity = 0.15;
+    this.angularVel += -gravity / this.length * Math.sin(this.angle) * dt * 60;
+    this.angularVel *= 0.998;
+    this.angle += this.angularVel * dt;
+    this.bob.x = this.anchorX + Math.sin(this.angle) * this.length;
+    this.bob.y = this.anchorY + Math.cos(this.angle) * this.length;
+  }
+  draw(ctx) {
+    // String
+    ctx.beginPath();
+    ctx.moveTo(this.anchorX, this.anchorY);
+    ctx.lineTo(this.bob.x, this.bob.y);
+    ctx.strokeStyle = BLUE + '0.4)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Anchor
+    ctx.beginPath();
+    ctx.arc(this.anchorX, this.anchorY, 3, 0, Math.PI * 2);
+    ctx.fillStyle = DIM + '0.6)';
+    ctx.fill();
+
+    // Bob
+    ctx.beginPath();
+    ctx.arc(this.bob.x, this.bob.y, 8, 0, Math.PI * 2);
+    ctx.strokeStyle = LIGHT + '0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(this.bob.x, this.bob.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = BLUE + '0.4)';
+    ctx.fill();
+  }
+}
+
+// ─── Spring Coil (visual) ────────────────────────────────────
+class SpringCoil {
+  constructor(ax, ay, bx, by) {
+    this.a = new Node(ax, ay, true);
+    this.b = new Node(bx, by, false);
+    this.rest = Math.hypot(bx - ax, by - ay);
+    this.spring = new Spring(this.a, this.b, 0.15, this.rest);
+    this.b.vy = 2; // start with some motion
+  }
+  update(dt) {
+    this.spring.solve();
+    // gravity
+    if (!this.b.fixed) this.b.vy += 0.3;
+    this.b.update(dt);
+  }
+  draw(ctx) {
+    let dx = this.b.x - this.a.x;
+    let dy = this.b.y - this.a.y;
+    let dist = Math.hypot(dx, dy);
+    let ang = Math.atan2(dy, dx);
+    let coils = 8;
+    let amplitude = 8;
+
+    ctx.save();
+    ctx.translate(this.a.x, this.a.y);
+    ctx.rotate(ang);
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (let i = 0; i <= coils * 4; i++) {
+      let t = i / (coils * 4);
+      let x = t * dist;
+      let y = Math.sin(t * coils * Math.PI * 2) * amplitude;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = BLUE + '0.45)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Anchor points
+    ctx.beginPath();
+    ctx.arc(this.a.x, this.a.y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = DIM + '0.6)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(this.b.x, this.b.y, 6, 0, Math.PI * 2);
+    ctx.strokeStyle = LIGHT + '0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+}
+
+// ─── Piston ──────────────────────────────────────────────────
+class Piston {
+  constructor(x, y, gear) {
+    this.x = x; this.y = y;
+    this.gear = gear;
+    this.rodLength = 80;
+    this.cylinderWidth = 30;
+    this.cylinderHeight = 60;
+  }
+  draw(ctx) {
+    // Connect to gear's rotation
+    let crankRadius = this.gear.radius * 0.7;
+    let crankX = this.gear.x + Math.cos(this.gear.angle) * crankRadius;
+    let crankY = this.gear.y + Math.sin(this.gear.angle) * crankRadius;
+
+    // Piston position (simplified: vertical motion)
+    let pistonY = this.y + Math.sin(this.gear.angle) * crankRadius;
+
+    // Connecting rod
+    ctx.beginPath();
+    ctx.moveTo(crankX, crankY);
+    ctx.lineTo(this.x, pistonY);
+    ctx.strokeStyle = BLUE + '0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Cylinder walls
+    let cw = this.cylinderWidth;
+    ctx.beginPath();
+    ctx.moveTo(this.x - cw/2, this.y - 40);
+    ctx.lineTo(this.x - cw/2, this.y + 40);
+    ctx.moveTo(this.x + cw/2, this.y - 40);
+    ctx.lineTo(this.x + cw/2, this.y + 40);
+    ctx.strokeStyle = DIM + '0.4)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Piston head
+    ctx.beginPath();
+    ctx.rect(this.x - cw/2 + 2, pistonY - 6, cw - 4, 12);
+    ctx.strokeStyle = BLUE + '0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Piston pin
+    ctx.beginPath();
+    ctx.arc(this.x, pistonY, 3, 0, Math.PI * 2);
+    ctx.fillStyle = LIGHT + '0.5)';
+    ctx.fill();
+  }
+}
+
+// ─── Build the Scene ─────────────────────────────────────────
+const gears = [];
+const conveyors = [];
+const chains = [];
+const levers = [];
+const pendulums = [];
+const springCoils = [];
+const pistons = [];
+const allNodes = [];
+
+function buildScene() {
+  // ── Gear Train (top left area) ──
+  let g1 = new Gear(-300, -200, 40, 10, 1.5);
+  let g2 = new Gear(-300 + 40 + 35 + 8, -200, 35, 8, -1.5 * (40/35));
+  let g3 = new Gear(-300 + 40 + 35*2 + 30 + 16, -200, 30, 7, 1.5 * (40/30));
+  gears.push(g1, g2, g3);
+  allNodes.push(g1.node, g2.node, g3.node);
+
+  // ── Piston connected to g3 ──
+  let piston1 = new Piston(g3.x + 70, g3.y, g3);
+  pistons.push(piston1);
+
+  // ── Conveyor Belts (bottom area) ──
+  let conv1 = new ConveyorBelt(-250, 200, 50, 200, 18);
+  let conv2 = new ConveyorBelt(100, 200, 300, 200, 18);
+  conv2.speed = 1.8;
+  conveyors.push(conv1, conv2);
+
+  // ── Hanging Chain (top right) ──
+  let chainNodes = [];
+  for (let i = 0; i < 12; i++) {
+    let n = new Node(200 + i * 12, -180 + Math.sin(i * 0.5) * 20, i === 0 || i === 11);
+    chainNodes.push(n);
+    allNodes.push(n);
+  }
+  chains.push(new Chain(chainNodes));
+
+  // ── Another chain (draped, left) ──
+  let chainNodes2 = [];
+  for (let i = 0; i < 10; i++) {
+    let n = new Node(-380 + i * 8, -50 + i * 15, i === 0);
+    chainNodes2.push(n);
+    allNodes.push(n);
+  }
+  chains.push(new Chain(chainNodes2));
+
+  // ── Lever (center) ──
+  let lever1 = new Lever(0, 50, 180, -0.2);
+  levers.push(lever1);
+  allNodes.push(lever1.pivot, lever1.endA, lever1.endB);
+
+  // ── Lever (right) ──
+  let lever2 = new Lever(300, 0, 140, 0.3);
+  levers.push(lever2);
+  allNodes.push(lever2.pivot, lever2.endA, lever2.endB);
+
+  // ── Pendulums ──
+  pendulums.push(new Pendulum(-150, -120, 100, 0.8));
+  pendulums.push(new Pendulum(-100, -120, 70, -0.5));
+  pendulums.push(new Pendulum(350, -150, 90, 0.4));
+  for (let p of pendulums) allNodes.push(p.bob);
+
+  // ── Spring Coils ──
+  springCoils.push(new SpringCoil(-400, 80, -400, 180));
+  springCoils.push(new SpringCoil(380, -80, 380, 30));
+  for (let s of springCoils) allNodes.push(s.a, s.b);
+
+  // ── Second gear cluster (bottom right) ──
+  let g4 = new Gear(250, 80, 25, 6, -2);
+  let g5 = new Gear(250 + 25 + 20 + 8, 80, 20, 5, 2 * (25/20));
+  gears.push(g4, g5);
+  allNodes.push(g4.node, g5.node);
+}
+
+buildScene();
+
+// ─── Interaction ─────────────────────────────────────────────
+function tryGrab() {
+  let wm = worldMouse();
+  let closest = null, closestDist = 30;
+
+  // Check lever ends
+  for (let lev of levers) {
+    for (let end of [lev.endA, lev.endB]) {
+      let d = Math.hypot(wm.x - end.x, wm.y - end.y);
+      if (d < closestDist) { closest = { type: 'lever', lever: lev, node: end }; closestDist = d; }
+    }
+  }
+
+  // Check pendulum bobs
+  for (let p of pendulums) {
+    let d = Math.hypot(wm.x - p.bob.x, wm.y - p.bob.y);
+    if (d < closestDist) { closest = { type: 'pendulum', pendulum: p }; closestDist = d; }
+  }
+
+  // Check chain nodes
+  for (let ch of chains) {
+    for (let n of ch.nodes) {
+      if (n.fixed) continue;
+      let d = Math.hypot(wm.x - n.x, wm.y - n.y);
+      if (d < closestDist) { closest = { type: 'node', node: n }; closestDist = d; }
+    }
+  }
+
+  // Check spring coil bobs
+  for (let sc of springCoils) {
+    let d = Math.hypot(wm.x - sc.b.x, wm.y - sc.b.y);
+    if (d < closestDist) { closest = { type: 'springBob', coil: sc }; closestDist = d; }
+  }
+
+  // Check gears (for speed interaction)
+  for (let g of gears) {
+    let d = Math.hypot(wm.x - g.x, wm.y - g.y);
+    if (d < g.radius + 10) { closest = { type: 'gear', gear: g }; closestDist = d; }
+  }
+
+  dragging = closest;
+}
+
+function release() {
+  if (dragging && dragging.type === 'node') {
+    // give it a flick
+    let wm = worldMouse();
+    dragging.node.vx = (wm.x - dragging.node.x) * 0.5;
+    dragging.node.vy = (wm.y - dragging.node.y) * 0.5;
+  }
+  dragging = null;
+}
+
+function handleDrag() {
+  if (!dragging) return;
+  let wm = worldMouse();
+
+  if (dragging.type === 'node') {
+    dragging.node.x += (wm.x - dragging.node.x) * 0.3;
+    dragging.node.y += (wm.y - dragging.node.y) * 0.3;
+    dragging.node.vx = 0;
+    dragging.node.vy = 0;
+  }
+  if (dragging.type === 'lever') {
+    let lev = dragging.lever;
+    let ang = Math.atan2(wm.y - lev.pivot.y, wm.x - lev.pivot.x);
+    // Which end?
+    if (dragging.node === lev.endB) ang += Math.PI;
+    let diff = ang - lev.angle;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    lev.angularVel += diff * 0.1;
+  }
+  if (dragging.type === 'pendulum') {
+    let p = dragging.pendulum;
+    let ang = Math.atan2(wm.x - p.anchorX, wm.y - p.anchorY);
+    let diff = ang - p.angle;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    p.angularVel += diff * 0.08;
+  }
+  if (dragging.type === 'springBob') {
+    let sc = dragging.coil;
+    sc.b.x += (wm.x - sc.b.x) * 0.2;
+    sc.b.y += (wm.y - sc.b.y) * 0.2;
+    sc.b.vx = 0;
+    sc.b.vy = 0;
+  }
+  if (dragging.type === 'gear') {
+    let g = dragging.gear;
+    // Drag sideways to change speed
+    let dx = wm.x - g.x;
+    g.targetSpeed = dx * 0.05;
+  }
+}
+
+// ─── Grid Drawing ────────────────────────────────────────────
+function drawGrid() {
+  let gridSize = 50;
+  let smallGrid = 10;
+
+  let startX = Math.floor((camX - W/2/zoom) / gridSize) * gridSize;
+  let startY = Math.floor((camY - H/2/zoom) / gridSize) * gridSize;
+  let endX = camX + W/2/zoom + gridSize;
+  let endY = camY + H/2/zoom + gridSize;
+
+  // Small grid
+  ctx.beginPath();
+  let sg = smallGrid;
+  let sStartX = Math.floor((camX - W/2/zoom) / sg) * sg;
+  let sStartY = Math.floor((camY - H/2/zoom) / sg) * sg;
+  for (let x = sStartX; x < endX; x += sg) {
+    ctx.moveTo(x, camY - H/2/zoom);
+    ctx.lineTo(x, endY);
+  }
+  for (let y = sStartY; y < endY; y += sg) {
+    ctx.moveTo(camX - W/2/zoom, y);
+    ctx.lineTo(endX, y);
+  }
+  ctx.strokeStyle = GRID_COLOR2;
+  ctx.lineWidth = 0.3;
+  ctx.stroke();
+
+  // Major grid
+  ctx.beginPath();
+  for (let x = startX; x < endX; x += gridSize) {
+    ctx.moveTo(x, camY - H/2/zoom);
+    ctx.lineTo(x, endY);
+  }
+  for (let y = startY; y < endY; y += gridSize) {
+    ctx.moveTo(camX - W/2/zoom, y);
+    ctx.lineTo(endX, y);
+  }
+  ctx.strokeStyle = GRID_COLOR;
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+}
+
+// ─── Dimension Lines ─────────────────────────────────────────
+function drawDimensionLine(ctx, x1, y1, x2, y2, label) {
+  let dx = x2 - x1, dy = y2 - y1;
+  let dist = Math.hypot(dx, dy);
+  let ang = Math.atan2(dy, dx);
+  let offset = 20;
+  let perpX = -Math.sin(ang) * offset;
+  let perpY = Math.cos(ang) * offset;
+
+  ctx.beginPath();
+  // Extension lines
+  ctx.moveTo(x1, y1); ctx.lineTo(x1 + perpX, y1 + perpY);
+  ctx.moveTo(x2, y2); ctx.lineTo(x2 + perpX, y2 + perpY);
+  // Dimension line
+  ctx.moveTo(x1 + perpX, y1 + perpY);
+  ctx.lineTo(x2 + perpX, y2 + perpY);
+  ctx.strokeStyle = DIM + '0.3)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Arrows
+  let arrowSize = 4;
+  for (let [sx, sy, dir] of [[x1+perpX, y1+perpY, 1], [x2+perpX, y2+perpY, -1]]) {
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(sx + Math.cos(ang + 0.4) * arrowSize * dir, sy + Math.sin(ang + 0.4) * arrowSize * dir);
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(sx + Math.cos(ang - 0.4) * arrowSize * dir, sy + Math.sin(ang - 0.4) * arrowSize * dir);
+    ctx.stroke();
+  }
+
+  // Label
+  let mx = (x1 + x2) / 2 + perpX;
+  let my = (y1 + y2) / 2 + perpY;
+  ctx.save();
+  ctx.translate(mx, my);
+  ctx.rotate(ang > Math.PI/2 || ang < -Math.PI/2 ? ang + Math.PI : ang);
+  ctx.font = '7px Courier New';
+  ctx.fillStyle = DIM + '0.4)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(label, 0, -3);
+  ctx.restore();
+}
+
+// ─── Blueprint annotations ──────────────────────────────────
+function drawAnnotations(ctx) {
+  ctx.font = '8px Courier New';
+  ctx.fillStyle = DIM + '0.35)';
+
+  // Gear label
+  ctx.fillText('GEAR TRAIN — 3:1 RATIO', -310, -250);
+  drawDimensionLine(ctx, -340, -200, -340 + 80 + 70 + 60 + 24, -200, '224mm');
+
+  // Conveyor labels
+  ctx.fillText('CONVEYOR A — 1.2 m/s', -250, 235);
+  ctx.fillText('CONVEYOR B — 1.8 m/s', 100, 235);
+
+  // Lever labels
+  ctx.fillText('FULCRUM', -18, 85);
+
+  // Chain label
+  ctx.fillText('CHAIN LINK — 12 SEGMENTS', 195, -200);
+
+  // Spring label
+  ctx.fillText('SPRING k=0.15', -430, 65);
+
+  // Section marker
+  ctx.font = '9px Courier New';
+  ctx.fillStyle = DIM + '0.25)';
+  ctx.fillText('SECTION A-A', -420, -280);
+  ctx.fillText('SCALE 1:1', -420, -268);
+  ctx.fillText('REV 03', -420, -256);
+
+  // Border frame corners
+  let bx = -450, by = -300, bw = 900, bh = 580;
+  let corner = 15;
+  ctx.strokeStyle = DIM + '0.15)';
+  ctx.lineWidth = 1;
+  // Top-left
+  ctx.beginPath();
+  ctx.moveTo(bx, by + corner); ctx.lineTo(bx, by); ctx.lineTo(bx + corner, by);
+  ctx.stroke();
+  // Top-right
+  ctx.beginPath();
+  ctx.moveTo(bx+bw-corner, by); ctx.lineTo(bx+bw, by); ctx.lineTo(bx+bw, by+corner);
+  ctx.stroke();
+  // Bottom-left
+  ctx.beginPath();
+  ctx.moveTo(bx, by+bh-corner); ctx.lineTo(bx, by+bh); ctx.lineTo(bx+corner, by+bh);
+  ctx.stroke();
+  // Bottom-right
+  ctx.beginPath();
+  ctx.moveTo(bx+bw-corner, by+bh); ctx.lineTo(bx+bw, by+bh); ctx.lineTo(bx+bw, by+bh-corner);
+  ctx.stroke();
+
+  // Title block (bottom right)
+  ctx.strokeStyle = DIM + '0.2)';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(bx+bw-200, by+bh-50, 200, 50);
+  ctx.font = '8px Courier New';
+  ctx.fillStyle = DIM + '0.3)';
+  ctx.fillText('INTERACTIVE BLUEPRINT', bx+bw-190, by+bh-35);
+  ctx.fillText('MATT ZIEGER', bx+bw-190, by+bh-22);
+  ctx.fillText('SHEET 1 OF 1', bx+bw-190, by+bh-10);
+}
+
+// ─── Hover Highlight ─────────────────────────────────────────
+function drawHoverHighlight(ctx) {
+  let wm = worldMouse();
+  let closestDist = 30;
+  let highlight = null;
+
+  for (let lev of levers) {
+    for (let end of [lev.endA, lev.endB]) {
+      let d = Math.hypot(wm.x - end.x, wm.y - end.y);
+      if (d < closestDist) { highlight = end; closestDist = d; }
+    }
+  }
+  for (let p of pendulums) {
+    let d = Math.hypot(wm.x - p.bob.x, wm.y - p.bob.y);
+    if (d < closestDist) { highlight = p.bob; closestDist = d; }
+  }
+  for (let ch of chains) {
+    for (let n of ch.nodes) {
+      if (n.fixed) continue;
+      let d = Math.hypot(wm.x - n.x, wm.y - n.y);
+      if (d < closestDist) { highlight = n; closestDist = d; }
+    }
+  }
+  for (let sc of springCoils) {
+    let d = Math.hypot(wm.x - sc.b.x, wm.y - sc.b.y);
+    if (d < closestDist) { highlight = sc.b; closestDist = d; }
+  }
+
+  if (highlight) {
+    ctx.beginPath();
+    ctx.arc(highlight.x, highlight.y, 12, 0, Math.PI * 2);
+    ctx.strokeStyle = LIGHT + '0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+// ─── Main Loop ───────────────────────────────────────────────
+let lastTime = performance.now();
+
+function frame(now) {
+  let dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+
+  // Clear
+  ctx.fillStyle = '#0a1628';
+  ctx.fillRect(0, 0, W, H);
+
+  // Camera transform
+  ctx.save();
+  ctx.translate(W/2, H/2);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-camX, -camY);
+
+  // Grid
+  drawGrid();
+
+  // Annotations
+  drawAnnotations(ctx);
+
+  // Physics updates
+  handleDrag();
+
+  for (let g of gears) g.update(dt);
+  for (let c of conveyors) c.update(dt);
+  for (let ch of chains) ch.solve();
+  for (let lev of levers) lev.update(dt);
+  for (let p of pendulums) p.update(dt);
+  for (let sc of springCoils) sc.update(dt);
+
+  // Update free nodes
+  for (let n of allNodes) n.update(dt);
+
+  // Draw everything
+  for (let c of conveyors) c.draw(ctx);
+  for (let g of gears) g.draw(ctx);
+  for (let p of pistons) p.draw(ctx);
+  for (let ch of chains) ch.draw(ctx);
+  for (let lev of levers) lev.draw(ctx);
+  for (let p of pendulums) p.draw(ctx);
+  for (let sc of springCoils) sc.draw(ctx);
+
+  // Dimension lines between conveyors
+  drawDimensionLine(ctx, 50, 220, 100, 220, '50mm');
+
+  // Hover
+  if (!mouseDown) drawHoverHighlight(ctx);
+
+  ctx.restore();
+
+  // Scanline effect (very subtle)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.03)';
+  for (let y = 0; y < H; y += 3) {
+    ctx.fillRect(0, y, W, 1);
+  }
+
+  requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+
+// ─── Prevent context menu ────────────────────────────────────
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+</script>
+</body>
+</html>
