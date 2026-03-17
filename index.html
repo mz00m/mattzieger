@@ -4,889 +4,200 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Matt Zieger</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#e8e4d8;overflow:hidden;font-family:'Courier New',monospace}
-canvas{display:block;position:absolute;top:0;left:0}
-#bg{z-index:0}
-#fg{z-index:1;cursor:grab}
-#fg:active{cursor:grabbing}
-#ui{position:fixed;z-index:10;top:16px;right:16px;display:flex;gap:8px}
-#ui button{background:rgba(234,230,220,0.85);border:1.5px solid rgba(30,50,85,0.4);color:rgba(30,50,85,0.7);
-font:10px/1 'Courier New',monospace;letter-spacing:2px;text-transform:uppercase;
-padding:8px 18px;cursor:pointer;transition:all .3s;backdrop-filter:blur(4px)}
-#ui button:hover{background:rgba(30,50,85,0.08);border-color:rgba(30,50,85,0.7);color:rgba(30,50,85,0.9)}
-#info{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);color:rgba(30,50,85,0.4);
-font:9px/1.4 'Courier New',monospace;letter-spacing:2px;text-transform:uppercase;pointer-events:none;text-align:center}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
+canvas { display: block; }
 </style>
 </head>
 <body>
-<canvas id="bg"></canvas>
-<canvas id="fg"></canvas>
-<div id="ui">
-  <button onclick="startMachine()">&#9654; start</button>
-  <button onclick="resetMachine()">&#8634; reset</button>
-</div>
-<div id="info">drag objects to interact &middot; click start to trigger chain</div>
-
+<canvas id="c"></canvas>
 <script>
-// ════════════════════════════════════════════════════
-//  INK COLORS — Strong, visible values
-// ════════════════════════════════════════════════════
-const ink  = a => `rgba(20,45,85,${a})`;
-const ink2 = a => `rgba(40,70,120,${a})`;
-const ink3 = a => `rgba(70,100,150,${a})`;
-const red  = a => `rgba(160,50,35,${a})`;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, cols, rows, dots;
 
-// ════════════════════════════════════════════════════
-//  CANVAS
-// ════════════════════════════════════════════════════
-const bgC = document.getElementById('bg');
-const fgC = document.getElementById('fg');
-const bgX = bgC.getContext('2d');
-const fgX = fgC.getContext('2d');
-let W, H, dpr, cx, cy;
+const SPACING = 28;
+const DOT_BASE = 1.8;
+const WAVE_SPEED = 280;       // px per second
+const DAMPING = 0.92;         // per-frame amplitude decay
+const FREQUENCY = 8;          // wave oscillation Hz
+const WAVELENGTH = WAVE_SPEED / FREQUENCY;
+const TWO_PI = Math.PI * 2;
 
-function resize() {
-  dpr = devicePixelRatio || 1;
-  W = innerWidth; H = innerHeight;
-  for (const c of [bgC, fgC]) {
-    c.width = W * dpr; c.height = H * dpr;
-    c.style.width = W + 'px'; c.style.height = H + 'px';
-  }
-  cx = W / 2; cy = H / 2;
-  drawBackground();
-}
+// Each dot stores its displacement (z) and velocity
+// Waves are stored separately and dots sum contributions
 
-// ════════════════════════════════════════════════════
-//  STATIC BACKGROUND
-// ════════════════════════════════════════════════════
-function drawBackground() {
-  const c = bgX;
-  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+let waves = []; // { x, y, t0, amplitude }
 
-  // Paper fill
-  c.fillStyle = '#eae6dc';
-  c.fillRect(0, 0, W, H);
+function init() {
+  W = canvas.width = innerWidth;
+  H = canvas.height = innerHeight;
+  cols = Math.ceil(W / SPACING) + 2;
+  rows = Math.ceil(H / SPACING) + 2;
 
-  // Subtle noise texture
-  for (let i = 0; i < 8000; i++) {
-    const nx = Math.random() * W, ny = Math.random() * H;
-    c.fillStyle = `rgba(0,0,0,${Math.random() * 0.04})`;
-    c.fillRect(nx, ny, 1, 1);
-  }
-  for (let i = 0; i < 4000; i++) {
-    c.fillStyle = `rgba(255,255,240,${Math.random() * 0.03})`;
-    c.fillRect(Math.random() * W, Math.random() * H, 1, 1);
-  }
+  // Offset to center the grid
+  const ox = (W - (cols - 1) * SPACING) / 2;
+  const oy = (H - (rows - 1) * SPACING) / 2;
 
-  // Aged spots
-  for (let i = 0; i < 5; i++) {
-    const gx = Math.random() * W, gy = Math.random() * H;
-    const gr = c.createRadialGradient(gx, gy, 0, gx, gy, 50 + Math.random() * 80);
-    gr.addColorStop(0, 'rgba(150,130,95,0.06)');
-    gr.addColorStop(1, 'rgba(150,130,95,0)');
-    c.fillStyle = gr; c.fillRect(0, 0, W, H);
-  }
-
-  // Fine grid
-  c.beginPath();
-  for (let x = 0; x < W; x += 20) { c.moveTo(x, 0); c.lineTo(x, H); }
-  for (let y = 0; y < H; y += 20) { c.moveTo(0, y); c.lineTo(W, y); }
-  c.strokeStyle = ink3(0.08); c.lineWidth = 0.3; c.stroke();
-
-  // Major grid
-  c.beginPath();
-  for (let x = 0; x < W; x += 100) { c.moveTo(x, 0); c.lineTo(x, H); }
-  for (let y = 0; y < H; y += 100) { c.moveTo(0, y); c.lineTo(W, y); }
-  c.strokeStyle = ink3(0.14); c.lineWidth = 0.5; c.stroke();
-
-  // Border
-  const m = 28;
-  c.strokeStyle = ink2(0.3); c.lineWidth = 2;
-  c.strokeRect(m, m, W - m * 2, H - m * 2);
-  c.strokeStyle = ink3(0.12); c.lineWidth = 0.5;
-  c.strokeRect(m + 5, m + 5, W - m * 2 - 10, H - m * 2 - 10);
-
-  // Corner ticks
-  const tk = 18;
-  c.strokeStyle = ink2(0.35); c.lineWidth = 1;
-  for (const [bx, by, dx2, dy2] of [
-    [m, m, 1, 1], [W-m, m, -1, 1], [m, H-m, 1, -1], [W-m, H-m, -1, -1]
-  ]) {
-    c.beginPath(); c.moveTo(bx, by + tk * dy2); c.lineTo(bx, by); c.lineTo(bx + tk * dx2, by); c.stroke();
-  }
-
-  // Title block
-  const tbW = 240, tbH = 65;
-  const tbX = W - m - tbW, tbY = H - m - tbH;
-  c.strokeStyle = ink2(0.3); c.lineWidth = 1;
-  c.strokeRect(tbX, tbY, tbW, tbH);
-  c.beginPath(); c.moveTo(tbX, tbY + 22); c.lineTo(tbX + tbW, tbY + 22); c.stroke();
-  c.beginPath(); c.moveTo(tbX, tbY + 44); c.lineTo(tbX + tbW, tbY + 44); c.stroke();
-  c.beginPath(); c.moveTo(tbX + 130, tbY); c.lineTo(tbX + 130, tbY + 22); c.stroke();
-
-  c.font = '8px Courier New'; c.fillStyle = ink2(0.5);
-  c.fillText('INTERACTIVE BLUEPRINT', tbX + 8, tbY + 15);
-  c.fillText('REV 06', tbX + 138, tbY + 15);
-  c.font = '14px Courier New'; c.fillStyle = ink(0.65);
-  c.fillText('MATT ZIEGER', tbX + 8, tbY + 38);
-  c.font = '7px Courier New'; c.fillStyle = ink3(0.4);
-  c.fillText('SCALE 1:1  SHEET 1/1  2026-03-17', tbX + 8, tbY + 57);
-
-  // Section labels
-  c.font = '8px Courier New'; c.fillStyle = ink2(0.35);
-  c.fillText('SECTION A-A  \u2014  ISOMETRIC ASSEMBLY', m + 20, m + 18);
-  c.font = '7px Courier New'; c.fillStyle = ink2(0.3);
-  c.fillText('INTERACTIVE PHYSICS SIMULATION / RUBE GOLDBERG MACHINE', m + 20, m + 30);
-
-  // Stage labels
-  c.font = '7px Courier New'; c.fillStyle = ink2(0.3);
-  const stages = ['STAGE I','STAGE II','STAGE III','STAGE IV'];
-  for (let i = 0; i < stages.length; i++) {
-    c.fillText(stages[i], cx - 300 + i * 180, m + 20);
-  }
-
-  // Scattered engineering notes
-  const rng = s => { s = Math.sin(s * 127.1 + 311.7) * 43758.5; return s - Math.floor(s); };
-  const notes = ['TYP.','(REF)','2x','4x','M6','\u00D812','R8','45\u00B0','CL','NTS','\u00D88','3x','M10'];
-  for (let i = 0; i < 30; i++) {
-    c.font = (5 + rng(i * 3.7) * 3) + 'px Courier New';
-    c.fillStyle = ink3(0.12 + rng(i * 5.1) * 0.1);
-    c.fillText(notes[i % notes.length], m + 40 + rng(i * 7.3) * (W - m * 2 - 80), m + 50 + rng(i * 11.1 + 5) * (H - m * 2 - 120));
-  }
-
-  // Construction lines
-  c.setLineDash([6, 5]); c.strokeStyle = ink3(0.06); c.lineWidth = 0.4;
-  for (let i = 0; i < 10; i++) {
-    const lx = rng(i * 13.7) * W, ly = rng(i * 17.3) * H, la = rng(i * 23.1) * Math.PI;
-    c.beginPath();
-    c.moveTo(lx - Math.cos(la) * 500, ly - Math.sin(la) * 500);
-    c.lineTo(lx + Math.cos(la) * 500, ly + Math.sin(la) * 500);
-    c.stroke();
-  }
-  c.setLineDash([]);
-
-  // Watermark
-  c.save(); c.globalAlpha = 0.04;
-  c.font = 'bold 200px Courier New'; c.fillStyle = ink(1);
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.fillText('MATT Z.', cx, cy);
-  c.restore();
-
-  // Vignette
-  const vig = c.createRadialGradient(cx, cy, Math.min(W, H) * 0.3, cx, cy, Math.max(W, H) * 0.72);
-  vig.addColorStop(0, 'rgba(0,0,0,0)');
-  vig.addColorStop(1, 'rgba(0,0,0,0.09)');
-  c.fillStyle = vig; c.fillRect(0, 0, W, H);
-}
-
-// ════════════════════════════════════════════════════
-//  3D DRAWING — High visibility
-// ════════════════════════════════════════════════════
-
-function hatch(ctx, pts, angle, spacing, alpha, lineW) {
-  if (!pts || pts.length < 3) return;
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.closePath(); ctx.clip();
-
-  let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
-  for (const p of pts) { mnx = Math.min(mnx, p.x); mny = Math.min(mny, p.y); mxx = Math.max(mxx, p.x); mxy = Math.max(mxy, p.y); }
-  const diag = Math.hypot(mxx - mnx, mxy - mny) + 40;
-  const ccx = (mnx + mxx) / 2, ccy = (mny + mxy) / 2;
-  const ca = Math.cos(angle), sa = Math.sin(angle);
-
-  ctx.beginPath();
-  for (let d = -diag; d < diag; d += spacing) {
-    ctx.moveTo(ccx + ca * diag + sa * d, ccy + sa * diag - ca * d);
-    ctx.lineTo(ccx - ca * diag + sa * d, ccy - sa * diag - ca * d);
-  }
-  ctx.strokeStyle = ink2(alpha); ctx.lineWidth = lineW || 0.5; ctx.stroke();
-  ctx.restore();
-}
-
-function draw3DBox(ctx, x, y, w, h, depth, opts = {}) {
-  const d = depth || 14;
-  const ex = d * 0.86, ey = d * -0.5;
-  const a = opts.alpha != null ? opts.alpha : 1;
-
-  // Right face
-  const rf = [{x:x+w,y},{x:x+w+ex,y:y+ey},{x:x+w+ex,y:y+h+ey},{x:x+w,y:y+h}];
-  ctx.beginPath(); for (let i=0;i<4;i++) i===0?ctx.moveTo(rf[i].x,rf[i].y):ctx.lineTo(rf[i].x,rf[i].y);
-  ctx.closePath();
-  ctx.fillStyle = ink(0.08 * a); ctx.fill();
-  ctx.strokeStyle = ink(0.6 * a); ctx.lineWidth = 1; ctx.stroke();
-  hatch(ctx, rf, -0.4, 3.5, 0.2 * a, 0.4);
-
-  // Top face
-  const tf = [{x,y},{x:x+ex,y:y+ey},{x:x+w+ex,y:y+ey},{x:x+w,y}];
-  ctx.beginPath(); for (let i=0;i<4;i++) i===0?ctx.moveTo(tf[i].x,tf[i].y):ctx.lineTo(tf[i].x,tf[i].y);
-  ctx.closePath();
-  ctx.fillStyle = ink3(0.04 * a); ctx.fill();
-  ctx.strokeStyle = ink(0.5 * a); ctx.lineWidth = 0.8; ctx.stroke();
-  hatch(ctx, tf, 1.2, 4, 0.12 * a, 0.35);
-
-  // Front face
-  ctx.beginPath(); ctx.rect(x, y, w, h);
-  ctx.fillStyle = `rgba(225,221,210,${0.5 * a})`; ctx.fill();
-  ctx.strokeStyle = ink(0.7 * a); ctx.lineWidth = opts.heavy ? 2 : 1.2; ctx.stroke();
-  const ff = [{x,y},{x:x+w,y},{x:x+w,y:y+h},{x,y:y+h}];
-  if (opts.hatch !== false) hatch(ctx, ff, 0.6, opts.hatchSp || 5, 0.1 * a, 0.4);
-
-  // Hidden edges
-  ctx.setLineDash([3, 3]);
-  ctx.strokeStyle = ink2(0.15 * a); ctx.lineWidth = 0.5;
-  ctx.beginPath(); ctx.moveTo(x+ex, y+ey); ctx.lineTo(x+ex, y+h+ey); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+ex, y+h+ey); ctx.lineTo(x, y+h); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+ex, y+h+ey); ctx.lineTo(x+w+ex, y+h+ey); ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Bolts
-  if (opts.bolts) {
-    for (const [bpx,bpy] of [[x+5,y+5],[x+w-5,y+5],[x+5,y+h-5],[x+w-5,y+h-5]]) {
-      ctx.beginPath(); ctx.arc(bpx, bpy, 2, 0, Math.PI * 2);
-      ctx.strokeStyle = ink(0.5 * a); ctx.lineWidth = 0.7; ctx.stroke();
-      ctx.beginPath(); ctx.arc(bpx, bpy, 0.7, 0, Math.PI * 2);
-      ctx.fillStyle = ink(0.4 * a); ctx.fill();
+  dots = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      dots.push({
+        x: ox + c * SPACING,
+        y: oy + r * SPACING,
+        z: 0,        // current displacement
+        prevZ: 0,    // for velocity-based rendering
+      });
     }
   }
 }
 
-function draw3DSphere(ctx, bx, by, r) {
-  // Drop shadow
-  ctx.beginPath(); ctx.ellipse(bx + 3, by + r + 3, r * 0.65, r * 0.12, 0, 0, Math.PI * 2);
-  ctx.fillStyle = ink(0.06); ctx.fill();
+function spawnWave(x, y) {
+  waves.push({
+    x, y,
+    t0: performance.now() / 1000,
+    amplitude: 18,
+  });
+  // Cap active waves to prevent slowdown
+  if (waves.length > 12) waves.shift();
+}
 
-  // Base fill
-  ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(220,216,205,0.7)'; ctx.fill();
+canvas.addEventListener('click', e => spawnWave(e.clientX, e.clientY));
+canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-  // Latitude lines
-  for (let i = -3; i <= 3; i++) {
-    const ly = by + (i / 4) * r;
-    const lrx = Math.sqrt(Math.max(0, r * r - (i / 4 * r) ** 2));
-    ctx.beginPath(); ctx.ellipse(bx, ly, lrx, lrx * 0.2, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = ink2(0.15); ctx.lineWidth = 0.5; ctx.stroke();
+// Touch support
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) spawnWave(t.clientX, t.clientY);
+}, { passive: false });
+
+let lastTime = performance.now() / 1000;
+
+function frame(now) {
+  now /= 1000;
+  const dt = Math.min(now - lastTime, 0.05);
+  lastTime = now;
+
+  ctx.fillStyle = '#0a0e1a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Prune dead waves (amplitude negligible after ~4 seconds)
+  waves = waves.filter(w => (now - w.t0) < 5);
+
+  // Compute each dot's displacement from superposition of all active waves
+  for (const dot of dots) {
+    dot.prevZ = dot.z;
+    let z = 0;
+
+    for (const wave of waves) {
+      const dx = dot.x - wave.x;
+      const dy = dot.y - wave.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      const elapsed = now - wave.t0;
+      const wavefront = elapsed * WAVE_SPEED;
+
+      // Only affect dots the wavefront has reached
+      if (dist > wavefront + WAVELENGTH * 0.5) continue;
+
+      // How long ago the wave passed this point
+      const localT = elapsed - dist / WAVE_SPEED;
+      if (localT < 0) continue;
+
+      // Realistic damped sinusoidal wave
+      // Amplitude falls off with 1/sqrt(r) (2D circular wave) and exponential time decay
+      const spatialFalloff = 1 / Math.max(1, Math.sqrt(dist / 30));
+      const timeDamping = Math.exp(-localT * 3.2);
+      const envelope = wave.amplitude * spatialFalloff * timeDamping;
+
+      // Leading edge fade-in (smooth wavefront)
+      const edgeFade = Math.min(1, localT * FREQUENCY * 1.5);
+
+      z += envelope * edgeFade * Math.sin(TWO_PI * FREQUENCY * localT);
+    }
+
+    dot.z = z;
   }
 
-  // Longitude lines
-  for (let i = 0; i < 6; i++) {
-    const la = (i / 6) * Math.PI;
-    ctx.save(); ctx.translate(bx, by);
-    ctx.beginPath(); ctx.ellipse(0, 0, Math.cos(la) * r, r, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = ink2(0.1); ctx.lineWidth = 0.4; ctx.stroke();
-    ctx.restore();
-  }
+  // Render dots
+  for (const dot of dots) {
+    const z = dot.z;
+    const absZ = Math.abs(z);
 
-  // Shadow-side hatching
-  ctx.save();
-  ctx.beginPath(); ctx.arc(bx, by, r - 0.5, 0, Math.PI * 2); ctx.clip();
-  for (let i = -r * 2; i < r * 0.8; i += 2) {
-    const darkness = Math.max(0, 1 - (i + r) / (r * 2));
-    if (Math.random() > darkness * 0.8 + 0.15) continue;
+    // Size: base + displacement
+    const size = DOT_BASE + absZ * 0.12;
+
+    // Vertical offset (3D perspective — dots move up when displaced)
+    const drawY = dot.y - z * 0.6;
+
+    // Color: cool blue base, shifts toward white/cyan on peaks
+    const intensity = Math.min(1, absZ / 12);
+    const r = Math.round(30 + intensity * 100);
+    const g = Math.round(55 + intensity * 180);
+    const b = Math.round(90 + intensity * 165);
+    const alpha = 0.35 + intensity * 0.65;
+
     ctx.beginPath();
-    ctx.moveTo(bx + i, by - r); ctx.lineTo(bx + i - r * 0.5, by + r);
-    ctx.strokeStyle = ink2(0.08 + darkness * 0.15); ctx.lineWidth = 0.5; ctx.stroke();
-  }
-  ctx.restore();
+    ctx.arc(dot.x, drawY, size, 0, TWO_PI);
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    ctx.fill();
 
-  // Specular highlight
-  const hg = ctx.createRadialGradient(bx - r * 0.3, by - r * 0.3, 0, bx - r * 0.3, by - r * 0.3, r * 0.55);
-  hg.addColorStop(0, 'rgba(255,255,255,0.35)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = hg;
-  ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
-
-  // Outline
-  ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2);
-  ctx.strokeStyle = ink(0.7); ctx.lineWidth = 1.5; ctx.stroke();
-
-  // Center crosshair
-  ctx.beginPath();
-  ctx.moveTo(bx - r * 0.35, by); ctx.lineTo(bx + r * 0.35, by);
-  ctx.moveTo(bx, by - r * 0.35); ctx.lineTo(bx, by + r * 0.35);
-  ctx.strokeStyle = ink2(0.25); ctx.lineWidth = 0.5; ctx.stroke();
-}
-
-function draw3DGear(ctx, gx, gy, r, teeth, angle) {
-  ctx.save(); ctx.translate(gx, gy); ctx.rotate(angle);
-
-  const toothH = r * 0.18;
-
-  // Gear body with teeth
-  ctx.beginPath();
-  for (let i = 0; i < teeth; i++) {
-    const a1 = (i / teeth) * Math.PI * 2;
-    const gapW = (Math.PI * 2 / teeth) * 0.35;
-    const a2 = a1 + gapW;
-    const a3 = a2 + gapW * 0.4;
-    ctx.lineTo(Math.cos(a1) * r, Math.sin(a1) * r);
-    ctx.lineTo(Math.cos(a1) * (r + toothH), Math.sin(a1) * (r + toothH));
-    ctx.lineTo(Math.cos(a2) * (r + toothH), Math.sin(a2) * (r + toothH));
-    ctx.lineTo(Math.cos(a3) * r, Math.sin(a3) * r);
-  }
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(218,214,204,0.6)'; ctx.fill();
-  ctx.strokeStyle = ink(0.65); ctx.lineWidth = 1.2; ctx.stroke();
-
-  // Inner rings
-  for (const [rr, al] of [[0.78, 0.25], [0.55, 0.2], [0.35, 0.3]]) {
-    ctx.beginPath(); ctx.arc(0, 0, r * rr, 0, Math.PI * 2);
-    ctx.strokeStyle = ink2(al); ctx.lineWidth = 0.6; ctx.stroke();
+    // Glow on high displacement
+    if (absZ > 4) {
+      ctx.beginPath();
+      ctx.arc(dot.x, drawY, size + absZ * 0.2, 0, TWO_PI);
+      ctx.fillStyle = `rgba(${r},${g},${b},${intensity * 0.15})`;
+      ctx.fill();
+    }
   }
 
-  // Spokes
-  const spokeN = Math.min(teeth, 6);
-  for (let i = 0; i < spokeN; i++) {
-    const sa = (i / spokeN) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(sa - 0.06) * r * 0.2, Math.sin(sa - 0.06) * r * 0.2);
-    ctx.lineTo(Math.cos(sa - 0.025) * r * 0.52, Math.sin(sa - 0.025) * r * 0.52);
-    ctx.lineTo(Math.cos(sa + 0.025) * r * 0.52, Math.sin(sa + 0.025) * r * 0.52);
-    ctx.lineTo(Math.cos(sa + 0.06) * r * 0.2, Math.sin(sa + 0.06) * r * 0.2);
-    ctx.closePath();
-    ctx.fillStyle = ink3(0.06); ctx.fill();
-    ctx.strokeStyle = ink2(0.3); ctx.lineWidth = 0.5; ctx.stroke();
-  }
+  // Subtle connection lines between neighbors when both displaced
+  // Only render horizontal/vertical for performance
+  const threshold = 2.5;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      const d = dots[i];
+      if (Math.abs(d.z) < threshold) continue;
 
-  // Lightening holes
-  for (let i = 0; i < spokeN; i++) {
-    const sa = ((i + 0.5) / spokeN) * Math.PI * 2;
-    ctx.beginPath(); ctx.arc(Math.cos(sa) * r * 0.42, Math.sin(sa) * r * 0.42, r * 0.09, 0, Math.PI * 2);
-    ctx.strokeStyle = ink2(0.2); ctx.lineWidth = 0.5; ctx.stroke();
-  }
-
-  // Hub
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(210,206,196,0.4)'; ctx.fill();
-  ctx.strokeStyle = ink(0.6); ctx.lineWidth = 1.2; ctx.stroke();
-
-  // Keyway
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.07, 0, Math.PI * 2);
-  ctx.fillStyle = ink(0.5); ctx.fill();
-  ctx.fillStyle = ink(0.4);
-  ctx.fillRect(-1.5, -r * 0.17, 3, r * 0.1);
-
-  // 3D edge thickness
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.96, -Math.PI * 0.75, Math.PI * 0.15);
-  ctx.strokeStyle = ink2(0.1); ctx.lineWidth = 6; ctx.stroke();
-
-  ctx.restore();
-}
-
-function draw3DCylinder(ctx, bx, by, rx, ry, h) {
-  ctx.save(); ctx.translate(bx, by);
-
-  // Back ellipse (dashed)
-  ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-  ctx.setLineDash([2, 2]); ctx.strokeStyle = ink2(0.2); ctx.lineWidth = 0.5; ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Side lines
-  ctx.beginPath(); ctx.moveTo(-rx, 0); ctx.lineTo(-rx, h);
-  ctx.moveTo(rx, 0); ctx.lineTo(rx, h);
-  ctx.strokeStyle = ink(0.6); ctx.lineWidth = 1.2; ctx.stroke();
-
-  // Body fill + hatching
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(-rx, 0); ctx.lineTo(-rx, h);
-  ctx.ellipse(0, h, rx, ry, 0, Math.PI, 0, true);
-  ctx.lineTo(rx, 0);
-  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(220,216,206,0.4)'; ctx.fill();
-  ctx.clip();
-  for (let i = -rx; i < rx; i += 2.5) {
-    const darkness = 1 - (i + rx) / (rx * 2);
-    if (Math.random() > darkness * 0.7 + 0.25) continue;
-    ctx.beginPath(); ctx.moveTo(i, -ry); ctx.lineTo(i, h + ry);
-    ctx.strokeStyle = ink2(0.06 + darkness * 0.12); ctx.lineWidth = 0.5; ctx.stroke();
-  }
-  for (let j = 0; j < h; j += 10) {
-    ctx.beginPath(); ctx.ellipse(0, j, rx * 0.98, ry * 0.5, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = ink3(0.08); ctx.lineWidth = 0.3; ctx.stroke();
-  }
-  ctx.restore();
-
-  // Front cap
-  ctx.beginPath(); ctx.ellipse(0, h, rx, ry, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(225,221,212,0.5)'; ctx.fill();
-  ctx.strokeStyle = ink(0.6); ctx.lineWidth = 1.2; ctx.stroke();
-
-  // Cap inner rings
-  ctx.beginPath(); ctx.ellipse(0, h, rx * 0.6, ry * 0.6, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = ink2(0.3); ctx.lineWidth = 0.5; ctx.stroke();
-  ctx.beginPath(); ctx.ellipse(0, h, rx * 0.25, ry * 0.25, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = ink2(0.35); ctx.lineWidth = 0.6; ctx.stroke();
-
-  // Center cross
-  ctx.beginPath(); ctx.moveTo(-5, h); ctx.lineTo(5, h); ctx.moveTo(0, h - 4); ctx.lineTo(0, h + 4);
-  ctx.strokeStyle = ink2(0.3); ctx.lineWidth = 0.5; ctx.stroke();
-
-  ctx.restore();
-}
-
-function dimLine(ctx, x1, y1, x2, y2, label, offset) {
-  offset = offset || 16;
-  const ang = Math.atan2(y2 - y1, x2 - x1);
-  const px = -Math.sin(ang) * offset, py = Math.cos(ang) * offset;
-
-  ctx.strokeStyle = ink2(0.35); ctx.lineWidth = 0.5;
-  ctx.beginPath();
-  ctx.moveTo(x1, y1); ctx.lineTo(x1 + px, y1 + py);
-  ctx.moveTo(x2, y2); ctx.lineTo(x2 + px, y2 + py);
-  ctx.moveTo(x1 + px, y1 + py); ctx.lineTo(x2 + px, y2 + py);
-  ctx.stroke();
-
-  const as = 4;
-  for (const [sx, sy, dir] of [[x1+px,y1+py,1],[x2+px,y2+py,-1]]) {
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(sx + Math.cos(ang + 0.35) * as * dir, sy + Math.sin(ang + 0.35) * as * dir);
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(sx + Math.cos(ang - 0.35) * as * dir, sy + Math.sin(ang - 0.35) * as * dir);
-    ctx.stroke();
-  }
-
-  ctx.save();
-  ctx.translate((x1+x2)/2 + px, (y1+y2)/2 + py);
-  let ta = ang; if (ta > Math.PI/2 || ta < -Math.PI/2) ta += Math.PI;
-  ctx.rotate(ta);
-  ctx.font = '6px Courier New'; ctx.fillStyle = ink2(0.45);
-  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-  ctx.fillText(label, 0, -3);
-  ctx.restore();
-}
-
-// ════════════════════════════════════════════════════
-//  PHYSICS
-// ════════════════════════════════════════════════════
-const { Engine, Bodies, Body, Composite, Constraint, Events, Mouse, MouseConstraint, Vector } = Matter;
-const engine = Engine.create({ gravity: { x: 0, y: 0.8 } });
-const world = engine.world;
-
-let objects = [], constraints = [], gears = [], particles = [];
-let started = false;
-
-function addObj(body, drawFn, type) {
-  Composite.add(world, body);
-  const obj = { body, draw: drawFn, type: type || '' };
-  objects.push(obj);
-  return obj;
-}
-
-function buildMachine() {
-  Composite.clear(world, false);
-  objects = []; constraints = []; gears = []; particles = [];
-  started = false;
-
-  // Walls
-  const wO = { isStatic: true, friction: 0.4, restitution: 0.3, label: 'wall' };
-  Composite.add(world, [
-    Bodies.rectangle(cx, H + 25, W * 2, 50, wO),
-    Bodies.rectangle(-25, cy, 50, H * 2, wO),
-    Bodies.rectangle(W + 25, cy, 50, H * 2, wO),
-  ]);
-
-  const midY = cy;
-
-  // ──────────────────────────────────────
-  // 1. MONOLITH — Central name block
-  // ──────────────────────────────────────
-  const mW = 340, mH = 90;
-  addObj(
-    Bodies.rectangle(cx, midY, mW, mH, { isStatic: true, label: 'monolith', friction: 0.3, restitution: 0.15 }),
-    function(c) {
-      const b = this.body;
-      c.save(); c.translate(b.position.x, b.position.y); c.rotate(b.angle);
-
-      draw3DBox(c, -mW/2, -mH/2, mW, mH, 20, { heavy: true, hatchSp: 6, bolts: true });
-
-      // Recessed panel
-      draw3DBox(c, -mW/2 + 14, -mH/2 + 12, mW - 28, mH - 24, 4, { alpha: 0.5, hatchSp: 8, hatch: false });
-
-      // Name
-      c.font = 'bold 42px Courier New';
-      c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillStyle = ink(0.12); c.fillText('MATT Z.', 1.5, 3.5);
-      c.fillStyle = ink(0.65); c.fillText('MATT Z.', 0, 1);
-
-      // Side brackets
-      for (const sx of [-1, 1]) {
-        const mx = sx * (mW / 2 + 6);
-        c.beginPath();
-        c.moveTo(mx, -18); c.lineTo(mx + sx * 14, -18);
-        c.lineTo(mx + sx * 14, 18); c.lineTo(mx, 18);
-        c.strokeStyle = ink(0.4); c.lineWidth = 1; c.stroke();
-        c.beginPath(); c.arc(mx + sx * 8, -8, 2.5, 0, Math.PI * 2);
-        c.strokeStyle = ink(0.4); c.lineWidth = 0.7; c.stroke();
-        c.beginPath(); c.arc(mx + sx * 8, 8, 2.5, 0, Math.PI * 2);
-        c.strokeStyle = ink(0.4); c.lineWidth = 0.7; c.stroke();
+      // Right neighbor
+      if (c < cols - 1) {
+        const dr = dots[i + 1];
+        if (Math.abs(dr.z) >= threshold) {
+          const avgZ = (Math.abs(d.z) + Math.abs(dr.z)) / 2;
+          const lineAlpha = Math.min(0.25, avgZ / 40);
+          ctx.beginPath();
+          ctx.moveTo(d.x, d.y - d.z * 0.6);
+          ctx.lineTo(dr.x, dr.y - dr.z * 0.6);
+          ctx.strokeStyle = `rgba(60,130,200,${lineAlpha})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
       }
-
-      c.restore();
-    },
-    'monolith'
-  );
-
-  // ──────────────────────────────────────
-  // 2 & 3. GEAR PAIR — Left side
-  // ──────────────────────────────────────
-  const g1x = cx - 240, g1y = midY + 140;
-  gears.push({ x: g1x, y: g1y, r: 55, teeth: 16, angle: 0, speed: 0.4,
-    draw(c) { draw3DGear(c, this.x, this.y, this.r, this.teeth, this.angle); }
-  });
-  gears.push({ x: g1x + 75, y: g1y, r: 32, teeth: 9, angle: 0, speed: -0.4 * (55/32),
-    draw(c) { draw3DGear(c, this.x, this.y, this.r, this.teeth, this.angle); }
-  });
-
-  // Gear axle mounts
-  gears.push({
-    x: g1x, y: g1y,
-    draw(c) {
-      // Mounting plate behind gears
-      draw3DBox(c, this.x - 70, this.y - 70, 160, 140, 6, { alpha: 0.25, hatchSp: 8 });
-    }
-  });
-
-  // ──────────────────────────────────────
-  // 4. PENDULUM — Left
-  // ──────────────────────────────────────
-  const pAx = cx - 160, pAy = midY - 150;
-  const pBob = addObj(
-    Bodies.circle(pAx - 45, pAy + 130, 18, { density: 0.006, restitution: 0.4, friction: 0.15, label: 'pend' }),
-    function(c) { draw3DSphere(c, this.body.position.x, this.body.position.y, 18); },
-    'pendulum'
-  );
-  const pCon = Constraint.create({ bodyA: pBob.body, pointB: { x: pAx, y: pAy }, length: 140, stiffness: 0.9, damping: 0.002 });
-  Composite.add(world, pCon); constraints.push(pCon);
-
-  // ──────────────────────────────────────
-  // 5. START BALL + RAMP
-  // ──────────────────────────────────────
-  const sBall = addObj(
-    Bodies.circle(cx - 300, midY - 110, 16, { restitution: 0.55, friction: 0.3, density: 0.004, label: 'ball', isStatic: true }),
-    function(c) { draw3DSphere(c, this.body.position.x, this.body.position.y, 16); },
-    'startBall'
-  );
-
-  // Ramp
-  addObj(
-    Bodies.rectangle(cx - 230, midY - 60, 180, 8, { isStatic: true, angle: 0.28, friction: 0.3, restitution: 0.15, label: 'ramp' }),
-    function(c) {
-      const b = this.body;
-      c.save(); c.translate(b.position.x, b.position.y); c.rotate(b.angle);
-      draw3DBox(c, -90, -4, 180, 8, 10, { hatchSp: 4 });
-      c.restore();
-    },
-    'ramp'
-  );
-
-  // Second ramp
-  addObj(
-    Bodies.rectangle(cx + 50, midY - 20, 140, 8, { isStatic: true, angle: -0.22, friction: 0.3, restitution: 0.15, label: 'ramp' }),
-    function(c) {
-      const b = this.body;
-      c.save(); c.translate(b.position.x, b.position.y); c.rotate(b.angle);
-      draw3DBox(c, -70, -4, 140, 8, 10, { hatchSp: 4 });
-      c.restore();
-    },
-    'ramp2'
-  );
-
-  // ──────────────────────────────────────
-  // 6. DOMINOES on shelf
-  // ──────────────────────────────────────
-  const dsx = cx - 70, dsy = midY + 30;
-
-  addObj(
-    Bodies.rectangle(dsx + 45, dsy + 12, 150, 8, { isStatic: true, friction: 0.6, restitution: 0.05, label: 'shelf' }),
-    function(c) {
-      const b = this.body;
-      c.save(); c.translate(b.position.x, b.position.y); c.rotate(b.angle);
-      draw3DBox(c, -75, -4, 150, 8, 12, { hatchSp: 5 });
-      c.restore();
-    },
-    'shelf'
-  );
-
-  for (let i = 0; i < 6; i++) {
-    addObj(
-      Bodies.rectangle(dsx + i * 24, dsy - 14, 7, 34, { friction: 0.6, restitution: 0.05, density: 0.003, label: 'domino' }),
-      function(c) {
-        const b = this.body;
-        c.save(); c.translate(b.position.x, b.position.y); c.rotate(b.angle);
-        draw3DBox(c, -3.5, -17, 7, 34, 5, { hatchSp: 2.5, fillAlpha: 0.05 });
-        // Dots
-        c.beginPath(); c.arc(0, -7, 1.5, 0, Math.PI * 2); c.fillStyle = ink(0.4); c.fill();
-        c.beginPath(); c.arc(0, 7, 1.5, 0, Math.PI * 2); c.fillStyle = ink(0.4); c.fill();
-        // Divider
-        c.beginPath(); c.moveTo(-3.5, 0); c.lineTo(3.5, 0);
-        c.strokeStyle = ink(0.3); c.lineWidth = 0.5; c.stroke();
-        c.restore();
-      },
-      'domino'
-    );
-  }
-
-  // ──────────────────────────────────────
-  // 7. SEESAW + ball
-  // ──────────────────────────────────────
-  const ssx = cx + 160, ssy = midY + 70;
-  const sArm = addObj(
-    Bodies.rectangle(ssx, ssy, 180, 8, { friction: 0.5, density: 0.002, label: 'seesaw' }),
-    function(c) {
-      const b = this.body;
-      c.save(); c.translate(b.position.x, b.position.y); c.rotate(b.angle);
-      draw3DBox(c, -90, -4, 180, 8, 7, { hatchSp: 4, bolts: true });
-      c.restore();
-    },
-    'seesaw'
-  );
-  const sPivot = Constraint.create({ bodyA: sArm.body, pointB: { x: ssx, y: ssy }, length: 0, stiffness: 0.95 });
-  Composite.add(world, sPivot); constraints.push(sPivot);
-
-  // Fulcrum
-  addObj(
-    Bodies.polygon(ssx, ssy + 22, 3, 20, { isStatic: true, angle: Math.PI, label: 'fulcrum' }),
-    function(c) {
-      const b = this.body, v = b.vertices;
-      const pts = v.map(vv => ({x:vv.x,y:vv.y}));
-      c.beginPath(); c.moveTo(v[0].x,v[0].y);
-      for (let i=1;i<v.length;i++) c.lineTo(v[i].x,v[i].y);
-      c.closePath();
-      c.fillStyle = 'rgba(220,216,206,0.5)'; c.fill();
-      c.strokeStyle = ink(0.6); c.lineWidth = 1.2; c.stroke();
-      hatch(c, pts, 0.5, 4, 0.15);
-    },
-    'fulcrum'
-  );
-
-  // Ball on seesaw
-  addObj(
-    Bodies.circle(ssx + 65, ssy - 18, 12, { restitution: 0.6, friction: 0.3, density: 0.004, label: 'ball' }),
-    function(c) { draw3DSphere(c, this.body.position.x, this.body.position.y, 12); },
-    'seesawBall'
-  );
-
-  // ──────────────────────────────────────
-  // 8. CYLINDER / PISTON — Right side
-  // ──────────────────────────────────────
-  const cylX = cx + 280, cylY = midY - 70;
-  gears.push({
-    x: cylX, y: cylY, phase: 0, speed: 1.2,
-    draw(c) {
-      const py = Math.sin(this.phase) * 14;
-      draw3DCylinder(c, this.x, this.y + py, 24, 10, 50);
-      // Piston rod
-      c.beginPath();
-      c.moveTo(this.x - 3, this.y + py + 50);
-      c.lineTo(this.x - 3, this.y + py + 50 + 25);
-      c.lineTo(this.x + 3, this.y + py + 50 + 25);
-      c.lineTo(this.x + 3, this.y + py + 50);
-      c.strokeStyle = ink(0.5); c.lineWidth = 0.8; c.stroke();
-      // Rod hatching
-      for (let i = 0; i < 25; i += 3) {
-        c.beginPath();
-        c.moveTo(this.x - 3, this.y + py + 50 + i);
-        c.lineTo(this.x + 3, this.y + py + 50 + i);
-        c.strokeStyle = ink3(0.1); c.lineWidth = 0.3; c.stroke();
-      }
-    }
-  });
-
-  // ──────────────────────────────────────
-  // 9. NEWTON'S CRADLE — Top right
-  // ──────────────────────────────────────
-  const ncx = cx + 200, ncy = midY - 160;
-
-  // Frame
-  gears.push({
-    x: ncx, y: ncy,
-    draw(c) {
-      draw3DBox(c, this.x - 10, this.y - 5, 72, 6, 7, { hatchSp: 3 });
-      draw3DBox(c, this.x - 10, this.y - 5, 5, 28, 5, { hatchSp: 2, alpha: 0.7 });
-      draw3DBox(c, this.x + 57, this.y - 5, 5, 28, 5, { hatchSp: 2, alpha: 0.7 });
-    }
-  });
-
-  for (let i = 0; i < 4; i++) {
-    const nbObj = addObj(
-      Bodies.circle(ncx + i * 20, ncy + 75, 9, { density: 0.006, restitution: 0.99, friction: 0.01, label: 'ball' }),
-      function(c) { draw3DSphere(c, this.body.position.x, this.body.position.y, 9); },
-      'newton'
-    );
-    const nc = Constraint.create({ bodyA: nbObj.body, pointB: { x: ncx + i * 20, y: ncy }, length: 75, stiffness: 0.95, damping: 0.001 });
-    Composite.add(world, nc); constraints.push(nc);
-  }
-
-  // ──────────────────────────────────────
-  // 10. BUCKET — Bottom center
-  // ──────────────────────────────────────
-  const bkx = cx, bky = midY + 180;
-  for (const [bx2,by2,bw2,bh2] of [
-    [bkx - 35, bky, 7, 55],
-    [bkx + 35, bky, 7, 55],
-    [bkx, bky + 25, 77, 7],
-  ]) {
-    addObj(
-      Bodies.rectangle(bx2, by2, bw2, bh2, { isStatic: true, friction: 0.3, restitution: 0.15, label: 'bucket' }),
-      function(c) {
-        const b = this.body;
-        c.save(); c.translate(b.position.x, b.position.y); c.rotate(b.angle);
-        draw3DBox(c, -bw2/2, -bh2/2, bw2, bh2, 6, { hatchSp: 3 });
-        c.restore();
-      },
-      'bucket'
-    );
-  }
-
-  // Catch ramp into bucket
-  addObj(
-    Bodies.rectangle(bkx - 90, bky - 30, 100, 7, { isStatic: true, angle: 0.35, friction: 0.3, restitution: 0.15, label: 'ramp' }),
-    function(c) {
-      const b = this.body;
-      c.save(); c.translate(b.position.x, b.position.y); c.rotate(b.angle);
-      draw3DBox(c, -50, -3.5, 100, 7, 8, { hatchSp: 4 });
-      c.restore();
-    },
-    'catchRamp'
-  );
-
-  // Finish flag
-  gears.push({
-    x: bkx + 5, y: bky - 45,
-    draw(c) {
-      c.beginPath(); c.moveTo(this.x, this.y + 30); c.lineTo(this.x, this.y);
-      c.lineTo(this.x + 22, this.y + 6); c.lineTo(this.x, this.y + 12);
-      c.strokeStyle = red(0.5); c.lineWidth = 0.8; c.stroke();
-      c.font = '7px Courier New'; c.fillStyle = red(0.45);
-      c.fillText('FINISH', this.x + 4, this.y - 4);
-    }
-  });
-
-  // ── Mouse ──
-  const mouse = Mouse.create(fgC);
-  mouse.pixelRatio = dpr;
-  const mc = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.08, render: { visible: false } } });
-  Composite.add(world, mc);
-
-  // Collision sparks
-  Events.on(engine, 'collisionStart', e => {
-    for (const pair of e.pairs) {
-      const spd = Vector.magnitude(Vector.sub(pair.bodyA.velocity, pair.bodyB.velocity));
-      if (spd > 2) {
-        const pt = pair.collision.supports?.[0] || pair.bodyA.position;
-        for (let i = 0; i < Math.min(spd * 1.5, 8); i++) {
-          particles.push({
-            x: pt.x, y: pt.y,
-            vx: (Math.random() - 0.5) * spd * 0.8,
-            vy: (Math.random() - 0.5) * spd * 0.8 - 1,
-            life: 1, size: Math.random() * 2 + 0.5
-          });
+      // Down neighbor
+      if (r < rows - 1) {
+        const dd = dots[i + cols];
+        if (Math.abs(dd.z) >= threshold) {
+          const avgZ = (Math.abs(d.z) + Math.abs(dd.z)) / 2;
+          const lineAlpha = Math.min(0.25, avgZ / 40);
+          ctx.beginPath();
+          ctx.moveTo(d.x, d.y - d.z * 0.6);
+          ctx.lineTo(dd.x, dd.y - dd.z * 0.6);
+          ctx.strokeStyle = `rgba(60,130,200,${lineAlpha})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
         }
       }
     }
-  });
-
-  window._startBall = sBall;
-}
-
-function startMachine() {
-  if (started) return;
-  started = true;
-  const sb = window._startBall;
-  if (sb) {
-    Body.setStatic(sb.body, false);
-    Body.setVelocity(sb.body, { x: 2, y: 0 });
-  }
-}
-
-function resetMachine() { buildMachine(); }
-
-// ════════════════════════════════════════════════════
-//  RENDER LOOP
-// ════════════════════════════════════════════════════
-let lastT = performance.now(), time = 0;
-
-function frame(now) {
-  const dt = Math.min((now - lastT) / 1000, 0.033);
-  lastT = now; time += dt;
-
-  Engine.update(engine, dt * 1000);
-
-  // Update animated elements
-  for (const g of gears) {
-    if (g.angle != null) g.angle += (g.speed || 0) * dt;
-    if (g.phase != null) g.phase += (g.speed || 0) * dt;
-  }
-
-  const c = fgX;
-  c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  c.clearRect(0, 0, W, H);
-
-  // Constraints (strings, rods)
-  for (const con of constraints) {
-    if (!con.bodyA || !con.pointB) continue;
-    const pA = con.bodyA.position, pB = con.pointB;
-
-    // String
-    c.beginPath(); c.moveTo(pA.x, pA.y); c.lineTo(pB.x, pB.y);
-    c.strokeStyle = ink(0.35); c.lineWidth = 0.8;
-    c.setLineDash([4, 3]); c.stroke(); c.setLineDash([]);
-
-    // Anchor
-    c.beginPath(); c.arc(pB.x, pB.y, 3.5, 0, Math.PI * 2);
-    c.strokeStyle = ink(0.5); c.lineWidth = 0.8; c.stroke();
-    c.beginPath(); c.arc(pB.x, pB.y, 1.2, 0, Math.PI * 2);
-    c.fillStyle = ink(0.45); c.fill();
-
-    // Mount bracket
-    draw3DBox(c, pB.x - 7, pB.y - 4, 14, 4, 4, { alpha: 0.5, hatchSp: 3 });
-  }
-
-  // Animated decorations (gears, piston, frame, etc.)
-  for (const g of gears) g.draw(c);
-
-  // Physics objects
-  for (const obj of objects) {
-    if (obj.body.label === 'wall') continue;
-    obj.draw.call(obj, c);
-  }
-
-  // Dimension lines
-  const mono = objects.find(o => o.type === 'monolith');
-  if (mono) {
-    const p = mono.body.position;
-    dimLine(c, p.x - 170, p.y + 45 + 6, p.x + 170, p.y + 45 + 6, '340mm', 14);
-    dimLine(c, p.x + 170 + 6, p.y - 45, p.x + 170 + 6, p.y + 45, '90mm', 14);
-  }
-
-  // Particles
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life -= dt * 3;
-    if (p.life <= 0) { particles.splice(i, 1); continue; }
-    c.beginPath(); c.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    c.fillStyle = ink2(p.life * 0.5); c.fill();
   }
 
   requestAnimationFrame(frame);
 }
 
-// ════════════════════════════════════════════════════
-//  INIT
-// ════════════════════════════════════════════════════
-resize();
-buildMachine();
+init();
+addEventListener('resize', init);
 requestAnimationFrame(frame);
-addEventListener('resize', resize);
-fgC.addEventListener('wheel', e => e.preventDefault(), { passive: false });
-fgC.addEventListener('contextmenu', e => e.preventDefault());
 </script>
 </body>
 </html>
