@@ -3,53 +3,64 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Matt Zieger — Blueprint</title>
+<title>Matt Zieger — Interactive Blueprint</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #0a1628;
+    background: #e8e0d0;
     overflow: hidden;
     font-family: 'Courier New', monospace;
     cursor: crosshair;
   }
-  canvas {
-    display: block;
-    width: 100vw;
-    height: 100vh;
-  }
+  canvas { display: block; }
   #ui {
     position: fixed;
-    bottom: 24px;
+    bottom: 18px;
     left: 50%;
     transform: translateX(-50%);
-    color: rgba(120, 180, 255, 0.5);
-    font-size: 11px;
+    color: rgba(25, 55, 100, 0.4);
+    font-size: 9px;
     letter-spacing: 2px;
     text-transform: uppercase;
     pointer-events: none;
     user-select: none;
     text-align: center;
   }
-  #title {
+  .btn {
     position: fixed;
-    top: 32px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: rgba(120, 180, 255, 0.35);
-    font-size: 13px;
-    letter-spacing: 6px;
+    top: 18px;
+    background: none;
+    border: 1.5px solid rgba(25, 55, 100, 0.35);
+    color: rgba(25, 55, 100, 0.55);
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
     text-transform: uppercase;
-    pointer-events: none;
-    user-select: none;
+    padding: 8px 18px;
+    cursor: pointer;
+    transition: all 0.3s;
   }
+  .btn:hover {
+    background: rgba(25, 55, 100, 0.07);
+    border-color: rgba(25, 55, 100, 0.6);
+  }
+  #startBtn { right: 18px; }
+  #resetBtn { right: 130px; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="title">MATT ZIEGER</div>
-<div id="ui">click &amp; drag to interact &middot; scroll to zoom</div>
+<button class="btn" id="startBtn">&#9654; START</button>
+<button class="btn" id="resetBtn">&#8634; RESET</button>
+<div id="ui">click start to begin the chain reaction &middot; drag objects to interact &middot; scroll to zoom</div>
+
 <script>
-// ─── Canvas Setup ────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+//  MATTER.JS
+// ══════════════════════════════════════════════════════════════
+const { Engine, Bodies, Body, Composite, Constraint, Events, Mouse, MouseConstraint, Vector } = Matter;
+
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 let W, H, dpr;
@@ -65,939 +76,1099 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-// ─── Colors ──────────────────────────────────────────────────
-const BLUE = 'rgba(100, 160, 255, ';
-const LIGHT = 'rgba(140, 195, 255, ';
-const DIM = 'rgba(60, 110, 200, ';
-const GRID_COLOR = 'rgba(40, 75, 140, 0.12)';
-const GRID_COLOR2 = 'rgba(40, 75, 140, 0.06)';
+// ── Colors ──
+const INK = 'rgba(20, 50, 95, ';
+const INK_L = 'rgba(40, 80, 140, ';
+const INK_D = 'rgba(30, 60, 110, ';
+const INK_F = 'rgba(25, 55, 100, ';
+const RED = 'rgba(160, 40, 30, ';
+const GREEN = 'rgba(30, 100, 60, ';
+const PAPER = '#e8e0d0';
 
-// ─── Camera ──────────────────────────────────────────────────
-let camX = 0, camY = 0, zoom = 1;
+// ── Engine ──
+const engine = Engine.create({ gravity: { x: 0, y: 1.0 } });
+const world = engine.world;
 
-// ─── Mouse ───────────────────────────────────────────────────
-let mx = 0, my = 0, mouseDown = false, dragging = null, dragOffset = {x:0,y:0};
+// ── Camera ──
+let camX = 0, camY = 0, zoom = 1, targetZoom = 1;
 
-function worldMouse() {
-  return { x: (mx - W/2) / zoom + camX, y: (my - H/2) / zoom + camY };
+// ── State ──
+let balls = [], staticBodies = [], dominoes = [], gears = [];
+let pendulums = [], pegs = [], impactParticles = [];
+let started = false, startBall = null, weightBody = null;
+let S = 1, time = 0;
+
+// ══════════════════════════════════════════════════════════════
+//  3D ISOMETRIC LETTER SYSTEM
+// ══════════════════════════════════════════════════════════════
+// Each letter is defined as a set of 2D box segments { x, y, w, h }
+// These get rendered as 3D isometric blocks and also become physics colliders
+
+const ISO_ANGLE = Math.PI / 6; // 30° isometric
+const ISO_DEPTH = 18;          // extrusion depth
+const LETTER_SCALE = 2.8;
+
+// Letter definitions (relative coordinates, will be scaled)
+function getLetterBoxes(char) {
+  const B = 8; // block unit
+  switch(char) {
+    case 'M': return [
+      { x: 0, y: 0, w: B, h: B*5 },           // left pillar
+      { x: B, y: 0, w: B, h: B*2 },            // left top
+      { x: B*2, y: B, w: B, h: B*2 },          // center V
+      { x: B*3, y: 0, w: B, h: B*2 },          // right top
+      { x: B*4, y: 0, w: B, h: B*5 },          // right pillar
+    ];
+    case 'A': return [
+      { x: 0, y: B, w: B, h: B*4 },            // left pillar
+      { x: B, y: 0, w: B*2, h: B },             // top bar
+      { x: B*3, y: B, w: B, h: B*4 },           // right pillar
+      { x: B, y: B*2, w: B*2, h: B },           // cross bar
+    ];
+    case 'T': return [
+      { x: 0, y: 0, w: B*4, h: B },             // top bar
+      { x: B*1.5, y: B, w: B, h: B*4 },         // stem
+    ];
+    case 'Z': return [
+      { x: 0, y: 0, w: B*4, h: B },             // top bar
+      { x: B*2.5, y: B, w: B*1.5, h: B },       // upper diagonal part
+      { x: B, y: B*2, w: B*2, h: B },           // middle
+      { x: 0, y: B*3, w: B*1.5, h: B },         // lower diagonal part
+      { x: 0, y: B*4, w: B*4, h: B },           // bottom bar
+    ];
+    case '.': return [
+      { x: 0, y: B*3.5, w: B, h: B*1.5 },      // dot
+    ];
+    default: return [];
+  }
 }
 
-canvas.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
-canvas.addEventListener('touchmove', e => { e.preventDefault(); mx = e.touches[0].clientX; my = e.touches[0].clientY; }, {passive:false});
+// ── Draw a single 3D isometric block ──
+function drawIsoBlock(ctx, x, y, w, h, depth, alpha) {
+  const d = depth || ISO_DEPTH;
+  const dx = d * Math.cos(ISO_ANGLE);
+  const dy = -d * Math.sin(ISO_ANGLE);
+  const a = alpha || 1;
 
-canvas.addEventListener('mousedown', e => { mouseDown = true; tryGrab(); });
-canvas.addEventListener('touchstart', e => { mx = e.touches[0].clientX; my = e.touches[0].clientY; mouseDown = true; tryGrab(); }, {passive:false});
+  // Front face
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.fillStyle = INK_F + (0.03 * a) + ')';
+  ctx.fill();
+  ctx.strokeStyle = INK + (0.45 * a) + ')';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
 
-canvas.addEventListener('mouseup', () => { mouseDown = false; release(); });
-canvas.addEventListener('touchend', () => { mouseDown = false; release(); });
-
-canvas.addEventListener('wheel', e => {
-  e.preventDefault();
-  zoom *= e.deltaY > 0 ? 0.95 : 1.05;
-  zoom = Math.max(0.3, Math.min(3, zoom));
-}, {passive:false});
-
-// ─── Physics Nodes ───────────────────────────────────────────
-class Node {
-  constructor(x, y, fixed = false) {
-    this.x = x; this.y = y;
-    this.px = x; this.py = y;
-    this.vx = 0; this.vy = 0;
-    this.fixed = fixed;
-    this.radius = 5;
-  }
-  update(dt) {
-    if (this.fixed) { this.vx = 0; this.vy = 0; return; }
-    this.vx *= 0.97;
-    this.vy *= 0.97;
-    this.x += this.vx * dt;
-    this.y += this.vy * dt;
-  }
-}
-
-class Spring {
-  constructor(a, b, stiffness = 0.4, restLength = null) {
-    this.a = a; this.b = b;
-    this.stiffness = stiffness;
-    this.rest = restLength ?? Math.hypot(b.x - a.x, b.y - a.y);
-  }
-  solve() {
-    let dx = this.b.x - this.a.x;
-    let dy = this.b.y - this.a.y;
-    let dist = Math.hypot(dx, dy) || 0.01;
-    let force = (dist - this.rest) * this.stiffness;
-    let fx = (dx / dist) * force;
-    let fy = (dy / dist) * force;
-    if (!this.a.fixed) { this.a.vx += fx; this.a.vy += fy; }
-    if (!this.b.fixed) { this.b.vx -= fx; this.b.vy -= fy; }
-  }
-}
-
-// ─── Gear ────────────────────────────────────────────────────
-class Gear {
-  constructor(x, y, radius, teeth, speed = 1) {
-    this.x = x; this.y = y;
-    this.radius = radius;
-    this.teeth = teeth;
-    this.angle = 0;
-    this.speed = speed;
-    this.node = new Node(x, y, true);
-    this.targetSpeed = speed;
-    this.meshes = [];
-  }
-  update(dt) {
-    // Smooth speed transitions
-    this.speed += (this.targetSpeed - this.speed) * 0.05;
-    this.angle += this.speed * dt;
-  }
-  draw(ctx) {
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.angle);
-
-    // Outer ring
+  // Front face crosshatch
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  for (let i = -h; i < w + h; i += 6) {
     ctx.beginPath();
-    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-    ctx.strokeStyle = BLUE + '0.5)';
-    ctx.lineWidth = 1;
+    ctx.moveTo(x + i, y);
+    ctx.lineTo(x + i - h * 0.7, y + h);
+    ctx.strokeStyle = INK_F + (0.06 * a) + ')';
+    ctx.lineWidth = 0.3;
     ctx.stroke();
+  }
+  ctx.restore();
 
-    // Teeth
-    for (let i = 0; i < this.teeth; i++) {
-      let a = (i / this.teeth) * Math.PI * 2;
-      let a2 = ((i + 0.35) / this.teeth) * Math.PI * 2;
-      let r1 = this.radius;
-      let r2 = this.radius + 8;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
-      ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
-      ctx.lineTo(Math.cos(a2) * r2, Math.sin(a2) * r2);
-      ctx.lineTo(Math.cos(a2) * r1, Math.sin(a2) * r1);
-      ctx.strokeStyle = BLUE + '0.4)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
+  // Top face
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + dx, y + dy);
+  ctx.lineTo(x + w + dx, y + dy);
+  ctx.lineTo(x + w, y);
+  ctx.closePath();
+  ctx.fillStyle = INK_F + (0.02 * a) + ')';
+  ctx.fill();
+  ctx.strokeStyle = INK + (0.35 * a) + ')';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Top face hatching
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + dx, y + dy);
+  ctx.lineTo(x + w + dx, y + dy);
+  ctx.lineTo(x + w, y);
+  ctx.closePath();
+  ctx.clip();
+  for (let i = 0; i < w + d; i += 5) {
+    ctx.beginPath();
+    ctx.moveTo(x + i, y);
+    ctx.lineTo(x + i + dx, y + dy);
+    ctx.strokeStyle = INK_F + (0.05 * a) + ')';
+    ctx.lineWidth = 0.3;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Right face
+  ctx.beginPath();
+  ctx.moveTo(x + w, y);
+  ctx.lineTo(x + w + dx, y + dy);
+  ctx.lineTo(x + w + dx, y + h + dy);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.fillStyle = INK_F + (0.05 * a) + ')';
+  ctx.fill();
+  ctx.strokeStyle = INK + (0.4 * a) + ')';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Right face hatching
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x + w, y);
+  ctx.lineTo(x + w + dx, y + dy);
+  ctx.lineTo(x + w + dx, y + h + dy);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.clip();
+  for (let i = 0; i < h + d; i += 4) {
+    ctx.beginPath();
+    ctx.moveTo(x + w, y + i);
+    ctx.lineTo(x + w + dx, y + i + dy);
+    ctx.strokeStyle = INK_F + (0.08 * a) + ')';
+    ctx.lineWidth = 0.3;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Hidden edge (dashed)
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.moveTo(x + dx, y + dy);
+  ctx.lineTo(x + dx, y + h + dy);
+  ctx.strokeStyle = INK_D + (0.12 * a) + ')';
+  ctx.lineWidth = 0.4;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + dx, y + h + dy);
+  ctx.lineTo(x, y + h);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ── Build all letters as physics + visual ──
+const letterData = []; // { char, boxes: [{ x,y,w,h }], originX, originY }
+
+function buildLetters() {
+  const text = 'MATT Z.';
+  const spacing = 40 * LETTER_SCALE;
+  const totalWidth = text.length * spacing;
+  const startX = -totalWidth / 2;
+  const startY = -60;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === ' ') continue;
+    const boxes = getLetterBoxes(ch);
+    const ox = startX + i * spacing;
+    const oy = startY;
+    const scaledBoxes = [];
+
+    for (const b of boxes) {
+      const sx = ox + b.x * LETTER_SCALE;
+      const sy = oy + b.y * LETTER_SCALE;
+      const sw = b.w * LETTER_SCALE;
+      const sh = b.h * LETTER_SCALE;
+      scaledBoxes.push({ x: sx, y: sy, w: sw, h: sh });
+
+      // Physics collider
+      const body = Bodies.rectangle(sx + sw/2, sy + sh/2, sw, sh, {
+        isStatic: true, friction: 0.3, restitution: 0.2, label: 'letter'
+      });
+      Composite.add(world, body);
+      staticBodies.push(body);
     }
 
-    // Center hub
-    ctx.beginPath();
-    ctx.arc(0, 0, 6, 0, Math.PI * 2);
-    ctx.strokeStyle = LIGHT + '0.6)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Cross
-    ctx.beginPath();
-    ctx.moveTo(-4, 0); ctx.lineTo(4, 0);
-    ctx.moveTo(0, -4); ctx.lineTo(0, 4);
-    ctx.strokeStyle = LIGHT + '0.4)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    ctx.restore();
+    letterData.push({ char: ch, boxes: scaledBoxes, originX: ox, originY: oy });
   }
 }
 
-// ─── Pulley ──────────────────────────────────────────────────
-class Pulley {
-  constructor(x, y, radius) {
-    this.x = x; this.y = y;
-    this.radius = radius;
-    this.angle = 0;
-    this.node = new Node(x, y, true);
-  }
-  draw(ctx) {
-    ctx.save();
-    ctx.translate(this.x, this.y);
-
-    // Wheel
-    ctx.beginPath();
-    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-    ctx.strokeStyle = BLUE + '0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Inner ring
-    ctx.beginPath();
-    ctx.arc(0, 0, this.radius * 0.3, 0, Math.PI * 2);
-    ctx.strokeStyle = DIM + '0.5)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Spokes
-    ctx.rotate(this.angle);
-    for (let i = 0; i < 4; i++) {
-      let a = (i / 4) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * this.radius * 0.3, Math.sin(a) * this.radius * 0.3);
-      ctx.lineTo(Math.cos(a) * this.radius * 0.9, Math.sin(a) * this.radius * 0.9);
-      ctx.strokeStyle = DIM + '0.3)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-
-    ctx.restore();
-  }
-}
-
-// ─── Conveyor Belt ───────────────────────────────────────────
-class ConveyorBelt {
-  constructor(x1, y1, x2, y2, radius) {
-    this.p1 = new Pulley(x1, y1, radius);
-    this.p2 = new Pulley(x2, y2, radius);
-    this.radius = radius;
-    this.tickOffset = 0;
-    this.speed = 1.2;
-  }
-  update(dt) {
-    this.tickOffset += this.speed * dt * 30;
-    this.p1.angle += this.speed * dt;
-    this.p2.angle += this.speed * dt;
-  }
-  draw(ctx) {
-    let dx = this.p2.x - this.p1.x;
-    let dy = this.p2.y - this.p1.y;
-    let dist = Math.hypot(dx, dy);
-    let ang = Math.atan2(dy, dx);
-    let perpX = -Math.sin(ang) * this.radius;
-    let perpY = Math.cos(ang) * this.radius;
-
-    // Top belt line
-    ctx.beginPath();
-    ctx.moveTo(this.p1.x + perpX, this.p1.y + perpY);
-    ctx.lineTo(this.p2.x + perpX, this.p2.y + perpY);
-    ctx.strokeStyle = BLUE + '0.35)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Bottom belt line
-    ctx.beginPath();
-    ctx.moveTo(this.p1.x - perpX, this.p1.y - perpY);
-    ctx.lineTo(this.p2.x - perpX, this.p2.y - perpY);
-    ctx.strokeStyle = BLUE + '0.35)';
-    ctx.stroke();
-
-    // Belt ticks (moving)
-    let ticks = Math.floor(dist / 15);
-    for (let i = 0; i < ticks; i++) {
-      let t = ((i / ticks) + (this.tickOffset % 15) / dist) % 1;
-      let tx = this.p1.x + dx * t + perpX;
-      let ty = this.p1.y + dy * t + perpY;
-      ctx.beginPath();
-      ctx.moveTo(tx, ty);
-      ctx.lineTo(tx - perpX * 2, ty - perpY * 2);
-      ctx.strokeStyle = DIM + '0.25)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-    }
-
-    // Draw pulleys
-    this.p1.draw(ctx);
-    this.p2.draw(ctx);
-  }
-}
-
-// ─── Chain ───────────────────────────────────────────────────
-class Chain {
-  constructor(nodes) {
-    this.nodes = nodes;
-    this.springs = [];
-    for (let i = 0; i < nodes.length - 1; i++) {
-      this.springs.push(new Spring(nodes[i], nodes[i+1], 0.5));
-    }
-  }
-  solve() {
-    for (let s of this.springs) s.solve();
-  }
-  draw(ctx) {
-    // Links
-    for (let i = 0; i < this.nodes.length - 1; i++) {
-      let a = this.nodes[i], b = this.nodes[i+1];
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.strokeStyle = BLUE + (i % 2 === 0 ? '0.5)' : '0.3)');
-      ctx.lineWidth = i % 2 === 0 ? 1.5 : 1;
-      ctx.stroke();
-
-      // Chain link ovals
-      let mx = (a.x + b.x) / 2;
-      let my = (a.y + b.y) / 2;
-      let ang = Math.atan2(b.y - a.y, b.x - a.x);
-      ctx.save();
-      ctx.translate(mx, my);
-      ctx.rotate(ang);
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 6, 3, 0, 0, Math.PI * 2);
-      ctx.strokeStyle = DIM + '0.35)';
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // Joints
-    for (let n of this.nodes) {
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, 2, 0, Math.PI * 2);
-      ctx.fillStyle = n.fixed ? LIGHT + '0.6)' : BLUE + '0.4)';
-      ctx.fill();
+function drawLetters(ctx) {
+  for (const ld of letterData) {
+    for (const b of ld.boxes) {
+      drawIsoBlock(ctx, b.x, b.y, b.w, b.h, ISO_DEPTH * LETTER_SCALE * 0.7);
     }
   }
 }
 
-// ─── Lever ───────────────────────────────────────────────────
-class Lever {
-  constructor(pivotX, pivotY, length, angle) {
-    this.pivot = new Node(pivotX, pivotY, true);
-    this.length = length;
-    this.angle = angle;
-    this.angularVel = 0;
-    this.endA = new Node(
-      pivotX + Math.cos(angle) * length/2,
-      pivotY + Math.sin(angle) * length/2
-    );
-    this.endB = new Node(
-      pivotX - Math.cos(angle) * length/2,
-      pivotY - Math.sin(angle) * length/2
-    );
-  }
-  update(dt) {
-    // Gravity torque
-    this.angularVel += Math.cos(this.angle) * 0.02;
-    this.angularVel *= 0.98; // damping
-    this.angle += this.angularVel * dt;
-
-    this.endA.x = this.pivot.x + Math.cos(this.angle) * this.length/2;
-    this.endA.y = this.pivot.y + Math.sin(this.angle) * this.length/2;
-    this.endB.x = this.pivot.x - Math.cos(this.angle) * this.length/2;
-    this.endB.y = this.pivot.y - Math.sin(this.angle) * this.length/2;
-  }
-  applyForce(worldPos, force) {
-    let dx = worldPos.x - this.pivot.x;
-    let dy = worldPos.y - this.pivot.y;
-    let perpForce = -dx * Math.sin(this.angle) + dy * Math.cos(this.angle);
-    // nope, simpler: torque from force
-    let armX = worldPos.x - this.pivot.x;
-    let armY = worldPos.y - this.pivot.y;
-    this.angularVel += (armX * force.y - armY * force.x) * 0.0001;
-  }
-  draw(ctx) {
-    // Beam
-    ctx.beginPath();
-    ctx.moveTo(this.endA.x, this.endA.y);
-    ctx.lineTo(this.endB.x, this.endB.y);
-    ctx.strokeStyle = BLUE + '0.6)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Pivot triangle
-    ctx.beginPath();
-    ctx.moveTo(this.pivot.x, this.pivot.y + 4);
-    ctx.lineTo(this.pivot.x - 10, this.pivot.y + 18);
-    ctx.lineTo(this.pivot.x + 10, this.pivot.y + 18);
-    ctx.closePath();
-    ctx.strokeStyle = DIM + '0.5)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Pivot circle
-    ctx.beginPath();
-    ctx.arc(this.pivot.x, this.pivot.y, 4, 0, Math.PI * 2);
-    ctx.fillStyle = LIGHT + '0.5)';
-    ctx.fill();
-
-    // End weights
-    for (let end of [this.endA, this.endB]) {
-      ctx.beginPath();
-      ctx.arc(end.x, end.y, 6, 0, Math.PI * 2);
-      ctx.strokeStyle = BLUE + '0.5)';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    }
-  }
-}
-
-// ─── Pendulum ────────────────────────────────────────────────
-class Pendulum {
-  constructor(x, y, length, angle) {
-    this.anchorX = x; this.anchorY = y;
-    this.length = length;
-    this.angle = angle;
-    this.angularVel = 0;
-    this.bob = new Node(
-      x + Math.sin(angle) * length,
-      y + Math.cos(angle) * length
-    );
-  }
-  update(dt) {
-    let gravity = 0.15;
-    this.angularVel += -gravity / this.length * Math.sin(this.angle) * dt * 60;
-    this.angularVel *= 0.998;
-    this.angle += this.angularVel * dt;
-    this.bob.x = this.anchorX + Math.sin(this.angle) * this.length;
-    this.bob.y = this.anchorY + Math.cos(this.angle) * this.length;
-  }
-  draw(ctx) {
-    // String
-    ctx.beginPath();
-    ctx.moveTo(this.anchorX, this.anchorY);
-    ctx.lineTo(this.bob.x, this.bob.y);
-    ctx.strokeStyle = BLUE + '0.4)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Anchor
-    ctx.beginPath();
-    ctx.arc(this.anchorX, this.anchorY, 3, 0, Math.PI * 2);
-    ctx.fillStyle = DIM + '0.6)';
-    ctx.fill();
-
-    // Bob
-    ctx.beginPath();
-    ctx.arc(this.bob.x, this.bob.y, 8, 0, Math.PI * 2);
-    ctx.strokeStyle = LIGHT + '0.6)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(this.bob.x, this.bob.y, 3, 0, Math.PI * 2);
-    ctx.fillStyle = BLUE + '0.4)';
-    ctx.fill();
-  }
-}
-
-// ─── Spring Coil (visual) ────────────────────────────────────
-class SpringCoil {
-  constructor(ax, ay, bx, by) {
-    this.a = new Node(ax, ay, true);
-    this.b = new Node(bx, by, false);
-    this.rest = Math.hypot(bx - ax, by - ay);
-    this.spring = new Spring(this.a, this.b, 0.15, this.rest);
-    this.b.vy = 2; // start with some motion
-  }
-  update(dt) {
-    this.spring.solve();
-    // gravity
-    if (!this.b.fixed) this.b.vy += 0.3;
-    this.b.update(dt);
-  }
-  draw(ctx) {
-    let dx = this.b.x - this.a.x;
-    let dy = this.b.y - this.a.y;
-    let dist = Math.hypot(dx, dy);
-    let ang = Math.atan2(dy, dx);
-    let coils = 8;
-    let amplitude = 8;
-
-    ctx.save();
-    ctx.translate(this.a.x, this.a.y);
-    ctx.rotate(ang);
-
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    for (let i = 0; i <= coils * 4; i++) {
-      let t = i / (coils * 4);
-      let x = t * dist;
-      let y = Math.sin(t * coils * Math.PI * 2) * amplitude;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.strokeStyle = BLUE + '0.45)';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-
-    ctx.restore();
-
-    // Anchor points
-    ctx.beginPath();
-    ctx.arc(this.a.x, this.a.y, 4, 0, Math.PI * 2);
-    ctx.fillStyle = DIM + '0.6)';
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(this.b.x, this.b.y, 6, 0, Math.PI * 2);
-    ctx.strokeStyle = LIGHT + '0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  }
-}
-
-// ─── Piston ──────────────────────────────────────────────────
-class Piston {
-  constructor(x, y, gear) {
-    this.x = x; this.y = y;
-    this.gear = gear;
-    this.rodLength = 80;
-    this.cylinderWidth = 30;
-    this.cylinderHeight = 60;
-  }
-  draw(ctx) {
-    // Connect to gear's rotation
-    let crankRadius = this.gear.radius * 0.7;
-    let crankX = this.gear.x + Math.cos(this.gear.angle) * crankRadius;
-    let crankY = this.gear.y + Math.sin(this.gear.angle) * crankRadius;
-
-    // Piston position (simplified: vertical motion)
-    let pistonY = this.y + Math.sin(this.gear.angle) * crankRadius;
-
-    // Connecting rod
-    ctx.beginPath();
-    ctx.moveTo(crankX, crankY);
-    ctx.lineTo(this.x, pistonY);
-    ctx.strokeStyle = BLUE + '0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Cylinder walls
-    let cw = this.cylinderWidth;
-    ctx.beginPath();
-    ctx.moveTo(this.x - cw/2, this.y - 40);
-    ctx.lineTo(this.x - cw/2, this.y + 40);
-    ctx.moveTo(this.x + cw/2, this.y - 40);
-    ctx.lineTo(this.x + cw/2, this.y + 40);
-    ctx.strokeStyle = DIM + '0.4)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Piston head
-    ctx.beginPath();
-    ctx.rect(this.x - cw/2 + 2, pistonY - 6, cw - 4, 12);
-    ctx.strokeStyle = BLUE + '0.6)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Piston pin
-    ctx.beginPath();
-    ctx.arc(this.x, pistonY, 3, 0, Math.PI * 2);
-    ctx.fillStyle = LIGHT + '0.5)';
-    ctx.fill();
-  }
-}
-
-// ─── Build the Scene ─────────────────────────────────────────
-const gears = [];
-const conveyors = [];
-const chains = [];
-const levers = [];
-const pendulums = [];
-const springCoils = [];
-const pistons = [];
-const allNodes = [];
-
+// ══════════════════════════════════════════════════════════════
+//  BUILD RUBE GOLDBERG MACHINE AROUND LETTERS
+// ══════════════════════════════════════════════════════════════
 function buildScene() {
-  // ── Gear Train (top left area) ──
-  let g1 = new Gear(-300, -200, 40, 10, 1.5);
-  let g2 = new Gear(-300 + 40 + 35 + 8, -200, 35, 8, -1.5 * (40/35));
-  let g3 = new Gear(-300 + 40 + 35*2 + 30 + 16, -200, 30, 7, 1.5 * (40/30));
-  gears.push(g1, g2, g3);
-  allNodes.push(g1.node, g2.node, g3.node);
+  Composite.clear(world, false);
+  balls = []; staticBodies = []; dominoes = []; gears = [];
+  pendulums = []; pegs = []; impactParticles = [];
+  started = false; startBall = null; weightBody = null;
+  letterData.length = 0;
 
-  // ── Piston connected to g3 ──
-  let piston1 = new Piston(g3.x + 70, g3.y, g3);
-  pistons.push(piston1);
+  S = Math.min(W / 1600, H / 1000);
+  if (S < 0.45) S = 0.45;
+  camX = 0; camY = 30; zoom = 1; targetZoom = 1;
 
-  // ── Conveyor Belts (bottom area) ──
-  let conv1 = new ConveyorBelt(-250, 200, 50, 200, 18);
-  let conv2 = new ConveyorBelt(100, 200, 300, 200, 18);
-  conv2.speed = 1.8;
-  conveyors.push(conv1, conv2);
+  const rampOpts = { isStatic: true, friction: 0.3, restitution: 0.15, label: 'ramp' };
 
-  // ── Hanging Chain (top right) ──
-  let chainNodes = [];
-  for (let i = 0; i < 12; i++) {
-    let n = new Node(200 + i * 12, -180 + Math.sin(i * 0.5) * 20, i === 0 || i === 11);
-    chainNodes.push(n);
-    allNodes.push(n);
+  // ── Build the 3D letters ──
+  buildLetters();
+
+  // ── Boundaries ──
+  const wallOpts = { isStatic: true, friction: 0.4, restitution: 0.3, label: 'wall' };
+  const floor = Bodies.rectangle(0, 430, 2000, 20, wallOpts);
+  Composite.add(world, floor);
+  staticBodies.push(floor);
+
+  // ════════════════════════════════════════════════
+  // STAGE 1: Ball release — high above the "M"
+  // ════════════════════════════════════════════════
+  const mLetter = letterData[0]; // M
+  const mTopY = mLetter.originY - 30;
+  const mLeftX = mLetter.originX - 20;
+
+  // Starting platform
+  const startPlat = Bodies.rectangle(mLeftX - 60, mTopY - 100, 100, 6, { ...rampOpts, angle: 0.05 });
+  Composite.add(world, startPlat);
+  staticBodies.push(startPlat);
+
+  // Start ball
+  startBall = Bodies.circle(mLeftX - 90, mTopY - 115, 10, {
+    restitution: 0.5, friction: 0.3, density: 0.004, label: 'ball', isStatic: true
+  });
+  Composite.add(world, startBall);
+  balls.push(startBall);
+
+  // Ramp from start down to M top
+  const r1 = Bodies.rectangle(mLeftX + 10, mTopY - 55, 140, 5, { ...rampOpts, angle: 0.4 });
+  Composite.add(world, r1); staticBodies.push(r1);
+
+  // Ramp across M top (ball rolls right)
+  const mTopRight = mLetter.boxes[mLetter.boxes.length - 1];
+  const r2 = Bodies.rectangle(mTopRight.x + mTopRight.w + 30, mTopY + 5, 80, 5, { ...rampOpts, angle: 0.3 });
+  Composite.add(world, r2); staticBodies.push(r2);
+
+  // ════════════════════════════════════════════════
+  // STAGE 2: Ramp cascade between M and A
+  // ════════════════════════════════════════════════
+  const aLetter = letterData[1]; // A
+  const r3 = Bodies.rectangle(aLetter.originX - 30, mTopY + 55, 100, 5, { ...rampOpts, angle: -0.3 });
+  Composite.add(world, r3); staticBodies.push(r3);
+
+  const r4 = Bodies.rectangle(aLetter.originX + 40, mTopY + 110, 110, 5, { ...rampOpts, angle: 0.25 });
+  Composite.add(world, r4); staticBodies.push(r4);
+
+  // ════════════════════════════════════════════════
+  // STAGE 3: Dominoes on top of A's crossbar area
+  // ════════════════════════════════════════════════
+  const aCrossbar = aLetter.boxes[3]; // crossbar of A
+  const domPlatY = aCrossbar.y - 15;
+
+  const domPlat = Bodies.rectangle(aCrossbar.x + aCrossbar.w / 2, domPlatY + 2, 120, 5, rampOpts);
+  Composite.add(world, domPlat); staticBodies.push(domPlat);
+
+  for (let i = 0; i < 7; i++) {
+    const d = Bodies.rectangle(aCrossbar.x + 10 + i * 15, domPlatY - 14, 5, 28, {
+      friction: 0.6, restitution: 0.05, density: 0.003, label: 'domino'
+    });
+    Composite.add(world, d);
+    dominoes.push(d);
   }
-  chains.push(new Chain(chainNodes));
 
-  // ── Another chain (draped, left) ──
-  let chainNodes2 = [];
-  for (let i = 0; i < 10; i++) {
-    let n = new Node(-380 + i * 8, -50 + i * 15, i === 0);
-    chainNodes2.push(n);
-    allNodes.push(n);
+  // ════════════════════════════════════════════════
+  // STAGE 4: Pendulum between A and first T
+  // ════════════════════════════════════════════════
+  const t1Letter = letterData[2]; // first T
+  const pendAnchorX = (aLetter.originX + t1Letter.originX) / 2 + 30;
+  const pendAnchorY = mTopY - 80;
+  const pendBob = Bodies.circle(pendAnchorX + 30, pendAnchorY + 120, 14, {
+    density: 0.005, restitution: 0.4, friction: 0.2, label: 'ball'
+  });
+  const pendCon = Constraint.create({
+    bodyA: pendBob,
+    pointB: { x: pendAnchorX, y: pendAnchorY },
+    length: 130, stiffness: 0.9, damping: 0.002, label: 'pendulum'
+  });
+  Composite.add(world, [pendBob, pendCon]);
+  pendulums.push({ bob: pendBob, constraint: pendCon, anchorX: pendAnchorX, anchorY: pendAnchorY });
+  balls.push(pendBob);
+
+  // ════════════════════════════════════════════════
+  // STAGE 5: Ramps around the T's
+  // ════════════════════════════════════════════════
+  const t1Top = t1Letter.boxes[0]; // T top bar
+  const t2Letter = letterData[3]; // second T
+
+  // Ramp from pendulum area down through T1
+  const r5 = Bodies.rectangle(t1Letter.originX + 50, t1Top.y + t1Top.h + 30, 80, 5, { ...rampOpts, angle: 0.35 });
+  Composite.add(world, r5); staticBodies.push(r5);
+
+  // Bridge between T's
+  const r6 = Bodies.rectangle((t1Letter.originX + t2Letter.originX) / 2 + 30, t1Top.y + t1Top.h + 80, 100, 5, { ...rampOpts, angle: -0.2 });
+  Composite.add(world, r6); staticBodies.push(r6);
+
+  // ════════════════════════════════════════════════
+  // STAGE 6: Seesaw at the space between T and Z
+  // ════════════════════════════════════════════════
+  const zLetter = letterData[4]; // Z
+  const seesawX = (t2Letter.originX + zLetter.originX) / 2 + 40;
+  const seesawY = zLetter.originY + 60;
+
+  const seesawArm = Bodies.rectangle(seesawX, seesawY, 160, 6, {
+    friction: 0.5, density: 0.002, label: 'seesaw'
+  });
+  const seesawBase = Bodies.polygon(seesawX, seesawY + 16, 3, 18, {
+    isStatic: true, label: 'base', angle: Math.PI
+  });
+  const seesawPin = Constraint.create({
+    bodyA: seesawArm, pointB: { x: seesawX, y: seesawY },
+    length: 0, stiffness: 0.9
+  });
+  Composite.add(world, [seesawArm, seesawBase, seesawPin]);
+  staticBodies.push(seesawBase);
+
+  // Launch ball on seesaw
+  const launchBall = Bodies.circle(seesawX + 60, seesawY - 15, 9, {
+    restitution: 0.6, friction: 0.3, density: 0.003, label: 'ball'
+  });
+  Composite.add(world, launchBall);
+  balls.push(launchBall);
+
+  // Weight to drop on seesaw
+  weightBody = Bodies.rectangle(seesawX - 50, seesawY - 120, 24, 24, {
+    density: 0.01, restitution: 0.1, friction: 0.5, label: 'weight', isStatic: true
+  });
+  Composite.add(world, weightBody);
+  balls.push(weightBody);
+
+  // Ramp leading to seesaw
+  const r7 = Bodies.rectangle(seesawX - 60, seesawY - 35, 90, 5, { ...rampOpts, angle: 0.3 });
+  Composite.add(world, r7); staticBodies.push(r7);
+
+  // ════════════════════════════════════════════════
+  // STAGE 7: Peg board beneath Z letter
+  // ════════════════════════════════════════════════
+  const zBottom = zLetter.boxes[zLetter.boxes.length - 1];
+  const pegStartX = zLetter.originX + 5;
+  const pegStartY = zBottom.y + zBottom.h + 20;
+
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 4 + (row % 2); col++) {
+      const px = pegStartX + col * 22 - (row % 2 === 0 ? 11 : 0);
+      const py = pegStartY + row * 22;
+      const peg = Bodies.circle(px, py, 3.5, {
+        isStatic: true, restitution: 0.5, friction: 0.1, label: 'peg'
+      });
+      Composite.add(world, peg);
+      pegs.push(peg);
+    }
   }
-  chains.push(new Chain(chainNodes2));
 
-  // ── Lever (center) ──
-  let lever1 = new Lever(0, 50, 180, -0.2);
-  levers.push(lever1);
-  allNodes.push(lever1.pivot, lever1.endA, lever1.endB);
+  // ════════════════════════════════════════════════
+  // STAGE 8: Funnel under dot → final ramps
+  // ════════════════════════════════════════════════
+  const dotLetter = letterData[5]; // "."
+  const dotBox = dotLetter.boxes[0];
 
-  // ── Lever (right) ──
-  let lever2 = new Lever(300, 0, 140, 0.3);
-  levers.push(lever2);
-  allNodes.push(lever2.pivot, lever2.endA, lever2.endB);
+  // Funnel walls
+  const fL = Bodies.rectangle(dotBox.x - 25, dotBox.y + dotBox.h + 40, 50, 5, { ...rampOpts, angle: 0.6 });
+  const fR = Bodies.rectangle(dotBox.x + dotBox.w + 25, dotBox.y + dotBox.h + 40, 50, 5, { ...rampOpts, angle: -0.6 });
+  Composite.add(world, [fL, fR]); staticBodies.push(fL, fR);
 
-  // ── Pendulums ──
-  pendulums.push(new Pendulum(-150, -120, 100, 0.8));
-  pendulums.push(new Pendulum(-100, -120, 70, -0.5));
-  pendulums.push(new Pendulum(350, -150, 90, 0.4));
-  for (let p of pendulums) allNodes.push(p.bob);
+  // Final collection ramps
+  const r8 = Bodies.rectangle(dotBox.x, dotBox.y + dotBox.h + 100, 120, 5, { ...rampOpts, angle: -0.3 });
+  Composite.add(world, r8); staticBodies.push(r8);
 
-  // ── Spring Coils ──
-  springCoils.push(new SpringCoil(-400, 80, -400, 180));
-  springCoils.push(new SpringCoil(380, -80, 380, 30));
-  for (let s of springCoils) allNodes.push(s.a, s.b);
+  const r9 = Bodies.rectangle(dotBox.x - 100, dotBox.y + dotBox.h + 150, 100, 5, { ...rampOpts, angle: 0.25 });
+  Composite.add(world, r9); staticBodies.push(r9);
 
-  // ── Second gear cluster (bottom right) ──
-  let g4 = new Gear(250, 80, 25, 6, -2);
-  let g5 = new Gear(250 + 25 + 20 + 8, 80, 20, 5, 2 * (25/20));
-  gears.push(g4, g5);
-  allNodes.push(g4.node, g5.node);
+  // ════════════════════════════════════════════════
+  // STAGE 9: Newton's cradle (decorative, top right)
+  // ════════════════════════════════════════════════
+  for (let i = 0; i < 5; i++) {
+    const nbX = zLetter.originX + 50 + i * 18;
+    const nbY = mTopY - 130;
+    const nBob = Bodies.circle(nbX, nbY + 70, 8, {
+      density: 0.005, restitution: 0.99, friction: 0.01, label: 'ball'
+    });
+    const nCon = Constraint.create({
+      bodyA: nBob, pointB: { x: nbX, y: nbY },
+      length: 70, stiffness: 0.95, damping: 0.001
+    });
+    Composite.add(world, [nBob, nCon]);
+    pendulums.push({ bob: nBob, constraint: nCon, anchorX: nbX, anchorY: nbY });
+    balls.push(nBob);
+  }
+
+  // ════════════════════════════════════════════════
+  // GEARS (decorative, bottom left)
+  // ════════════════════════════════════════════════
+  const gx = mLetter.originX - 30;
+  const gy = mLetter.originY + 160;
+  gears.push(
+    { x: gx, y: gy, radius: 38, teeth: 10, angle: 0, speed: 0.7 },
+    { x: gx + 60, y: gy, radius: 26, teeth: 7, angle: 0, speed: -0.7 * (38/26) },
+    { x: gx + 60 + 42, y: gy, radius: 18, teeth: 5, angle: 0, speed: 0.7 * (38/18) }
+  );
+
+  // Second gear set bottom right
+  const gx2 = zLetter.originX + 60;
+  const gy2 = zLetter.originY + 200;
+  gears.push(
+    { x: gx2, y: gy2, radius: 30, teeth: 8, angle: 0, speed: -1.0 },
+    { x: gx2 + 48, y: gy2, radius: 22, teeth: 6, angle: 0, speed: 1.0 * (30/22) }
+  );
+
+  // ════════════════════════════════════════════════
+  // EXTRA: Bucket at bottom center
+  // ════════════════════════════════════════════════
+  const bkX = 0, bkY = 380;
+  const bkL = Bodies.rectangle(bkX - 30, bkY, 6, 50, rampOpts);
+  const bkR = Bodies.rectangle(bkX + 30, bkY, 6, 50, rampOpts);
+  const bkB = Bodies.rectangle(bkX, bkY + 22, 66, 6, rampOpts);
+  Composite.add(world, [bkL, bkR, bkB]);
+  staticBodies.push(bkL, bkR, bkB);
+
+  // Extra ramp feeding to bucket
+  const r10 = Bodies.rectangle(bkX - 80, bkY - 40, 100, 5, { ...rampOpts, angle: 0.3 });
+  Composite.add(world, r10); staticBodies.push(r10);
+
+  // ════════════════════════════════════════════════
+  // Trampoline
+  // ════════════════════════════════════════════════
+  const tramp = Bodies.rectangle(bkX + 130, bkY + 10, 60, 8, {
+    isStatic: true, restitution: 0.92, friction: 0.2, label: 'trampoline'
+  });
+  Composite.add(world, tramp);
+  staticBodies.push(tramp);
+
+  // Extra loose balls for fun
+  for (let i = 0; i < 3; i++) {
+    const eb = Bodies.circle(mLeftX + 160 + i * 50, mTopY - 140 - i * 20, 7, {
+      restitution: 0.5, friction: 0.3, density: 0.003, label: 'ball', isStatic: true
+    });
+    Composite.add(world, eb);
+    balls.push(eb);
+  }
 }
 
 buildScene();
 
-// ─── Interaction ─────────────────────────────────────────────
-function tryGrab() {
-  let wm = worldMouse();
-  let closest = null, closestDist = 30;
+// ── Mouse ──
+const mouse = Mouse.create(canvas);
+const mouseConstraint = MouseConstraint.create(engine, {
+  mouse, constraint: { stiffness: 0.08, render: { visible: false } }
+});
+mouse.pixelRatio = dpr;
+Composite.add(world, mouseConstraint);
 
-  // Check lever ends
-  for (let lev of levers) {
-    for (let end of [lev.endA, lev.endB]) {
-      let d = Math.hypot(wm.x - end.x, wm.y - end.y);
-      if (d < closestDist) { closest = { type: 'lever', lever: lev, node: end }; closestDist = d; }
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  targetZoom *= e.deltaY > 0 ? 0.93 : 1.07;
+  targetZoom = Math.max(0.3, Math.min(3, targetZoom));
+}, { passive: false });
+
+// ── Start / Reset ──
+document.getElementById('startBtn').addEventListener('click', () => {
+  if (!started && startBall) {
+    started = true;
+    Body.setStatic(startBall, false);
+    // Release extra balls
+    setTimeout(() => {
+      for (const b of balls) {
+        if (b.isStatic && b.label === 'ball') Body.setStatic(b, false);
+      }
+    }, 1200);
+    // Drop weight
+    setTimeout(() => {
+      if (weightBody) Body.setStatic(weightBody, false);
+    }, 3000);
+  }
+});
+document.getElementById('resetBtn').addEventListener('click', buildScene);
+
+// ── Collision particles ──
+Events.on(engine, 'collisionStart', event => {
+  for (const pair of event.pairs) {
+    const speed = Vector.magnitude(Vector.sub(pair.bodyA.velocity, pair.bodyB.velocity));
+    if (speed > 2.5) {
+      const pt = pair.collision.supports?.[0] || pair.bodyA.position;
+      for (let i = 0; i < Math.min(speed * 1.5, 10); i++) {
+        impactParticles.push({
+          x: pt.x, y: pt.y,
+          vx: (Math.random() - 0.5) * speed * 1.2,
+          vy: (Math.random() - 0.5) * speed * 1.2 - 1,
+          life: 1, size: Math.random() * 2 + 0.5
+        });
+      }
     }
   }
+});
 
-  // Check pendulum bobs
-  for (let p of pendulums) {
-    let d = Math.hypot(wm.x - p.bob.x, wm.y - p.bob.y);
-    if (d < closestDist) { closest = { type: 'pendulum', pendulum: p }; closestDist = d; }
-  }
+// ══════════════════════════════════════════════════════════════
+//  DRAWING HELPERS
+// ══════════════════════════════════════════════════════════════
+function drawGear(ctx, g) {
+  ctx.save();
+  ctx.translate(g.x, g.y);
+  ctx.rotate(g.angle);
 
-  // Check chain nodes
-  for (let ch of chains) {
-    for (let n of ch.nodes) {
-      if (n.fixed) continue;
-      let d = Math.hypot(wm.x - n.x, wm.y - n.y);
-      if (d < closestDist) { closest = { type: 'node', node: n }; closestDist = d; }
-    }
-  }
-
-  // Check spring coil bobs
-  for (let sc of springCoils) {
-    let d = Math.hypot(wm.x - sc.b.x, wm.y - sc.b.y);
-    if (d < closestDist) { closest = { type: 'springBob', coil: sc }; closestDist = d; }
-  }
-
-  // Check gears (for speed interaction)
-  for (let g of gears) {
-    let d = Math.hypot(wm.x - g.x, wm.y - g.y);
-    if (d < g.radius + 10) { closest = { type: 'gear', gear: g }; closestDist = d; }
-  }
-
-  dragging = closest;
-}
-
-function release() {
-  if (dragging && dragging.type === 'node') {
-    // give it a flick
-    let wm = worldMouse();
-    dragging.node.vx = (wm.x - dragging.node.x) * 0.5;
-    dragging.node.vy = (wm.y - dragging.node.y) * 0.5;
-  }
-  dragging = null;
-}
-
-function handleDrag() {
-  if (!dragging) return;
-  let wm = worldMouse();
-
-  if (dragging.type === 'node') {
-    dragging.node.x += (wm.x - dragging.node.x) * 0.3;
-    dragging.node.y += (wm.y - dragging.node.y) * 0.3;
-    dragging.node.vx = 0;
-    dragging.node.vy = 0;
-  }
-  if (dragging.type === 'lever') {
-    let lev = dragging.lever;
-    let ang = Math.atan2(wm.y - lev.pivot.y, wm.x - lev.pivot.x);
-    // Which end?
-    if (dragging.node === lev.endB) ang += Math.PI;
-    let diff = ang - lev.angle;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    lev.angularVel += diff * 0.1;
-  }
-  if (dragging.type === 'pendulum') {
-    let p = dragging.pendulum;
-    let ang = Math.atan2(wm.x - p.anchorX, wm.y - p.anchorY);
-    let diff = ang - p.angle;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    p.angularVel += diff * 0.08;
-  }
-  if (dragging.type === 'springBob') {
-    let sc = dragging.coil;
-    sc.b.x += (wm.x - sc.b.x) * 0.2;
-    sc.b.y += (wm.y - sc.b.y) * 0.2;
-    sc.b.vx = 0;
-    sc.b.vy = 0;
-  }
-  if (dragging.type === 'gear') {
-    let g = dragging.gear;
-    // Drag sideways to change speed
-    let dx = wm.x - g.x;
-    g.targetSpeed = dx * 0.05;
-  }
-}
-
-// ─── Grid Drawing ────────────────────────────────────────────
-function drawGrid() {
-  let gridSize = 50;
-  let smallGrid = 10;
-
-  let startX = Math.floor((camX - W/2/zoom) / gridSize) * gridSize;
-  let startY = Math.floor((camY - H/2/zoom) / gridSize) * gridSize;
-  let endX = camX + W/2/zoom + gridSize;
-  let endY = camY + H/2/zoom + gridSize;
-
-  // Small grid
   ctx.beginPath();
-  let sg = smallGrid;
-  let sStartX = Math.floor((camX - W/2/zoom) / sg) * sg;
-  let sStartY = Math.floor((camY - H/2/zoom) / sg) * sg;
-  for (let x = sStartX; x < endX; x += sg) {
-    ctx.moveTo(x, camY - H/2/zoom);
-    ctx.lineTo(x, endY);
-  }
-  for (let y = sStartY; y < endY; y += sg) {
-    ctx.moveTo(camX - W/2/zoom, y);
-    ctx.lineTo(endX, y);
-  }
-  ctx.strokeStyle = GRID_COLOR2;
-  ctx.lineWidth = 0.3;
+  ctx.arc(0, 0, g.radius, 0, Math.PI * 2);
+  ctx.strokeStyle = INK + '0.45)';
+  ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Major grid
   ctx.beginPath();
-  for (let x = startX; x < endX; x += gridSize) {
-    ctx.moveTo(x, camY - H/2/zoom);
-    ctx.lineTo(x, endY);
-  }
-  for (let y = startY; y < endY; y += gridSize) {
-    ctx.moveTo(camX - W/2/zoom, y);
-    ctx.lineTo(endX, y);
-  }
-  ctx.strokeStyle = GRID_COLOR;
-  ctx.lineWidth = 0.5;
-  ctx.stroke();
-}
-
-// ─── Dimension Lines ─────────────────────────────────────────
-function drawDimensionLine(ctx, x1, y1, x2, y2, label) {
-  let dx = x2 - x1, dy = y2 - y1;
-  let dist = Math.hypot(dx, dy);
-  let ang = Math.atan2(dy, dx);
-  let offset = 20;
-  let perpX = -Math.sin(ang) * offset;
-  let perpY = Math.cos(ang) * offset;
-
-  ctx.beginPath();
-  // Extension lines
-  ctx.moveTo(x1, y1); ctx.lineTo(x1 + perpX, y1 + perpY);
-  ctx.moveTo(x2, y2); ctx.lineTo(x2 + perpX, y2 + perpY);
-  // Dimension line
-  ctx.moveTo(x1 + perpX, y1 + perpY);
-  ctx.lineTo(x2 + perpX, y2 + perpY);
-  ctx.strokeStyle = DIM + '0.3)';
+  ctx.arc(0, 0, g.radius * 0.55, 0, Math.PI * 2);
+  ctx.strokeStyle = INK + '0.18)';
   ctx.lineWidth = 0.5;
   ctx.stroke();
 
-  // Arrows
-  let arrowSize = 4;
-  for (let [sx, sy, dir] of [[x1+perpX, y1+perpY, 1], [x2+perpX, y2+perpY, -1]]) {
+  for (let i = 0; i < g.teeth; i++) {
+    const a1 = (i / g.teeth) * Math.PI * 2;
+    const a2 = ((i + 0.38) / g.teeth) * Math.PI * 2;
+    const r1 = g.radius, r2 = g.radius + 6;
     ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(sx + Math.cos(ang + 0.4) * arrowSize * dir, sy + Math.sin(ang + 0.4) * arrowSize * dir);
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(sx + Math.cos(ang - 0.4) * arrowSize * dir, sy + Math.sin(ang - 0.4) * arrowSize * dir);
+    ctx.moveTo(Math.cos(a1)*r1, Math.sin(a1)*r1);
+    ctx.lineTo(Math.cos(a1)*r2, Math.sin(a1)*r2);
+    ctx.lineTo(Math.cos(a2)*r2, Math.sin(a2)*r2);
+    ctx.lineTo(Math.cos(a2)*r1, Math.sin(a2)*r1);
+    ctx.strokeStyle = INK + '0.35)';
+    ctx.lineWidth = 0.7;
     ctx.stroke();
   }
 
-  // Label
-  let mx = (x1 + x2) / 2 + perpX;
-  let my = (y1 + y2) / 2 + perpY;
-  ctx.save();
-  ctx.translate(mx, my);
-  ctx.rotate(ang > Math.PI/2 || ang < -Math.PI/2 ? ang + Math.PI : ang);
-  ctx.font = '7px Courier New';
-  ctx.fillStyle = DIM + '0.4)';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(label, 0, -3);
+  for (let i = 0; i < 4; i++) {
+    const a = (i/4) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a)*3, Math.sin(a)*3);
+    ctx.lineTo(Math.cos(a)*g.radius*0.5, Math.sin(a)*g.radius*0.5);
+    ctx.strokeStyle = INK_D + '0.2)';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.arc(0, 0, 3, 0, Math.PI * 2);
+  ctx.fillStyle = INK + '0.35)';
+  ctx.fill();
+
   ctx.restore();
 }
 
-// ─── Blueprint annotations ──────────────────────────────────
-function drawAnnotations(ctx) {
-  ctx.font = '8px Courier New';
-  ctx.fillStyle = DIM + '0.35)';
+function drawBody(ctx, body) {
+  const v = body.vertices;
+  if (!v || v.length < 2) return;
+  const label = body.label || '';
 
-  // Gear label
-  ctx.fillText('GEAR TRAIN — 3:1 RATIO', -310, -250);
-  drawDimensionLine(ctx, -340, -200, -340 + 80 + 70 + 60 + 24, -200, '224mm');
+  if (label === 'wall' || label === 'letter') return;
 
-  // Conveyor labels
-  ctx.fillText('CONVEYOR A — 1.2 m/s', -250, 235);
-  ctx.fillText('CONVEYOR B — 1.8 m/s', 100, 235);
-
-  // Lever labels
-  ctx.fillText('FULCRUM', -18, 85);
-
-  // Chain label
-  ctx.fillText('CHAIN LINK — 12 SEGMENTS', 195, -200);
-
-  // Spring label
-  ctx.fillText('SPRING k=0.15', -430, 65);
-
-  // Section marker
-  ctx.font = '9px Courier New';
-  ctx.fillStyle = DIM + '0.25)';
-  ctx.fillText('SECTION A-A', -420, -280);
-  ctx.fillText('SCALE 1:1', -420, -268);
-  ctx.fillText('REV 03', -420, -256);
-
-  // Border frame corners
-  let bx = -450, by = -300, bw = 900, bh = 580;
-  let corner = 15;
-  ctx.strokeStyle = DIM + '0.15)';
-  ctx.lineWidth = 1;
-  // Top-left
-  ctx.beginPath();
-  ctx.moveTo(bx, by + corner); ctx.lineTo(bx, by); ctx.lineTo(bx + corner, by);
-  ctx.stroke();
-  // Top-right
-  ctx.beginPath();
-  ctx.moveTo(bx+bw-corner, by); ctx.lineTo(bx+bw, by); ctx.lineTo(bx+bw, by+corner);
-  ctx.stroke();
-  // Bottom-left
-  ctx.beginPath();
-  ctx.moveTo(bx, by+bh-corner); ctx.lineTo(bx, by+bh); ctx.lineTo(bx+corner, by+bh);
-  ctx.stroke();
-  // Bottom-right
-  ctx.beginPath();
-  ctx.moveTo(bx+bw-corner, by+bh); ctx.lineTo(bx+bw, by+bh); ctx.lineTo(bx+bw, by+bh-corner);
-  ctx.stroke();
-
-  // Title block (bottom right)
-  ctx.strokeStyle = DIM + '0.2)';
-  ctx.lineWidth = 0.5;
-  ctx.strokeRect(bx+bw-200, by+bh-50, 200, 50);
-  ctx.font = '8px Courier New';
-  ctx.fillStyle = DIM + '0.3)';
-  ctx.fillText('INTERACTIVE BLUEPRINT', bx+bw-190, by+bh-35);
-  ctx.fillText('MATT ZIEGER', bx+bw-190, by+bh-22);
-  ctx.fillText('SHEET 1 OF 1', bx+bw-190, by+bh-10);
-}
-
-// ─── Hover Highlight ─────────────────────────────────────────
-function drawHoverHighlight(ctx) {
-  let wm = worldMouse();
-  let closestDist = 30;
-  let highlight = null;
-
-  for (let lev of levers) {
-    for (let end of [lev.endA, lev.endB]) {
-      let d = Math.hypot(wm.x - end.x, wm.y - end.y);
-      if (d < closestDist) { highlight = end; closestDist = d; }
-    }
-  }
-  for (let p of pendulums) {
-    let d = Math.hypot(wm.x - p.bob.x, wm.y - p.bob.y);
-    if (d < closestDist) { highlight = p.bob; closestDist = d; }
-  }
-  for (let ch of chains) {
-    for (let n of ch.nodes) {
-      if (n.fixed) continue;
-      let d = Math.hypot(wm.x - n.x, wm.y - n.y);
-      if (d < closestDist) { highlight = n; closestDist = d; }
-    }
-  }
-  for (let sc of springCoils) {
-    let d = Math.hypot(wm.x - sc.b.x, wm.y - sc.b.y);
-    if (d < closestDist) { highlight = sc.b; closestDist = d; }
-  }
-
-  if (highlight) {
+  // Circle bodies (balls, pegs)
+  if (label === 'ball' || label === 'pendulum-bob') {
+    const r = body.circleRadius || 10;
     ctx.beginPath();
-    ctx.arc(highlight.x, highlight.y, 12, 0, Math.PI * 2);
-    ctx.strokeStyle = LIGHT + '0.3)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 3]);
+    ctx.arc(body.position.x, body.position.y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = INK + '0.6)';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.setLineDash([]);
+
+    // Crosshatch fill
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(body.position.x, body.position.y, r, 0, Math.PI * 2);
+    ctx.clip();
+    for (let i = -r*2; i < r*2; i += 3) {
+      ctx.beginPath();
+      ctx.moveTo(body.position.x + i, body.position.y - r);
+      ctx.lineTo(body.position.x + i - r*0.8, body.position.y + r);
+      ctx.strokeStyle = INK_F + '0.1)';
+      ctx.lineWidth = 0.3;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Center
+    ctx.beginPath();
+    ctx.arc(body.position.x, body.position.y, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = INK + '0.5)';
+    ctx.fill();
+    return;
+  }
+
+  if (label === 'peg') {
+    ctx.beginPath();
+    ctx.arc(body.position.x, body.position.y, body.circleRadius || 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = INK + '0.3)';
+    ctx.fill();
+    ctx.strokeStyle = INK + '0.5)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+    return;
+  }
+
+  // Color by type
+  let strokeA = 0.5, lw = 1.2, fillA = 0;
+  let color = INK;
+
+  if (label === 'ramp' || label === 'platform') { lw = 1.5; fillA = 0.03; }
+  if (label === 'domino') { strokeA = 0.5; lw = 1; fillA = 0.05; }
+  if (label === 'seesaw') { lw = 1.8; }
+  if (label === 'weight') { strokeA = 0.6; lw = 1.5; fillA = 0.07; }
+  if (label === 'base') { color = INK_D; strokeA = 0.35; }
+  if (label === 'trampoline') { color = RED; strokeA = 0.5; lw = 2; }
+
+  ctx.beginPath();
+  ctx.moveTo(v[0].x, v[0].y);
+  for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
+  ctx.closePath();
+  if (fillA > 0) { ctx.fillStyle = color + fillA + ')'; ctx.fill(); }
+  ctx.strokeStyle = color + strokeA + ')';
+  ctx.lineWidth = lw;
+  ctx.stroke();
+
+  // Weight crosshatch
+  if (label === 'weight') {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(v[0].x, v[0].y);
+    for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
+    ctx.closePath(); ctx.clip();
+    for (let i = -50; i < 50; i += 4) {
+      ctx.beginPath();
+      ctx.moveTo(body.position.x + i, body.position.y - 30);
+      ctx.lineTo(body.position.x + i + 20, body.position.y + 30);
+      ctx.strokeStyle = INK_F + '0.08)';
+      ctx.lineWidth = 0.3;
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 }
 
-// ─── Main Loop ───────────────────────────────────────────────
+function drawConstraintLine(ctx, con) {
+  if (!con.bodyA || !con.pointB) return;
+  const pA = con.bodyA.position;
+  const pB = con.pointB;
+
+  ctx.beginPath();
+  ctx.moveTo(pA.x, pA.y);
+  ctx.lineTo(pB.x, pB.y);
+  ctx.strokeStyle = INK + '0.25)';
+  ctx.lineWidth = 0.7;
+  ctx.setLineDash([4, 3]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Anchor
+  ctx.beginPath();
+  ctx.arc(pB.x, pB.y, 3, 0, Math.PI * 2);
+  ctx.fillStyle = INK + '0.35)';
+  ctx.fill();
+
+  // Mount bar
+  ctx.beginPath();
+  ctx.moveTo(pB.x - 7, pB.y); ctx.lineTo(pB.x + 7, pB.y);
+  ctx.strokeStyle = INK_D + '0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  for (let i = -7; i <= 7; i += 3) {
+    ctx.beginPath();
+    ctx.moveTo(pB.x + i, pB.y);
+    ctx.lineTo(pB.x + i - 3, pB.y - 4);
+    ctx.strokeStyle = INK_D + '0.15)';
+    ctx.lineWidth = 0.4;
+    ctx.stroke();
+  }
+}
+
+function drawGrid(ctx) {
+  const gs = 50, sgs = 10;
+  const sx = Math.floor((camX - W/2/zoom) / gs) * gs;
+  const sy = Math.floor((camY - H/2/zoom) / gs) * gs;
+  const ex = camX + W/2/zoom + gs;
+  const ey = camY + H/2/zoom + gs;
+
+  // Small
+  const ssx = Math.floor((camX - W/2/zoom) / sgs) * sgs;
+  const ssy = Math.floor((camY - H/2/zoom) / sgs) * sgs;
+  ctx.beginPath();
+  for (let x = ssx; x < ex; x += sgs) { ctx.moveTo(x, camY-H/2/zoom); ctx.lineTo(x, ey); }
+  for (let y = ssy; y < ey; y += sgs) { ctx.moveTo(camX-W/2/zoom, y); ctx.lineTo(ex, y); }
+  ctx.strokeStyle = 'rgba(120,140,160,0.05)';
+  ctx.lineWidth = 0.3;
+  ctx.stroke();
+
+  // Major
+  ctx.beginPath();
+  for (let x = sx; x < ex; x += gs) { ctx.moveTo(x, camY-H/2/zoom); ctx.lineTo(x, ey); }
+  for (let y = sy; y < ey; y += gs) { ctx.moveTo(camX-W/2/zoom, y); ctx.lineTo(ex, y); }
+  ctx.strokeStyle = 'rgba(100,120,150,0.09)';
+  ctx.lineWidth = 0.4;
+  ctx.stroke();
+}
+
+function drawDimLine(ctx, x1, y1, x2, y2, label, off) {
+  off = off || 16;
+  const dx = x2-x1, dy = y2-y1, ang = Math.atan2(dy,dx);
+  const px = -Math.sin(ang)*off, py = Math.cos(ang)*off;
+
+  ctx.beginPath();
+  ctx.moveTo(x1,y1); ctx.lineTo(x1+px,y1+py);
+  ctx.moveTo(x2,y2); ctx.lineTo(x2+px,y2+py);
+  ctx.moveTo(x1+px,y1+py); ctx.lineTo(x2+px,y2+py);
+  ctx.strokeStyle = INK_D + '0.2)';
+  ctx.lineWidth = 0.4;
+  ctx.stroke();
+
+  const as = 3.5;
+  for (const [sx2,sy2,dir] of [[x1+px,y1+py,1],[x2+px,y2+py,-1]]) {
+    ctx.beginPath();
+    ctx.moveTo(sx2,sy2);
+    ctx.lineTo(sx2+Math.cos(ang+0.4)*as*dir, sy2+Math.sin(ang+0.4)*as*dir);
+    ctx.moveTo(sx2,sy2);
+    ctx.lineTo(sx2+Math.cos(ang-0.4)*as*dir, sy2+Math.sin(ang-0.4)*as*dir);
+    ctx.stroke();
+  }
+
+  const lx = (x1+x2)/2+px, ly = (y1+y2)/2+py;
+  ctx.save();
+  ctx.translate(lx, ly);
+  let ta = ang; if (ta > Math.PI/2 || ta < -Math.PI/2) ta += Math.PI;
+  ctx.rotate(ta);
+  ctx.font = '6px Courier New';
+  ctx.fillStyle = INK_D + '0.3)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(label, 0, -2);
+  ctx.restore();
+}
+
+function drawParticles(ctx, dt) {
+  for (let i = impactParticles.length - 1; i >= 0; i--) {
+    const p = impactParticles[i];
+    p.x += p.vx * dt * 60; p.y += p.vy * dt * 60;
+    p.vy += 0.15; p.life -= dt * 3;
+    if (p.life <= 0) { impactParticles.splice(i, 1); continue; }
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = INK + (p.life * 0.35) + ')';
+    ctx.fill();
+  }
+}
+
+function drawBorder(ctx) {
+  const bx = -600, by = -350, bw = 1200, bh = 810;
+
+  ctx.strokeStyle = INK_D + '0.12)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(bx, by, bw, bh);
+  ctx.strokeStyle = INK_D + '0.06)';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(bx+7, by+7, bw-14, bh-14);
+
+  // Corner marks
+  const c = 16;
+  ctx.strokeStyle = INK_D + '0.18)';
+  ctx.lineWidth = 1;
+  for (const [cx2,cy2] of [[bx,by],[bx+bw,by],[bx,by+bh],[bx+bw,by+bh]]) {
+    const dx2 = cx2===bx?1:-1, dy2 = cy2===by?1:-1;
+    ctx.beginPath();
+    ctx.moveTo(cx2, cy2+c*dy2); ctx.lineTo(cx2,cy2); ctx.lineTo(cx2+c*dx2,cy2);
+    ctx.stroke();
+  }
+
+  // Title block
+  const tbx = bx+bw-200, tby = by+bh-60, tbw = 200, tbh = 60;
+  ctx.strokeStyle = INK_D + '0.18)';
+  ctx.lineWidth = 0.7;
+  ctx.strokeRect(tbx, tby, tbw, tbh);
+  ctx.beginPath();
+  ctx.moveTo(tbx, tby+20); ctx.lineTo(tbx+tbw, tby+20);
+  ctx.moveTo(tbx, tby+40); ctx.lineTo(tbx+tbw, tby+40);
+  ctx.stroke();
+
+  ctx.font = '7px Courier New';
+  ctx.fillStyle = INK_D + '0.3)';
+  ctx.fillText('RUBE GOLDBERG — INTERACTIVE', tbx+6, tby+14);
+  ctx.font = '8px Courier New';
+  ctx.fillStyle = INK + '0.35)';
+  ctx.fillText('MATT ZIEGER', tbx+6, tby+34);
+  ctx.font = '6px Courier New';
+  ctx.fillStyle = INK_D + '0.25)';
+  ctx.fillText('SCALE 1:1  REV 05  2026-03-17', tbx+6, tby+53);
+}
+
+function drawFlowArrows(ctx) {
+  const pulse = (Math.sin(time * 2) + 1) / 2;
+  const a = 0.08 + pulse * 0.08;
+
+  if (letterData.length < 5) return;
+
+  const arrows = [];
+  // Build flow path through letters
+  for (let i = 0; i < letterData.length - 1; i++) {
+    const cur = letterData[i], next = letterData[i+1];
+    const ax = (cur.originX + next.originX) / 2 + 30;
+    const ay = cur.originY + 50;
+    const angle = Math.atan2(next.originY - cur.originY, next.originX - cur.originX);
+    arrows.push({ x: ax, y: ay, angle });
+  }
+
+  for (const arr of arrows) {
+    ctx.save();
+    ctx.translate(arr.x, arr.y);
+    ctx.rotate(arr.angle);
+    ctx.beginPath();
+    ctx.moveTo(-10, 0); ctx.lineTo(10, 0);
+    ctx.moveTo(5, -4); ctx.lineTo(10, 0); ctx.lineTo(5, 4);
+    ctx.strokeStyle = GREEN + a + ')';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawAnnotations(ctx) {
+  if (letterData.length < 5) return;
+
+  ctx.font = '6px Courier New';
+  ctx.fillStyle = INK_D + '0.25)';
+
+  const labels = [
+    { txt: 'STAGE 1 — BALL RELEASE', x: letterData[0].originX - 50, y: letterData[0].originY - 140 },
+    { txt: 'STAGE 2 — RAMP CASCADE', x: letterData[0].originX + 60, y: letterData[0].originY - 20 },
+    { txt: 'STAGE 3 — DOMINO CHAIN', x: letterData[1].originX, y: letterData[1].originY - 50 },
+    { txt: 'STAGE 4 — PENDULUM', x: (letterData[1].originX+letterData[2].originX)/2-10, y: letterData[1].originY - 120 },
+    { txt: 'STAGE 5 — SEESAW LAUNCH', x: letterData[3].originX + 50, y: letterData[3].originY - 80 },
+    { txt: 'STAGE 6 — GALTON BOARD', x: letterData[4].originX - 10, y: letterData[4].originY + 140 },
+    { txt: "NEWTON'S CRADLE", x: letterData[4].originX + 40, y: letterData[0].originY - 155 },
+    { txt: 'GEAR TRAIN — 3-STAGE', x: letterData[0].originX - 50, y: letterData[0].originY + 145 },
+    { txt: 'COLLECTION BUCKET', x: -40, y: 340 },
+  ];
+
+  for (const l of labels) {
+    ctx.fillText(l.txt, l.x, l.y);
+    // Leader tick
+    ctx.beginPath();
+    ctx.moveTo(l.x, l.y + 2);
+    ctx.lineTo(l.x + 12, l.y + 8);
+    ctx.strokeStyle = INK_D + '0.12)';
+    ctx.lineWidth = 0.3;
+    ctx.stroke();
+  }
+
+  // Section circles
+  const sections = 'ABCDEF';
+  const sectionPos = [
+    { x: letterData[0].originX - 80, y: letterData[0].originY - 100 },
+    { x: letterData[1].originX + 20, y: letterData[1].originY - 30 },
+    { x: (letterData[2].originX+letterData[3].originX)/2, y: letterData[2].originY - 100 },
+    { x: letterData[4].originX + 20, y: letterData[4].originY + 80 },
+    { x: 0, y: 360 },
+    { x: letterData[4].originX + 50, y: letterData[0].originY - 140 },
+  ];
+
+  for (let i = 0; i < sectionPos.length; i++) {
+    const sp = sectionPos[i];
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, 10, 0, Math.PI * 2);
+    ctx.strokeStyle = RED + '0.25)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.font = '8px Courier New';
+    ctx.fillStyle = RED + '0.35)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(sections[i], sp.x, sp.y + 1);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  // Dimension lines on letters
+  if (letterData.length > 0) {
+    const m = letterData[0];
+    const lastBox = m.boxes[m.boxes.length - 1];
+    drawDimLine(ctx, m.boxes[0].x, m.boxes[0].y + m.boxes[0].h + 5,
+      lastBox.x + lastBox.w, lastBox.y + lastBox.h + 5,
+      Math.round(lastBox.x + lastBox.w - m.boxes[0].x) + 'mm', 12);
+  }
+}
+
+// ── Paper texture ──
+const paperCvs = document.createElement('canvas');
+const paperCtx = paperCvs.getContext('2d');
+paperCvs.width = 256; paperCvs.height = 256;
+paperCtx.fillStyle = PAPER;
+paperCtx.fillRect(0, 0, 256, 256);
+for (let i = 0; i < 6000; i++) {
+  paperCtx.fillStyle = `rgba(0,0,0,${Math.random()*0.035})`;
+  paperCtx.fillRect(Math.random()*256, Math.random()*256, 1, 1);
+}
+for (let i = 0; i < 3; i++) {
+  const gx = Math.random()*256, gy = Math.random()*256;
+  const grad = paperCtx.createRadialGradient(gx,gy,0,gx,gy,40+Math.random()*50);
+  grad.addColorStop(0, 'rgba(170,150,120,0.05)');
+  grad.addColorStop(1, 'rgba(170,150,120,0)');
+  paperCtx.fillStyle = grad;
+  paperCtx.fillRect(0,0,256,256);
+}
+const paperPat = ctx.createPattern(paperCvs, 'repeat');
+
+// ══════════════════════════════════════════════════════════════
+//  MAIN LOOP
+// ══════════════════════════════════════════════════════════════
 let lastTime = performance.now();
 
 function frame(now) {
-  let dt = Math.min((now - lastTime) / 1000, 0.05);
+  const dt = Math.min((now - lastTime) / 1000, 0.033);
   lastTime = now;
+  time += dt;
 
-  // Clear
-  ctx.fillStyle = '#0a1628';
+  Engine.update(engine, dt * 1000);
+  for (const g of gears) g.angle += g.speed * dt;
+  zoom += (targetZoom - zoom) * 0.1;
+
+  // ── Paper background ──
+  ctx.fillStyle = paperPat || PAPER;
   ctx.fillRect(0, 0, W, H);
 
-  // Camera transform
+  // ── Camera ──
   ctx.save();
   ctx.translate(W/2, H/2);
   ctx.scale(zoom, zoom);
   ctx.translate(-camX, -camY);
 
-  // Grid
-  drawGrid();
+  drawGrid(ctx);
 
-  // Annotations
+  // Construction lines (faint dashed)
+  ctx.setLineDash([5, 4]);
+  ctx.strokeStyle = INK_F + '0.05)';
+  ctx.lineWidth = 0.3;
+  for (let y = -300; y <= 400; y += 100) {
+    ctx.beginPath(); ctx.moveTo(-600,y); ctx.lineTo(600,y); ctx.stroke();
+  }
+  for (let x = -600; x <= 600; x += 100) {
+    ctx.beginPath(); ctx.moveTo(x,-350); ctx.lineTo(x,460); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  drawBorder(ctx);
+  drawFlowArrows(ctx);
+
+  // ── 3D Letters ──
+  drawLetters(ctx);
+
+  // ── Gears ──
+  for (const g of gears) drawGear(ctx, g);
+
+  // ── Physics bodies ──
+  const allBodies = Matter.Composite.allBodies(world);
+  for (const b of allBodies) drawBody(ctx, b);
+
+  // ── Constraints ──
+  for (const p of pendulums) drawConstraintLine(ctx, p.constraint);
+
+  // ── Seesaw pivot ──
+  // find seesaw pin (it's a constraint with pointB)
+  const allCons = Matter.Composite.allConstraints(world);
+  for (const con of allCons) {
+    if (con.label === 'seesaw-pin' || con.label === 'constraint') {
+      // skip mouse constraint
+    }
+  }
+
+  // ── Annotations ──
   drawAnnotations(ctx);
 
-  // Physics updates
-  handleDrag();
+  // ── Particles ──
+  drawParticles(ctx, dt);
 
-  for (let g of gears) g.update(dt);
-  for (let c of conveyors) c.update(dt);
-  for (let ch of chains) ch.solve();
-  for (let lev of levers) lev.update(dt);
-  for (let p of pendulums) p.update(dt);
-  for (let sc of springCoils) sc.update(dt);
+  // Bucket flag
+  ctx.beginPath();
+  ctx.moveTo(0, 350); ctx.lineTo(0, 320);
+  ctx.lineTo(25, 325); ctx.lineTo(0, 330);
+  ctx.strokeStyle = RED + '0.25)';
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+  ctx.font = '7px Courier New';
+  ctx.fillStyle = RED + '0.3)';
+  ctx.fillText('FINISH', 5, 315);
 
-  // Update free nodes
-  for (let n of allNodes) n.update(dt);
-
-  // Draw everything
-  for (let c of conveyors) c.draw(ctx);
-  for (let g of gears) g.draw(ctx);
-  for (let p of pistons) p.draw(ctx);
-  for (let ch of chains) ch.draw(ctx);
-  for (let lev of levers) lev.draw(ctx);
-  for (let p of pendulums) p.draw(ctx);
-  for (let sc of springCoils) sc.draw(ctx);
-
-  // Dimension lines between conveyors
-  drawDimensionLine(ctx, 50, 220, 100, 220, '50mm');
-
-  // Hover
-  if (!mouseDown) drawHoverHighlight(ctx);
+  // Spring coils under trampoline
+  const trampBodies = staticBodies.filter(b => b.label === 'trampoline');
+  for (const t of trampBodies) {
+    for (let i = 0; i < 3; i++) {
+      const sx = t.position.x - 15 + i * 15;
+      ctx.beginPath();
+      for (let j = 0; j <= 8; j++) {
+        const tt = j/8;
+        const px = sx + Math.sin(tt * Math.PI * 4) * 3;
+        const py = t.position.y + 4 + tt * 16;
+        if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = RED + '0.2)';
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
+  }
 
   ctx.restore();
 
-  // Scanline effect (very subtle)
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.03)';
-  for (let y = 0; y < H; y += 3) {
-    ctx.fillRect(0, y, W, 1);
-  }
+  // ── Vignette ──
+  const vig = ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.3,W/2,H/2,Math.max(W,H)*0.75);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.1)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle scanlines
+  ctx.fillStyle = 'rgba(0,0,0,0.012)';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
 
   requestAnimationFrame(frame);
 }
-
 requestAnimationFrame(frame);
 
-// ─── Prevent context menu ────────────────────────────────────
 canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ── Pan ──
+let panning = false, psx = 0, psy = 0, pcx = 0, pcy = 0;
+canvas.addEventListener('mousedown', e => {
+  if (e.button === 1 || e.button === 2) {
+    panning = true; psx = e.clientX; psy = e.clientY; pcx = camX; pcy = camY;
+  }
+});
+canvas.addEventListener('mousemove', e => {
+  if (panning) { camX = pcx - (e.clientX - psx)/zoom; camY = pcy - (e.clientY - psy)/zoom; }
+});
+canvas.addEventListener('mouseup', e => { if (e.button===1||e.button===2) panning = false; });
+
+let lastTD = 0;
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) {
+    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    lastTD = d; panning = true;
+    psx = (e.touches[0].clientX+e.touches[1].clientX)/2;
+    psy = (e.touches[0].clientY+e.touches[1].clientY)/2;
+    pcx = camX; pcy = camY;
+  }
+}, {passive:false});
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const mx2 = (e.touches[0].clientX+e.touches[1].clientX)/2;
+    const my2 = (e.touches[0].clientY+e.touches[1].clientY)/2;
+    camX = pcx-(mx2-psx)/zoom; camY = pcy-(my2-psy)/zoom;
+    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    if (lastTD > 0) { targetZoom *= d/lastTD; targetZoom = Math.max(0.3, Math.min(3, targetZoom)); }
+    lastTD = d;
+  }
+}, {passive:false});
+canvas.addEventListener('touchend', () => { panning = false; lastTD = 0; });
 </script>
 </body>
 </html>
