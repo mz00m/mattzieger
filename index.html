@@ -13,18 +13,10 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
   top: 0; left: 0;
   width: 100%; height: 100%;
 }
-#three-canvas {
-  display: block;
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  pointer-events: none;
-}
 </style>
 </head>
 <body>
 <canvas id="wave-canvas"></canvas>
-<canvas id="three-canvas"></canvas>
 
 <!-- Water surface simulation: standalone, no dependencies -->
 <script>
@@ -40,42 +32,11 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
 
   let W, H, simW, simH;
   let buf1, buf2;       // wave height double-buffer
-  let letterMask;       // Uint8Array: 1 = inside letter (pinned)
 
   // Offscreen canvas at simulation resolution for fast pixel writes
   const simCanvas = document.createElement('canvas');
   const simCtx = simCanvas.getContext('2d');
   let imageData, pixels;
-
-  function buildLetterMask() {
-    const offscreen = document.createElement('canvas');
-    offscreen.width = simW;
-    offscreen.height = simH;
-    const octx = offscreen.getContext('2d');
-
-    const fontSize = Math.min(H * 0.28, W * 0.22);
-    octx.save();
-    octx.scale(1 / SCALE, 1 / SCALE);
-    octx.font = `900 ${fontSize}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
-    octx.textAlign = 'center';
-    octx.textBaseline = 'middle';
-    octx.fillStyle = '#fff';
-
-    const gap = fontSize * 0.15;
-    const mW = octx.measureText('M').width;
-    const zW = octx.measureText('Z').width;
-    const total = mW + gap + zW;
-
-    octx.fillText('M', W / 2 - total / 2 + mW / 2, H / 2);
-    octx.fillText('Z', W / 2 + total / 2 - zW / 2, H / 2);
-    octx.restore();
-
-    const id = octx.getImageData(0, 0, simW, simH);
-    letterMask = new Uint8Array(simW * simH);
-    for (let i = 0; i < simW * simH; i++) {
-      letterMask[i] = id.data[i * 4 + 3] > 128 ? 1 : 0;
-    }
-  }
 
   function init() {
     W = canvas.width = innerWidth;
@@ -91,8 +52,6 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
 
     imageData = simCtx.createImageData(simW, simH);
     pixels = imageData.data;
-
-    buildLetterMask();
   }
 
   function dropRipple(screenX, screenY) {
@@ -108,7 +67,6 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
         const sx = cx + dx, sy = cy + dy;
         if (sx < 1 || sx >= simW - 1 || sy < 1 || sy >= simH - 1) continue;
         const idx = sy * simW + sx;
-        if (letterMask[idx]) continue;
         // Smooth cosine bell shape
         const t = Math.sqrt(d2) / r;
         buf1[idx] += RIPPLE_STRENGTH * (0.5 + 0.5 * Math.cos(Math.PI * t));
@@ -122,7 +80,6 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
       const row = y * simW;
       for (let x = 1; x < simW - 1; x++) {
         const i = row + x;
-        if (letterMask[i]) { buf2[i] = 0; continue; }
         // Average of 4 neighbors, propagate, dampen
         buf2[i] = ((
           buf1[i - 1] + buf1[i + 1] +
@@ -136,71 +93,168 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
     buf2 = tmp;
   }
 
-  function render() {
-    // Light direction (normalized) — above-right, slightly behind viewer
-    const lx = 0.25, ly = -0.45, lz = 0.86;
+  // --- Impressionist palette (Monet / Sargent water) ---
+  // Multiple broken-color hues that blend based on surface angle + position
+  // Deep shadows: indigo-violet, mid: cerulean-teal, highlights: warm gold-peach
+  const palette = [
+    // [R, G, B] — shadow tones (cool violets, deep blues)
+    { r: 18, g: 12, b: 48 },   // deep indigo
+    { r: 25, g: 28, b: 62 },   // ultramarine shadow
+    { r: 14, g: 30, b: 52 },   // prussian blue
+    // mid tones (broken greens, ceruleans)
+    { r: 28, g: 58, b: 82 },   // cerulean
+    { r: 22, g: 65, b: 70 },   // viridian-teal
+    { r: 38, g: 72, b: 64 },   // sage reflection
+    // light tones (lavender, warm sky reflections)
+    { r: 70, g: 90, b: 130 },  // reflected sky
+    { r: 85, g: 100, b: 145 }, // light lavender
+    { r: 100, g: 115, b: 140 },// Sargent grey-blue
+  ];
 
-    // Pre-compute half-vector for Blinn-Phong specular (view = 0,0,1)
+  // Warm highlight colors (golden sunlight on water)
+  const warmHighR = 255, warmHighG = 220, warmHighB = 160;
+  const coolHighR = 180, coolHighG = 210, coolHighB = 255;
+
+  // Pre-compute a static noise texture for "brushstroke" variation
+  let noiseMap;
+  function buildNoise() {
+    noiseMap = new Float32Array(simW * simH);
+    // Simple layered value noise
+    for (let oct = 0; oct < 3; oct++) {
+      const freq = (oct + 1) * 0.07;
+      const amp = 1 / (oct + 1);
+      for (let y = 0; y < simH; y++) {
+        for (let x = 0; x < simW; x++) {
+          // Hash-based pseudo-noise
+          const v = Math.sin(x * freq * 12.9898 + y * freq * 78.233 + oct * 43.12) * 43758.5453;
+          noiseMap[y * simW + x] += (v - Math.floor(v)) * amp;
+        }
+      }
+    }
+  }
+
+  const origInit = init;
+  init = function() {
+    origInit();
+    buildNoise();
+  };
+
+  let globalTime = 0;
+
+  function render() {
+    globalTime += 0.016;
+
+    // Slowly drifting light direction for gentle shimmer
+    const lt = globalTime * 0.3;
+    const lx = 0.25 + Math.sin(lt) * 0.05;
+    const ly = -0.45 + Math.cos(lt * 0.7) * 0.05;
+    const lz = 0.86;
+
+    // Half-vector for specular
     const hx = lx, hy = ly, hz = lz + 1;
     const hlen = Math.sqrt(hx * hx + hy * hy + hz * hz);
     const nhx = hx / hlen, nhy = hy / hlen, nhz = hz / hlen;
 
+    const invSimW = 1 / simW;
+    const invSimH = 1 / simH;
+
     for (let y = 1; y < simH - 1; y++) {
       const row = y * simW;
+      const vy = y * invSimH; // 0..1 vertical position
       for (let x = 1; x < simW - 1; x++) {
         const i = row + x;
         const pi = i << 2;
+        const vx = x * invSimW; // 0..1 horizontal position
 
-        // Height gradients for surface normal
+        // Height gradients → surface normal
         const dzdx = buf1[i + 1] - buf1[i - 1];
         const dzdy = buf1[i + simW] - buf1[i - simW];
-
-        // Surface normal (-dzdx, -dzdy, scale), unnormalized for speed
-        const nscale = 4.0; // controls "sharpness" of highlights
-        const nnx = -dzdx;
-        const nny = -dzdy;
-        const nnz = nscale;
+        const nscale = 3.5;
+        const nnx = -dzdx, nny = -dzdy, nnz = nscale;
         const invLen = 1 / Math.sqrt(nnx * nnx + nny * nny + nnz * nnz);
-        const nx = nnx * invLen;
-        const ny = nny * invLen;
-        const nz = nnz * invLen;
+        const nx = nnx * invLen, ny = nny * invLen, nz = nnz * invLen;
 
-        // Diffuse lighting
+        // Diffuse
         const diffuse = Math.max(0, nx * lx + ny * ly + nz * lz);
 
-        // Specular (Blinn-Phong, exponent 60 for tight highlights)
+        // Specular — softer exponent (20) for broader, painterly highlights
         const specDot = nx * nhx + ny * nhy + nz * nhz;
-        const spec = specDot > 0 ? Math.pow(specDot, 60) : 0;
+        const spec = specDot > 0 ? Math.pow(specDot, 20) : 0;
+        // Also a tight sparkle for Sargent-like glints
+        const sparkle = specDot > 0 ? Math.pow(specDot, 80) : 0;
 
-        // Fresnel-like rim: darker where surface faces camera directly
-        const fresnel = 1 - nz;
-        const fresnelBoost = fresnel * fresnel * 0.4;
+        // Noise-based "brushstroke" variation to break up color
+        const noise = noiseMap[i];
+        const brushShift = Math.sin(noise * 18.0 + globalTime * 0.5) * 0.5 + 0.5;
 
-        // Height-based caustic tint
+        // Palette index driven by diffuse + noise → broken color
+        const palIdx = (diffuse * 6 + noise * 3) % 9;
+        const palLow = palIdx | 0;
+        const palHigh = (palLow + 1) % 9;
+        const palT = palIdx - palLow;
+        const cLow = palette[palLow];
+        const cHigh = palette[palHigh];
+
+        // Interpolated base color from palette
+        let baseR = cLow.r + (cHigh.r - cLow.r) * palT;
+        let baseG = cLow.g + (cHigh.g - cLow.g) * palT;
+        let baseB = cLow.b + (cHigh.b - cLow.b) * palT;
+
+        // Vertical gradient: upper = sky reflection (lighter), lower = deeper
+        const depthGrad = 1 - vy * 0.3;
+        baseR *= depthGrad;
+        baseG *= depthGrad;
+        baseB *= depthGrad;
+
+        // Add diffuse lighting with warm/cool split
+        // Lit areas get warm, shadow areas stay cool (impressionist color theory)
+        const warmT = diffuse * 0.6 + brushShift * 0.15;
+        baseR += diffuse * (30 + warmT * 25);
+        baseG += diffuse * (40 + warmT * 15);
+        baseB += diffuse * (50 - warmT * 10);
+
+        // Height tint: peaks get warmer (golden), troughs get cooler (violet)
         const h = buf1[i];
-        const caustic = Math.max(0, h * 0.003);
+        if (h > 0) {
+          const ht = Math.min(1, h * 0.008);
+          baseR += ht * 40;
+          baseG += ht * 25;
+          baseB -= ht * 10;
+        } else {
+          const ht = Math.min(1, -h * 0.006);
+          baseR += ht * 8;
+          baseG += ht * 5;
+          baseB += ht * 25;
+        }
 
-        // Base deep water color
-        const br = 8 + diffuse * 22 + fresnelBoost * 15 + caustic * 30;
-        const bg = 14 + diffuse * 45 + fresnelBoost * 25 + caustic * 50;
-        const bb = 32 + diffuse * 70 + fresnelBoost * 50 + caustic * 40;
+        // Broad specular: warm golden highlight (Monet's sunlight on water)
+        const specWarmT = brushShift * 0.4 + 0.6;
+        baseR += spec * (warmHighR * specWarmT + coolHighR * (1 - specWarmT)) * 0.6;
+        baseG += spec * (warmHighG * specWarmT + coolHighG * (1 - specWarmT)) * 0.5;
+        baseB += spec * (warmHighB * specWarmT + coolHighB * (1 - specWarmT)) * 0.4;
 
-        // Add specular highlight on top
-        const sr = br + spec * 220;
-        const sg = bg + spec * 240;
-        const sb = bb + spec * 255;
+        // Tight sparkle: pure white glints (Sargent wet-on-wet strokes)
+        baseR += sparkle * 200;
+        baseG += sparkle * 200;
+        baseB += sparkle * 220;
 
-        pixels[pi]     = sr > 255 ? 255 : sr | 0;
-        pixels[pi + 1] = sg > 255 ? 255 : sg | 0;
-        pixels[pi + 2] = sb > 255 ? 255 : sb | 0;
+        // Subtle color noise to mimic visible brushstrokes
+        const strokeNoise = (noise - 0.5) * 12;
+        baseR += strokeNoise;
+        baseG += strokeNoise * 0.8;
+        baseB -= strokeNoise * 0.5;
+
+        pixels[pi]     = baseR > 255 ? 255 : baseR < 0 ? 0 : baseR | 0;
+        pixels[pi + 1] = baseG > 255 ? 255 : baseG < 0 ? 0 : baseG | 0;
+        pixels[pi + 2] = baseB > 255 ? 255 : baseB < 0 ? 0 : baseB | 0;
         pixels[pi + 3] = 255;
       }
     }
 
     // Write to simulation canvas, then scale up to main canvas
     simCtx.putImageData(imageData, 0, 0);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    // No smoothing — keeps the painterly pixelation (like visible brushstrokes)
+    ctx.imageSmoothingEnabled = false;
     ctx.drawImage(simCanvas, 0, 0, simW, simH, 0, 0, W, H);
   }
 
@@ -233,142 +287,5 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
 })();
 </script>
 
-<!-- Three.js 3D letters: loads independently, fails gracefully -->
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-  }
-}
-</script>
-
-<script type="module">
-import * as THREE from 'three';
-import { FontLoader } from 'three/addons/loaders/FontLoader.js';
-import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
-
-const threeCanvas = document.getElementById('three-canvas');
-const scene = new THREE.Scene();
-
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 1, 2000);
-camera.position.set(0, 0, 500);
-
-const renderer = new THREE.WebGLRenderer({
-  canvas: threeCanvas,
-  alpha: true,
-  antialias: true
-});
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setClearColor(0x000000, 0);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-// Lighting
-scene.add(new THREE.AmbientLight(0x4466aa, 0.6));
-
-const keyLight = new THREE.DirectionalLight(0x88bbff, 1.8);
-keyLight.position.set(100, 200, 300);
-keyLight.castShadow = true;
-keyLight.shadow.mapSize.set(1024, 1024);
-keyLight.shadow.camera.near = 10;
-keyLight.shadow.camera.far = 1000;
-keyLight.shadow.camera.left = -300;
-keyLight.shadow.camera.right = 300;
-keyLight.shadow.camera.top = 200;
-keyLight.shadow.camera.bottom = -200;
-scene.add(keyLight);
-
-const rimLight = new THREE.DirectionalLight(0x6699cc, 0.8);
-rimLight.position.set(-150, -50, 200);
-scene.add(rimLight);
-
-const bottomLight = new THREE.DirectionalLight(0x223355, 0.4);
-bottomLight.position.set(0, -200, 100);
-scene.add(bottomLight);
-
-// Shadow plane
-const planeMat = new THREE.ShadowMaterial({ opacity: 0.35 });
-const plane = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), planeMat);
-plane.position.z = -30;
-plane.receiveShadow = true;
-scene.add(plane);
-
-const letterGroup = new THREE.Group();
-scene.add(letterGroup);
-
-// Load font and create letters
-const loader = new FontLoader();
-loader.load(
-  'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_bold.typeface.json',
-  function(font) {
-    const matFront = new THREE.MeshPhongMaterial({
-      color: 0x1a3055,
-      specular: 0x5588bb,
-      shininess: 60,
-    });
-    const matSide = new THREE.MeshPhongMaterial({
-      color: 0x0f1f38,
-      specular: 0x334466,
-      shininess: 30,
-    });
-
-    const textParams = {
-      font: font,
-      size: 100,
-      depth: 30,
-      curveSegments: 16,
-      bevelEnabled: true,
-      bevelThickness: 4,
-      bevelSize: 3,
-      bevelOffset: 0,
-      bevelSegments: 8,
-    };
-
-    const mGeo = new TextGeometry('M', textParams);
-    mGeo.computeBoundingBox();
-    const mMesh = new THREE.Mesh(mGeo, [matFront, matSide]);
-    mMesh.castShadow = true;
-
-    const zGeo = new TextGeometry('Z', textParams);
-    zGeo.computeBoundingBox();
-    const zMesh = new THREE.Mesh(zGeo, [matFront, matSide]);
-    zMesh.castShadow = true;
-
-    const mBox = mGeo.boundingBox;
-    const zBox = zGeo.boundingBox;
-    const mWidth = mBox.max.x - mBox.min.x;
-    const zWidth = zBox.max.x - zBox.min.x;
-    const gap = 30;
-    const totalWidth = mWidth + gap + zWidth;
-    const mHeight = mBox.max.y - mBox.min.y;
-
-    mMesh.position.set(-totalWidth / 2, -mHeight / 2, 0);
-    zMesh.position.set(-totalWidth / 2 + mWidth + gap, -mHeight / 2, 0);
-
-    letterGroup.add(mMesh);
-    letterGroup.add(zMesh);
-  }
-);
-
-function threeFrame(now) {
-  const t = now / 1000;
-  letterGroup.position.y = Math.sin(t * 0.8) * 6;
-  letterGroup.position.z = Math.sin(t * 0.5) * 4;
-  letterGroup.rotation.x = Math.sin(t * 0.6) * 0.04;
-  letterGroup.rotation.y = Math.sin(t * 0.4) * 0.03;
-  renderer.render(scene, camera);
-  requestAnimationFrame(threeFrame);
-}
-
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-
-requestAnimationFrame(threeFrame);
-</script>
 </body>
 </html>
