@@ -18,10 +18,10 @@ const ctx = canvas.getContext('2d');
 let W, H, cols, rows, dots;
 
 const SPACING = 28;
-const DOT_BASE = 1.8;
-const WAVE_SPEED = 280;       // px per second
+const DOT_BASE = 1.1;
+const WAVE_SPEED = 120;       // px per second
 const DAMPING = 0.92;         // per-frame amplitude decay
-const FREQUENCY = 8;          // wave oscillation Hz
+const FREQUENCY = 3.5;        // wave oscillation Hz
 const WAVELENGTH = WAVE_SPEED / FREQUENCY;
 const TWO_PI = Math.PI * 2;
 
@@ -57,7 +57,7 @@ function spawnWave(x, y) {
   waves.push({
     x, y,
     t0: performance.now() / 1000,
-    amplitude: 18,
+    amplitude: 10,
   });
   // Cap active waves to prevent slowdown
   if (waves.length > 12) waves.shift();
@@ -83,7 +83,7 @@ function frame(now) {
   ctx.fillRect(0, 0, W, H);
 
   // Prune dead waves (amplitude negligible after ~4 seconds)
-  waves = waves.filter(w => (now - w.t0) < 5);
+  waves = waves.filter(w => (now - w.t0) < 10);
 
   // Compute each dot's displacement from superposition of all active waves
   for (const dot of dots) {
@@ -108,7 +108,7 @@ function frame(now) {
       // Realistic damped sinusoidal wave
       // Amplitude falls off with 1/sqrt(r) (2D circular wave) and exponential time decay
       const spatialFalloff = 1 / Math.max(1, Math.sqrt(dist / 30));
-      const timeDamping = Math.exp(-localT * 3.2);
+      const timeDamping = Math.exp(-localT * 1.6);
       const envelope = wave.amplitude * spatialFalloff * timeDamping;
 
       // Leading edge fade-in (smooth wavefront)
