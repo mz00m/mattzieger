@@ -26,30 +26,36 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
 <canvas id="wave-canvas"></canvas>
 <canvas id="three-canvas"></canvas>
 
-<!-- Wave simulation: standalone, no dependencies -->
+<!-- Water surface simulation: standalone, no dependencies -->
 <script>
 (function() {
   const canvas = document.getElementById('wave-canvas');
   const ctx = canvas.getContext('2d');
-  let W, H, cols, rows, dots;
 
-  const SPACING = 28;
-  const DOT_BASE = 1.1;
-  const WAVE_SPEED = 120;
-  const FREQUENCY = 3.5;
-  const WAVELENGTH = WAVE_SPEED / FREQUENCY;
-  const TWO_PI = Math.PI * 2;
+  // Simulation runs at reduced resolution for performance
+  const SCALE = 3;
+  const DAMPING = 0.988;
+  const RIPPLE_RADIUS = 12;
+  const RIPPLE_STRENGTH = 180;
 
-  let letterMask = null;
-  let waves = [];
+  let W, H, simW, simH;
+  let buf1, buf2;       // wave height double-buffer
+  let letterMask;       // Uint8Array: 1 = inside letter (pinned)
+
+  // Offscreen canvas at simulation resolution for fast pixel writes
+  const simCanvas = document.createElement('canvas');
+  const simCtx = simCanvas.getContext('2d');
+  let imageData, pixels;
 
   function buildLetterMask() {
     const offscreen = document.createElement('canvas');
-    offscreen.width = W;
-    offscreen.height = H;
+    offscreen.width = simW;
+    offscreen.height = simH;
     const octx = offscreen.getContext('2d');
 
     const fontSize = Math.min(H * 0.28, W * 0.22);
+    octx.save();
+    octx.scale(1 / SCALE, 1 / SCALE);
     octx.font = `900 ${fontSize}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
     octx.textAlign = 'center';
     octx.textBaseline = 'middle';
@@ -59,166 +65,171 @@ body { background: #0a0e1a; overflow: hidden; cursor: crosshair; }
     const mW = octx.measureText('M').width;
     const zW = octx.measureText('Z').width;
     const total = mW + gap + zW;
-    const cx = W / 2, cy = H / 2;
 
-    octx.fillText('M', cx - total / 2 + mW / 2, cy);
-    octx.fillText('Z', cx + total / 2 - zW / 2, cy);
+    octx.fillText('M', W / 2 - total / 2 + mW / 2, H / 2);
+    octx.fillText('Z', W / 2 + total / 2 - zW / 2, H / 2);
+    octx.restore();
 
-    const imageData = octx.getImageData(0, 0, W, H);
-    const data = imageData.data;
-
-    letterMask = new Array(dots.length);
-    for (let i = 0; i < dots.length; i++) {
-      const px = Math.round(dots[i].x);
-      const py = Math.round(dots[i].y);
-      if (px >= 0 && px < W && py >= 0 && py < H) {
-        letterMask[i] = data[(py * W + px) * 4 + 3] > 128;
-      } else {
-        letterMask[i] = false;
-      }
+    const id = octx.getImageData(0, 0, simW, simH);
+    letterMask = new Uint8Array(simW * simH);
+    for (let i = 0; i < simW * simH; i++) {
+      letterMask[i] = id.data[i * 4 + 3] > 128 ? 1 : 0;
     }
   }
 
-  function initWave() {
+  function init() {
     W = canvas.width = innerWidth;
     H = canvas.height = innerHeight;
-    cols = Math.ceil(W / SPACING) + 2;
-    rows = Math.ceil(H / SPACING) + 2;
+    simW = Math.ceil(W / SCALE);
+    simH = Math.ceil(H / SCALE);
 
-    const ox = (W - (cols - 1) * SPACING) / 2;
-    const oy = (H - (rows - 1) * SPACING) / 2;
+    simCanvas.width = simW;
+    simCanvas.height = simH;
 
-    dots = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        dots.push({ x: ox + c * SPACING, y: oy + r * SPACING, z: 0, prevZ: 0 });
-      }
-    }
+    buf1 = new Float32Array(simW * simH);
+    buf2 = new Float32Array(simW * simH);
+
+    imageData = simCtx.createImageData(simW, simH);
+    pixels = imageData.data;
+
     buildLetterMask();
   }
 
-  function spawnWave(x, y) {
-    waves.push({ x, y, t0: performance.now() / 1000, amplitude: 10 });
-    if (waves.length > 12) waves.shift();
+  function dropRipple(screenX, screenY) {
+    const cx = (screenX / SCALE) | 0;
+    const cy = (screenY / SCALE) | 0;
+    const r = RIPPLE_RADIUS;
+    const r2 = r * r;
+
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const d2 = dx * dx + dy * dy;
+        if (d2 > r2) continue;
+        const sx = cx + dx, sy = cy + dy;
+        if (sx < 1 || sx >= simW - 1 || sy < 1 || sy >= simH - 1) continue;
+        const idx = sy * simW + sx;
+        if (letterMask[idx]) continue;
+        // Smooth cosine bell shape
+        const t = Math.sqrt(d2) / r;
+        buf1[idx] += RIPPLE_STRENGTH * (0.5 + 0.5 * Math.cos(Math.PI * t));
+      }
+    }
   }
 
-  canvas.addEventListener('click', e => spawnWave(e.clientX, e.clientY));
+  // Propagate wave using classic ripple algorithm
+  function simulate() {
+    for (let y = 1; y < simH - 1; y++) {
+      const row = y * simW;
+      for (let x = 1; x < simW - 1; x++) {
+        const i = row + x;
+        if (letterMask[i]) { buf2[i] = 0; continue; }
+        // Average of 4 neighbors, propagate, dampen
+        buf2[i] = ((
+          buf1[i - 1] + buf1[i + 1] +
+          buf1[i - simW] + buf1[i + simW]
+        ) * 0.5 - buf2[i]) * DAMPING;
+      }
+    }
+    // Swap buffers
+    const tmp = buf1;
+    buf1 = buf2;
+    buf2 = tmp;
+  }
+
+  function render() {
+    // Light direction (normalized) — above-right, slightly behind viewer
+    const lx = 0.25, ly = -0.45, lz = 0.86;
+
+    // Pre-compute half-vector for Blinn-Phong specular (view = 0,0,1)
+    const hx = lx, hy = ly, hz = lz + 1;
+    const hlen = Math.sqrt(hx * hx + hy * hy + hz * hz);
+    const nhx = hx / hlen, nhy = hy / hlen, nhz = hz / hlen;
+
+    for (let y = 1; y < simH - 1; y++) {
+      const row = y * simW;
+      for (let x = 1; x < simW - 1; x++) {
+        const i = row + x;
+        const pi = i << 2;
+
+        // Height gradients for surface normal
+        const dzdx = buf1[i + 1] - buf1[i - 1];
+        const dzdy = buf1[i + simW] - buf1[i - simW];
+
+        // Surface normal (-dzdx, -dzdy, scale), unnormalized for speed
+        const nscale = 4.0; // controls "sharpness" of highlights
+        const nnx = -dzdx;
+        const nny = -dzdy;
+        const nnz = nscale;
+        const invLen = 1 / Math.sqrt(nnx * nnx + nny * nny + nnz * nnz);
+        const nx = nnx * invLen;
+        const ny = nny * invLen;
+        const nz = nnz * invLen;
+
+        // Diffuse lighting
+        const diffuse = Math.max(0, nx * lx + ny * ly + nz * lz);
+
+        // Specular (Blinn-Phong, exponent 60 for tight highlights)
+        const specDot = nx * nhx + ny * nhy + nz * nhz;
+        const spec = specDot > 0 ? Math.pow(specDot, 60) : 0;
+
+        // Fresnel-like rim: darker where surface faces camera directly
+        const fresnel = 1 - nz;
+        const fresnelBoost = fresnel * fresnel * 0.4;
+
+        // Height-based caustic tint
+        const h = buf1[i];
+        const caustic = Math.max(0, h * 0.003);
+
+        // Base deep water color
+        const br = 8 + diffuse * 22 + fresnelBoost * 15 + caustic * 30;
+        const bg = 14 + diffuse * 45 + fresnelBoost * 25 + caustic * 50;
+        const bb = 32 + diffuse * 70 + fresnelBoost * 50 + caustic * 40;
+
+        // Add specular highlight on top
+        const sr = br + spec * 220;
+        const sg = bg + spec * 240;
+        const sb = bb + spec * 255;
+
+        pixels[pi]     = sr > 255 ? 255 : sr | 0;
+        pixels[pi + 1] = sg > 255 ? 255 : sg | 0;
+        pixels[pi + 2] = sb > 255 ? 255 : sb | 0;
+        pixels[pi + 3] = 255;
+      }
+    }
+
+    // Write to simulation canvas, then scale up to main canvas
+    simCtx.putImageData(imageData, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(simCanvas, 0, 0, simW, simH, 0, 0, W, H);
+  }
+
+  // Input
+  canvas.addEventListener('click', e => dropRipple(e.clientX, e.clientY));
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
-    for (const t of e.changedTouches) spawnWave(t.clientX, t.clientY);
+    for (const t of e.changedTouches) dropRipple(t.clientX, t.clientY);
   }, { passive: false });
 
-  let lastTime = performance.now() / 1000;
+  // Optional: drag to paint ripples
+  let dragging = false;
+  canvas.addEventListener('mousedown', () => { dragging = true; });
+  canvas.addEventListener('mouseup', () => { dragging = false; });
+  canvas.addEventListener('mousemove', e => {
+    if (dragging) dropRipple(e.clientX, e.clientY);
+  });
 
-  function waveFrame(now) {
-    now /= 1000;
-    lastTime = now;
-
-    ctx.fillStyle = '#0a0e1a';
-    ctx.fillRect(0, 0, W, H);
-
-    waves = waves.filter(w => (now - w.t0) < 10);
-
-    for (const dot of dots) {
-      dot.prevZ = dot.z;
-      let z = 0;
-
-      for (const wave of waves) {
-        const dx = dot.x - wave.x;
-        const dy = dot.y - wave.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        const elapsed = now - wave.t0;
-        const wavefront = elapsed * WAVE_SPEED;
-
-        if (dist > wavefront + WAVELENGTH * 0.5) continue;
-
-        const localT = elapsed - dist / WAVE_SPEED;
-        if (localT < 0) continue;
-
-        const spatialFalloff = 1 / Math.max(1, Math.sqrt(dist / 30));
-        const timeDamping = Math.exp(-localT * 1.6);
-        const envelope = wave.amplitude * spatialFalloff * timeDamping;
-        const edgeFade = Math.min(1, localT * FREQUENCY * 1.5);
-
-        z += envelope * edgeFade * Math.sin(TWO_PI * FREQUENCY * localT);
-      }
-
-      dot.z = z;
-    }
-
-    // Zero out letter-masked dots
-    for (let i = 0; i < dots.length; i++) {
-      if (letterMask[i]) dots[i].z = 0;
-    }
-
-    for (let i = 0; i < dots.length; i++) {
-      if (letterMask[i]) continue;
-      const dot = dots[i];
-      const absZ = Math.abs(dot.z);
-      const size = DOT_BASE + absZ * 0.12;
-      const drawY = dot.y - dot.z * 0.6;
-      const intensity = Math.min(1, absZ / 12);
-      const r = Math.round(30 + intensity * 100);
-      const g = Math.round(55 + intensity * 180);
-      const b = Math.round(90 + intensity * 165);
-      const alpha = 0.35 + intensity * 0.65;
-
-      ctx.beginPath();
-      ctx.arc(dot.x, drawY, size, 0, TWO_PI);
-      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
-      ctx.fill();
-
-      if (absZ > 4) {
-        ctx.beginPath();
-        ctx.arc(dot.x, drawY, size + absZ * 0.2, 0, TWO_PI);
-        ctx.fillStyle = `rgba(${r},${g},${b},${intensity * 0.15})`;
-        ctx.fill();
-      }
-    }
-
-    const threshold = 2.0;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const i = r * cols + c;
-        if (letterMask[i]) continue;
-        const d = dots[i];
-        if (Math.abs(d.z) < threshold) continue;
-
-        if (c < cols - 1 && !letterMask[i + 1]) {
-          const dr = dots[i + 1];
-          if (Math.abs(dr.z) >= threshold) {
-            const lineAlpha = Math.min(0.25, (Math.abs(d.z) + Math.abs(dr.z)) / 80);
-            ctx.beginPath();
-            ctx.moveTo(d.x, d.y - d.z * 0.6);
-            ctx.lineTo(dr.x, dr.y - dr.z * 0.6);
-            ctx.strokeStyle = `rgba(60,130,200,${lineAlpha})`;
-            ctx.lineWidth = 0.5;
-            ctx.stroke();
-          }
-        }
-        if (r < rows - 1 && !letterMask[i + cols]) {
-          const dd = dots[i + cols];
-          if (Math.abs(dd.z) >= threshold) {
-            const lineAlpha = Math.min(0.25, (Math.abs(d.z) + Math.abs(dd.z)) / 80);
-            ctx.beginPath();
-            ctx.moveTo(d.x, d.y - d.z * 0.6);
-            ctx.lineTo(dd.x, dd.y - dd.z * 0.6);
-            ctx.strokeStyle = `rgba(60,130,200,${lineAlpha})`;
-            ctx.lineWidth = 0.5;
-            ctx.stroke();
-          }
-        }
-      }
-    }
-
-    requestAnimationFrame(waveFrame);
+  function frame() {
+    simulate();
+    simulate(); // 2 substeps per frame for faster propagation
+    render();
+    requestAnimationFrame(frame);
   }
 
-  initWave();
-  addEventListener('resize', initWave);
-  requestAnimationFrame(waveFrame);
+  init();
+  addEventListener('resize', init);
+  requestAnimationFrame(frame);
 })();
 </script>
 
