@@ -19,16 +19,54 @@ let W, H, cols, rows, dots;
 
 const SPACING = 28;
 const DOT_BASE = 1.1;
-const WAVE_SPEED = 120;       // px per second
-const DAMPING = 0.92;         // per-frame amplitude decay
-const FREQUENCY = 3.5;        // wave oscillation Hz
-const WAVELENGTH = WAVE_SPEED / FREQUENCY;
+const C = 180;                // wave propagation speed (px/s)
+const DAMPING = 0.997;        // per-step velocity damping
 const TWO_PI = Math.PI * 2;
 
-// Each dot stores its displacement (z) and velocity
-// Waves are stored separately and dots sum contributions
+let letterMask = null; // boolean grid: true = inside letter (pinned boundary)
 
-let waves = []; // { x, y, t0, amplitude }
+function buildLetterMask() {
+  // Render "M Z" to offscreen canvas and sample at dot positions
+  const offscreen = document.createElement('canvas');
+  offscreen.width = W;
+  offscreen.height = H;
+  const octx = offscreen.getContext('2d');
+
+  // Size letters to ~quarter of page height
+  const fontSize = Math.min(H * 0.28, W * 0.22);
+  octx.font = `100 ${fontSize}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  octx.textAlign = 'center';
+  octx.textBaseline = 'middle';
+  octx.fillStyle = '#fff';
+
+  // Measure and draw M and Z with a gap
+  const gap = fontSize * 0.15;
+  const mWidth = octx.measureText('M').width;
+  const zWidth = octx.measureText('Z').width;
+  const totalWidth = mWidth + gap + zWidth;
+
+  const cx = W / 2;
+  const cy = H / 2;
+
+  octx.fillText('M', cx - totalWidth / 2 + mWidth / 2, cy);
+  octx.fillText('Z', cx + totalWidth / 2 - zWidth / 2, cy);
+
+  // Sample the mask at each dot position
+  const imageData = octx.getImageData(0, 0, W, H);
+  const data = imageData.data;
+
+  letterMask = new Array(dots.length);
+  for (let i = 0; i < dots.length; i++) {
+    const px = Math.round(dots[i].x);
+    const py = Math.round(dots[i].y);
+    if (px >= 0 && px < W && py >= 0 && py < H) {
+      const idx = (py * W + px) * 4;
+      letterMask[i] = data[idx + 3] > 128; // alpha threshold
+    } else {
+      letterMask[i] = false;
+    }
+  }
+}
 
 function init() {
   W = canvas.width = innerWidth;
@@ -36,7 +74,6 @@ function init() {
   cols = Math.ceil(W / SPACING) + 2;
   rows = Math.ceil(H / SPACING) + 2;
 
-  // Offset to center the grid
   const ox = (W - (cols - 1) * SPACING) / 2;
   const oy = (H - (rows - 1) * SPACING) / 2;
 
@@ -46,27 +83,35 @@ function init() {
       dots.push({
         x: ox + c * SPACING,
         y: oy + r * SPACING,
-        z: 0,        // current displacement
-        prevZ: 0,    // for velocity-based rendering
+        z: 0,
+        vz: 0,
+        prevZ: 0,
       });
     }
   }
+
+  buildLetterMask();
 }
 
 function spawnWave(x, y) {
-  waves.push({
-    x, y,
-    t0: performance.now() / 1000,
-    amplitude: 10,
-  });
-  // Cap active waves to prevent slowdown
-  if (waves.length > 12) waves.shift();
+  // Inject a Gaussian pulse into the grid
+  const radius = 60;
+  const amp = 12;
+  for (let i = 0; i < dots.length; i++) {
+    if (letterMask[i]) continue;
+    const dx = dots[i].x - x;
+    const dy = dots[i].y - y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < radius * radius) {
+      const falloff = Math.exp(-d2 / (radius * 12));
+      dots[i].vz += amp * falloff;
+    }
+  }
 }
 
 canvas.addEventListener('click', e => spawnWave(e.clientX, e.clientY));
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-// Touch support
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   for (const t of e.changedTouches) spawnWave(t.clientX, t.clientY);
@@ -76,114 +121,117 @@ let lastTime = performance.now() / 1000;
 
 function frame(now) {
   now /= 1000;
-  const dt = Math.min(now - lastTime, 0.05);
+  let dt = Math.min(now - lastTime, 0.033);
   lastTime = now;
 
   ctx.fillStyle = '#0a0e1a';
   ctx.fillRect(0, 0, W, H);
 
-  // Prune dead waves (amplitude negligible after ~4 seconds)
-  waves = waves.filter(w => (now - w.t0) < 10);
+  // --- Wave equation simulation ---
+  // Sub-step for stability
+  const subSteps = 3;
+  const sdt = dt / subSteps;
+  const c2 = (C * C) / (SPACING * SPACING);
 
-  // Compute each dot's displacement from superposition of all active waves
-  for (const dot of dots) {
-    dot.prevZ = dot.z;
-    let z = 0;
+  for (let s = 0; s < subSteps; s++) {
+    // Compute Laplacian and update velocities
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        if (letterMask[i]) continue; // pinned boundary
 
-    for (const wave of waves) {
-      const dx = dot.x - wave.x;
-      const dy = dot.y - wave.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+        const z = dots[i].z;
+        // Neighbors (Neumann boundary: clamp at edges)
+        const zL = c > 0 ? dots[i - 1].z : z;
+        const zR = c < cols - 1 ? dots[i + 1].z : z;
+        const zU = r > 0 ? dots[i - cols].z : z;
+        const zD = r < rows - 1 ? dots[i + cols].z : z;
 
-      const elapsed = now - wave.t0;
-      const wavefront = elapsed * WAVE_SPEED;
-
-      // Only affect dots the wavefront has reached
-      if (dist > wavefront + WAVELENGTH * 0.5) continue;
-
-      // How long ago the wave passed this point
-      const localT = elapsed - dist / WAVE_SPEED;
-      if (localT < 0) continue;
-
-      // Realistic damped sinusoidal wave
-      // Amplitude falls off with 1/sqrt(r) (2D circular wave) and exponential time decay
-      const spatialFalloff = 1 / Math.max(1, Math.sqrt(dist / 30));
-      const timeDamping = Math.exp(-localT * 1.6);
-      const envelope = wave.amplitude * spatialFalloff * timeDamping;
-
-      // Leading edge fade-in (smooth wavefront)
-      const edgeFade = Math.min(1, localT * FREQUENCY * 1.5);
-
-      z += envelope * edgeFade * Math.sin(TWO_PI * FREQUENCY * localT);
+        const laplacian = zL + zR + zU + zD - 4 * z;
+        dots[i].vz += c2 * laplacian * sdt;
+        dots[i].vz *= DAMPING;
+      }
     }
 
-    dot.z = z;
+    // Update positions
+    for (let i = 0; i < dots.length; i++) {
+      if (letterMask[i]) {
+        dots[i].z = 0;
+        dots[i].vz = 0;
+        continue;
+      }
+      dots[i].z += dots[i].vz * sdt;
+    }
   }
 
-  // Render dots
-  for (const dot of dots) {
+  // --- Render dots ---
+  for (let i = 0; i < dots.length; i++) {
+    const dot = dots[i];
+    const isLetter = letterMask[i];
     const z = dot.z;
     const absZ = Math.abs(z);
 
-    // Size: base + displacement
-    const size = DOT_BASE + absZ * 0.12;
+    const size = DOT_BASE + absZ * 0.1;
+    const drawY = dot.y - z * 0.5;
 
-    // Vertical offset (3D perspective — dots move up when displaced)
-    const drawY = dot.y - z * 0.6;
+    let r, g, b, alpha;
 
-    // Color: cool blue base, shifts toward white/cyan on peaks
-    const intensity = Math.min(1, absZ / 12);
-    const r = Math.round(30 + intensity * 100);
-    const g = Math.round(55 + intensity * 180);
-    const b = Math.round(90 + intensity * 165);
-    const alpha = 0.35 + intensity * 0.65;
+    if (isLetter) {
+      // Letter dots: subtle warm white, slightly larger
+      r = 160; g = 170; b = 190;
+      alpha = 0.18;
+    } else {
+      const intensity = Math.min(1, absZ / 10);
+      r = Math.round(30 + intensity * 100);
+      g = Math.round(55 + intensity * 180);
+      b = Math.round(90 + intensity * 165);
+      alpha = 0.35 + intensity * 0.65;
+    }
 
     ctx.beginPath();
-    ctx.arc(dot.x, drawY, size, 0, TWO_PI);
+    ctx.arc(dot.x, drawY, isLetter ? DOT_BASE * 0.9 : size, 0, TWO_PI);
     ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
     ctx.fill();
 
-    // Glow on high displacement
-    if (absZ > 4) {
+    // Glow on high displacement (non-letter only)
+    if (!isLetter && absZ > 3) {
       ctx.beginPath();
-      ctx.arc(dot.x, drawY, size + absZ * 0.2, 0, TWO_PI);
-      ctx.fillStyle = `rgba(${r},${g},${b},${intensity * 0.15})`;
+      ctx.arc(dot.x, drawY, size + absZ * 0.18, 0, TWO_PI);
+      ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, absZ / 10) * 0.12})`;
       ctx.fill();
     }
   }
 
-  // Subtle connection lines between neighbors when both displaced
-  // Only render horizontal/vertical for performance
-  const threshold = 2.5;
+  // Connection lines between displaced neighbors
+  const threshold = 2.0;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = r * cols + c;
+      if (letterMask[i]) continue;
       const d = dots[i];
       if (Math.abs(d.z) < threshold) continue;
 
-      // Right neighbor
-      if (c < cols - 1) {
+      if (c < cols - 1 && !letterMask[i + 1]) {
         const dr = dots[i + 1];
         if (Math.abs(dr.z) >= threshold) {
           const avgZ = (Math.abs(d.z) + Math.abs(dr.z)) / 2;
           const lineAlpha = Math.min(0.25, avgZ / 40);
           ctx.beginPath();
-          ctx.moveTo(d.x, d.y - d.z * 0.6);
-          ctx.lineTo(dr.x, dr.y - dr.z * 0.6);
+          ctx.moveTo(d.x, d.y - d.z * 0.5);
+          ctx.lineTo(dr.x, dr.y - dr.z * 0.5);
           ctx.strokeStyle = `rgba(60,130,200,${lineAlpha})`;
           ctx.lineWidth = 0.5;
           ctx.stroke();
         }
       }
-      // Down neighbor
-      if (r < rows - 1) {
+      if (r < rows - 1 && !letterMask[i + cols]) {
         const dd = dots[i + cols];
         if (Math.abs(dd.z) >= threshold) {
           const avgZ = (Math.abs(d.z) + Math.abs(dd.z)) / 2;
           const lineAlpha = Math.min(0.25, avgZ / 40);
           ctx.beginPath();
-          ctx.moveTo(d.x, d.y - d.z * 0.6);
-          ctx.lineTo(dd.x, dd.y - dd.z * 0.6);
+          ctx.moveTo(d.x, d.y - d.z * 0.5);
+          ctx.lineTo(dd.x, dd.y - dd.z * 0.5);
           ctx.strokeStyle = `rgba(60,130,200,${lineAlpha})`;
           ctx.lineWidth = 0.5;
           ctx.stroke();
