@@ -84,7 +84,7 @@
   scene.add(gridHelper);
 
   // Finer sub-grid
-  const subGrid = new THREE.GridHelper(20, 200, 0x091830, 0x091830);
+  const subGrid = new THREE.GridHelper(20, 80, 0x091830, 0x091830);
   subGrid.position.y = -2.49;
   scene.add(subGrid);
 
@@ -802,6 +802,7 @@
   }, { passive: true });
 
   let bloomTime = 0;
+  let animationDone = false;
 
   // === Resize ===
   window.addEventListener('resize', () => {
@@ -834,12 +835,25 @@
     const bloomOpen = easeInOut(clamp01((bloomProgress - 0.4) * 2.0));
     const fullBloom = easeInOut(clamp01((bloomProgress - 0.7) * 3.3));
 
-    // Build geometry each frame (wireframe rebuilds are cheap)
-    const headPos = buildStem(stemGrow);
-    buildLeaves(stemGrow);
-    buildFlowerHead(headPos, bloomOpen, fullBloom, budForm);
-    buildAnnotations(stemGrow, headPos.y);
-    buildSeedlings(bloomProgress);
+    // Only rebuild geometry while animating; once done, use group transforms for sway
+    if (!animationDone) {
+      const headPos = buildStem(stemGrow);
+      buildLeaves(stemGrow);
+      buildFlowerHead(headPos, bloomOpen, fullBloom, budForm);
+      buildAnnotations(stemGrow, headPos.y);
+      buildSeedlings(bloomProgress);
+
+      // Check if all animations are complete
+      const lastSeedlingEnd = EXTRA_SEEDLING_DELAY + (EXTRA_SEEDLING_COUNT - 1) * EXTRA_SEEDLING_STAGGER + 1.2;
+      if (bloomTime > lastSeedlingEnd && bloomProgress >= 1) {
+        animationDone = true;
+      }
+    }
+
+    // Gentle sway via group rotation (no geometry rebuild needed)
+    const swayAngle = Math.sin(elapsed * 0.6) * 0.02;
+    flower.rotation.x = swayAngle;
+    seedlingsGroup.rotation.x = swayAngle * 0.5;
 
     // Camera orbit with gentle auto-rotation
     if (!isDragging && !prefersReduced) {
