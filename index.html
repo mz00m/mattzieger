@@ -116,7 +116,7 @@
 
     if (growT <= 0) return { x: 0, y: -2.5, z: 0 };
 
-    const stemHeight = 4.5 * growT;
+    const stemHeight = 3.5 * growT;
     const points = [];
     const segments = 40;
     for (let i = 0; i <= segments; i++) {
@@ -547,81 +547,120 @@
 
       const groundY = -2.5;
       const sproutH = sd.height * growT;
-      const sway = Math.sin(elapsed * 0.9 + i * 2) * 0.03 * growT;
+      const sway = Math.sin(elapsed * 0.9 + i * 2) * 0.02 * growT;
+      const lineCol = sd.url ? BRIGHT_COLOR : LINE_COLOR;
 
       const sproutGroup = new THREE.Group();
       sproutGroup.position.set(sd.x, groundY, sd.z);
+      // Rotate each seedling to face a random direction
+      sproutGroup.rotation.y = sd.leafAngle;
       seedlingsGroup.add(sproutGroup);
 
-      // Tiny stem
+      // Curved stem — starts underground, arcs upward like a real sprout
       const stemPts = [];
-      const steps = 12;
+      const steps = 20;
       for (let j = 0; j <= steps; j++) {
         const t = j / steps;
-        const y = sproutH * t;
-        const x = Math.sin(t * Math.PI) * sway;
-        stemPts.push(new THREE.Vector3(x, y, 0));
+        // Hypocotyl arch: starts bent, straightens as it grows
+        const archBend = Math.max(0, 1 - growT * 1.5) * 0.6;
+        const y = sproutH * (t - archBend * Math.sin(t * Math.PI) * 0.3);
+        const x = sway + Math.sin(t * Math.PI) * archBend * sproutH * 0.4;
+        const z = 0;
+        stemPts.push(new THREE.Vector3(x, y, z));
       }
       sproutGroup.add(new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(stemPts),
-        lineMat(sd.url ? BRIGHT_COLOR : LINE_COLOR, 0.6 + growT * 0.4)
+        lineMat(lineCol, 0.6 + growT * 0.4)
       ));
 
-      // Two tiny cotyledon leaves at the top
-      if (growT > 0.4) {
-        const leafT = clamp01((growT - 0.4) / 0.6);
-        const topY = sproutH;
-        const topX = Math.sin(Math.PI) * sway;
-        const leafSize = 0.15 * leafT;
+      // Cotyledon leaves — two rounded leaves that open outward from the tip
+      if (growT > 0.3) {
+        const leafT = clamp01((growT - 0.3) / 0.7);
+        const tipPt = stemPts[stemPts.length - 1];
+        const leafLen = 0.12 + 0.06 * leafT;
+        const leafW = 0.07 + 0.04 * leafT;
+        // Spread angle: leaves start closed (pointing up) and open outward
+        const spreadAngle = leafT * 1.1; // radians from vertical
 
         for (let side = -1; side <= 1; side += 2) {
           const leafPts = [];
-          const leafSteps = 12;
-          // Simple teardrop leaf
+          const leafSteps = 16;
+          // Rounded oval cotyledon shape
           for (let j = 0; j <= leafSteps; j++) {
             const t = j / leafSteps;
-            const a = t * Math.PI;
-            const lx = topX + Math.cos(sd.leafAngle + side * 0.8) * Math.sin(a) * leafSize;
-            const ly = topY + Math.sin(a) * leafSize * 0.5;
-            const lz = Math.sin(sd.leafAngle + side * 0.8) * Math.sin(a) * leafSize;
+            const a = t * Math.PI * 2;
+            // Oval: wider in middle, pointed at tip and base
+            const along = Math.sin(a) * leafLen; // along the leaf axis
+            const across = Math.sin(a) * Math.sin(t * Math.PI) * leafW; // width bulge
+
+            // Rotate leaf outward by spreadAngle on the side axis
+            const lx = tipPt.x + side * (Math.sin(spreadAngle) * along + Math.cos(spreadAngle) * across * 0.3);
+            const ly = tipPt.y + Math.cos(spreadAngle) * along - Math.sin(spreadAngle) * Math.abs(across) * 0.2;
+            const lz = tipPt.z + across;
             leafPts.push(new THREE.Vector3(lx, ly, lz));
           }
           sproutGroup.add(new THREE.Line(
             new THREE.BufferGeometry().setFromPoints(leafPts),
-            lineMat(sd.url ? BRIGHT_COLOR : LINE_COLOR, 0.5 * leafT)
+            lineMat(lineCol, 0.55 * leafT + 0.25)
           ));
 
-          // Leaf vein
-          const veinStart = new THREE.Vector3(topX, topY, 0);
-          const veinEnd = new THREE.Vector3(
-            topX + Math.cos(sd.leafAngle + side * 0.8) * leafSize * 0.7,
-            topY + leafSize * 0.25,
-            Math.sin(sd.leafAngle + side * 0.8) * leafSize * 0.7
+          // Tiny leaf vein (midrib)
+          const vMid = new THREE.Vector3(
+            tipPt.x + side * Math.sin(spreadAngle) * leafLen * 0.75,
+            tipPt.y + Math.cos(spreadAngle) * leafLen * 0.75,
+            tipPt.z
           );
           sproutGroup.add(new THREE.Line(
-            new THREE.BufferGeometry().setFromPoints([veinStart, veinEnd]),
-            lineMat(DIM_COLOR, 0.3 * leafT)
+            new THREE.BufferGeometry().setFromPoints([tipPt.clone(), vMid]),
+            lineMat(DIM_COLOR, 0.35 * leafT)
           ));
         }
 
-        // Small ground circle at base (blueprint datum)
-        if (growT > 0.2) {
-          const cPts = [];
-          const r = 0.06 * growT;
-          for (let j = 0; j <= 16; j++) {
-            const a = (j / 16) * Math.PI * 2;
-            cPts.push(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r));
+        // Tiny seed shell splitting open at the base of cotyledons (detail)
+        if (growT > 0.5) {
+          const shellT = clamp01((growT - 0.5) / 0.5);
+          const shellPts = [];
+          const shellR = 0.04;
+          const shellOpen = shellT * 0.4;
+          for (let j = 0; j <= 8; j++) {
+            const a = (j / 8) * Math.PI - Math.PI * 0.5; // half-circle
+            shellPts.push(new THREE.Vector3(
+              tipPt.x + Math.cos(a) * shellR + shellOpen * 0.03,
+              tipPt.y + Math.sin(a) * shellR * 0.5 - 0.02,
+              tipPt.z
+            ));
           }
           sproutGroup.add(new THREE.Line(
-            new THREE.BufferGeometry().setFromPoints(cPts),
-            lineMat(DIM_COLOR, 0.3 * growT)
+            new THREE.BufferGeometry().setFromPoints(shellPts),
+            lineMat(DIM_COLOR, 0.3 * shellT)
           ));
         }
       }
 
+      // Small ground disturbance — dirt pushing up
+      if (growT > 0.1) {
+        const dirtT = clamp01(growT / 0.5);
+        const dirtPts = [];
+        const dirtR = 0.08 * dirtT;
+        for (let j = 0; j <= 10; j++) {
+          const a = (j / 10) * Math.PI * 2;
+          const bump = 1 + Math.sin(j * 1.5) * 0.3;
+          dirtPts.push(new THREE.Vector3(
+            Math.cos(a) * dirtR * bump,
+            Math.sin(a * 2) * 0.01 * dirtT,
+            Math.sin(a) * dirtR * bump
+          ));
+        }
+        dirtPts.push(dirtPts[0].clone());
+        sproutGroup.add(new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(dirtPts),
+          lineMat(DIM_COLOR, 0.25 * dirtT)
+        ));
+      }
+
       // Invisible hitbox for raycasting (only for linked seedlings)
       if (sd.url && growT > 0.3) {
-        const hitGeo = new THREE.CylinderGeometry(0.2, 0.2, sproutH + 0.3, 8);
+        const hitGeo = new THREE.CylinderGeometry(0.22, 0.22, sproutH + 0.4, 8);
         const hitMat = new THREE.MeshBasicMaterial({ visible: false });
         const hitMesh = new THREE.Mesh(hitGeo, hitMat);
         hitMesh.position.set(sd.x, groundY + sproutH * 0.5, sd.z);
