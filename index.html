@@ -537,13 +537,14 @@
 
     // Generate extra decorative seedlings further out
     for (let i = 0; i < EXTRA_SEEDLING_COUNT; i++) {
-      const angle = (i / EXTRA_SEEDLING_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+      const angle = Math.random() * Math.PI * 2; // fully random direction
       const dist = 2.8 + Math.random() * 5.0; // spread across a wide area
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
 
       seedlingData.push({
         x, z,
+        dist, // store distance for color fading
         angle: angle,
         url: null,
         label: null,
@@ -568,9 +569,9 @@
         // Easing stagger: fast at first, slowing down over time
         const ei = i - SEEDLING_COUNT;
         const t = ei / (EXTRA_SEEDLING_COUNT - 1); // 0..1
-        // Quadratic ease-in: later seedlings take progressively longer
-        const maxTime = 40; // total seconds for all extra seedlings
-        seedlingStart = EXTRA_SEEDLING_DELAY + t * t * maxTime;
+        // Cubic ease-in: later seedlings appear much more slowly
+        const maxTime = 60; // total seconds for all extra seedlings
+        seedlingStart = EXTRA_SEEDLING_DELAY + t * t * t * maxTime;
       } else {
         seedlingStart = SEEDLING_DELAY + i * SEEDLING_STAGGER;
       }
@@ -580,7 +581,19 @@
       const groundY = -2.5;
       const sproutH = sd.height * growT;
       const sway = Math.sin(elapsed * 0.9 + i * 2) * 0.02 * growT;
-      const lineCol = sd.url ? BRIGHT_COLOR : (sd.isExtra ? DIM_COLOR : LINE_COLOR);
+      let lineCol;
+      if (sd.url) {
+        lineCol = BRIGHT_COLOR;
+      } else if (sd.isExtra && sd.dist) {
+        // Fade color toward background as distance increases
+        const fadeFactor = clamp01((sd.dist - 2.8) / 5.0); // 0 at closest, 1 at farthest
+        const baseColor = new THREE.Color(DIM_COLOR);
+        const fadeColor = new THREE.Color(0x0a1a2a); // very dark blue, near background
+        baseColor.lerp(fadeColor, fadeFactor * 0.8);
+        lineCol = baseColor;
+      } else {
+        lineCol = LINE_COLOR;
+      }
 
       const sproutGroup = new THREE.Group();
       sproutGroup.position.set(sd.x, groundY, sd.z);
@@ -602,45 +615,58 @@
       }
       sproutGroup.add(new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(stemPts),
-        lineMat(lineCol, sd.url ? 0.8 + growT * 0.2 : (sd.isExtra ? 0.35 + growT * 0.25 : 0.6 + growT * 0.4))
+        lineMat(lineCol, sd.url ? 0.8 + growT * 0.2 : (sd.isExtra ? (0.35 + growT * 0.25) * (1 - (sd.dist ? clamp01((sd.dist - 2.8) / 5.0) * 0.5 : 0)) : 0.6 + growT * 0.4))
       ));
 
       // Cotyledon leaves — two rounded leaves that open outward from the tip
       if (growT > 0.3) {
         const leafT = clamp01((growT - 0.3) / 0.7);
         const tipPt = stemPts[stemPts.length - 1];
-        const leafLen = 0.12 + 0.06 * leafT;
-        const leafW = 0.07 + 0.04 * leafT;
+        const leafLen = 0.16 + 0.08 * leafT;
+        const leafW = leafLen * 0.35 * leafT; // wider, more like real leaves
         // Spread angle: leaves start closed (pointing up) and open outward
-        const spreadAngle = leafT * 1.1; // radians from vertical
+        const spreadAngle = leafT * 1.2; // radians from vertical
 
         for (let side = -1; side <= 1; side += 2) {
           const leafPts = [];
-          const leafSteps = 16;
-          // Rounded oval cotyledon shape
-          for (let j = 0; j <= leafSteps; j++) {
-            const t = j / leafSteps;
-            const a = t * Math.PI * 2;
-            // Oval: wider in middle, pointed at tip and base
-            const along = Math.sin(a) * leafLen; // along the leaf axis
-            const across = Math.sin(a) * Math.sin(t * Math.PI) * leafW; // width bulge
+          const leafSteps = 20;
 
-            // Rotate leaf outward by spreadAngle on the side axis
+          // Top edge — sinusoidal bulge like the flower leaves
+          for (let j = 0; j <= leafSteps; j++) {
+            const lt = j / leafSteps;
+            const along = lt * leafLen;
+            const across = Math.sin(lt * Math.PI) * leafW;
+
+            // Rotate leaf outward by spreadAngle
+            const lx = tipPt.x + side * (Math.sin(spreadAngle) * along + Math.cos(spreadAngle) * across * 0.3);
+            const ly = tipPt.y + Math.cos(spreadAngle) * along - Math.sin(spreadAngle) * across * 0.2;
+            const lz = tipPt.z + across;
+            leafPts.push(new THREE.Vector3(lx, ly, lz));
+          }
+          // Bottom edge (reverse) — narrower underside like the flower leaves
+          for (let j = leafSteps; j >= 0; j--) {
+            const lt = j / leafSteps;
+            const along = lt * leafLen;
+            const across = -Math.sin(lt * Math.PI) * leafW * 0.55;
+
             const lx = tipPt.x + side * (Math.sin(spreadAngle) * along + Math.cos(spreadAngle) * across * 0.3);
             const ly = tipPt.y + Math.cos(spreadAngle) * along - Math.sin(spreadAngle) * Math.abs(across) * 0.2;
             const lz = tipPt.z + across;
             leafPts.push(new THREE.Vector3(lx, ly, lz));
           }
+          // Close the leaf shape
+          leafPts.push(leafPts[0].clone());
+
           sproutGroup.add(new THREE.Line(
             new THREE.BufferGeometry().setFromPoints(leafPts),
             lineMat(lineCol, 0.55 * leafT + 0.25)
           ));
 
-          // Tiny leaf vein (midrib)
+          // Midrib vein like the flower leaves
           const vMid = new THREE.Vector3(
-            tipPt.x + side * Math.sin(spreadAngle) * leafLen * 0.75,
-            tipPt.y + Math.cos(spreadAngle) * leafLen * 0.75,
-            tipPt.z
+            tipPt.x + side * Math.sin(spreadAngle) * leafLen * 0.85,
+            tipPt.y + Math.cos(spreadAngle) * leafLen * 0.85,
+            tipPt.z + 0.01 * leafT
           );
           sproutGroup.add(new THREE.Line(
             new THREE.BufferGeometry().setFromPoints([tipPt.clone(), vMid]),
@@ -851,7 +877,7 @@
       buildSeedlings(bloomProgress);
 
       // Check if all animations are complete
-      const lastSeedlingEnd = EXTRA_SEEDLING_DELAY + 40 + 1.2; // matches quadratic easing maxTime
+      const lastSeedlingEnd = EXTRA_SEEDLING_DELAY + 60 + 1.2; // matches cubic easing maxTime
       if (bloomTime > lastSeedlingEnd && bloomProgress >= 1) {
         animationDone = true;
       }
