@@ -484,9 +484,8 @@
   const SEEDLING_COUNT = 5;
   const SEEDLING_DELAY = 1.5; // seconds after bloom starts — sprout alongside the flower
   const SEEDLING_STAGGER = 1.8; // seconds between each seedling popping up
-  const EXTRA_SEEDLING_COUNT = 15; // additional decorative seedlings
+  const EXTRA_SEEDLING_COUNT = 120; // additional decorative seedlings
   const EXTRA_SEEDLING_DELAY = SEEDLING_DELAY + SEEDLING_COUNT * SEEDLING_STAGGER; // start right after the first 5
-  const EXTRA_SEEDLING_STAGGER = 0.25; // seconds between each extra seedling
   const seedlingsGroup = new THREE.Group();
   scene.add(seedlingsGroup);
 
@@ -538,8 +537,8 @@
 
     // Generate extra decorative seedlings further out
     for (let i = 0; i < EXTRA_SEEDLING_COUNT; i++) {
-      const angle = (i / EXTRA_SEEDLING_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
-      const dist = 3.2 + Math.random() * 2.0; // further out from the flower
+      const angle = (i / EXTRA_SEEDLING_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+      const dist = 2.8 + Math.random() * 5.0; // spread across a wide area
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
 
@@ -564,9 +563,17 @@
     for (let i = 0; i < seedlingData.length; i++) {
       const sd = seedlingData[i];
       // Staggered appearance — extra seedlings use their own delay
-      const seedlingStart = sd.isExtra
-        ? EXTRA_SEEDLING_DELAY + (i - SEEDLING_COUNT) * EXTRA_SEEDLING_STAGGER
-        : SEEDLING_DELAY + i * SEEDLING_STAGGER;
+      let seedlingStart;
+      if (sd.isExtra) {
+        // Easing stagger: fast at first, slowing down over time
+        const ei = i - SEEDLING_COUNT;
+        const t = ei / (EXTRA_SEEDLING_COUNT - 1); // 0..1
+        // Quadratic ease-in: later seedlings take progressively longer
+        const maxTime = 40; // total seconds for all extra seedlings
+        seedlingStart = EXTRA_SEEDLING_DELAY + t * t * maxTime;
+      } else {
+        seedlingStart = SEEDLING_DELAY + i * SEEDLING_STAGGER;
+      }
       const growT = easeInOut(clamp01((bloomTime - seedlingStart) / 1.2));
       if (growT <= 0) continue;
 
@@ -844,7 +851,7 @@
       buildSeedlings(bloomProgress);
 
       // Check if all animations are complete
-      const lastSeedlingEnd = EXTRA_SEEDLING_DELAY + (EXTRA_SEEDLING_COUNT - 1) * EXTRA_SEEDLING_STAGGER + 1.2;
+      const lastSeedlingEnd = EXTRA_SEEDLING_DELAY + 40 + 1.2; // matches quadratic easing maxTime
       if (bloomTime > lastSeedlingEnd && bloomProgress >= 1) {
         animationDone = true;
       }
