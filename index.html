@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Blueprint Bloom</title>
+<title>Matt Zieger</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { overflow: hidden; background: #071222; }
@@ -481,8 +481,8 @@
 
   // === Seedlings ===
   const SEEDLING_COUNT = 5;
-  const SEEDLING_DELAY = 12; // seconds after bloom starts before seedlings appear
-  const SEEDLING_STAGGER = 0.8; // seconds between each seedling popping up
+  const SEEDLING_DELAY = 1.5; // seconds after bloom starts — sprout alongside the flower
+  const SEEDLING_STAGGER = 1.8; // seconds between each seedling popping up
   const seedlingsGroup = new THREE.Group();
   scene.add(seedlingsGroup);
 
@@ -517,7 +517,7 @@
 
     for (let i = 0; i < SEEDLING_COUNT; i++) {
       const angle = baseAngles[i];
-      const dist = 1.2 + Math.random() * 0.8; // distance from center
+      const dist = 1.8 + Math.random() * 1.2; // distance from center — more spread out
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
 
@@ -542,7 +542,7 @@
       const sd = seedlingData[i];
       // Staggered appearance
       const seedlingStart = SEEDLING_DELAY + i * SEEDLING_STAGGER;
-      const growT = easeInOut(clamp01((bloomTime - seedlingStart) / 2.0));
+      const growT = easeInOut(clamp01((bloomTime - seedlingStart) / 1.2));
       if (growT <= 0) continue;
 
       const groundY = -2.5;
