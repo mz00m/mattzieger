@@ -622,38 +622,51 @@
       if (growT > 0.3) {
         const leafT = clamp01((growT - 0.3) / 0.7);
         const tipPt = stemPts[stemPts.length - 1];
-        const leafLen = 0.12 + 0.06 * leafT;
-        const leafW = 0.07 + 0.04 * leafT;
+        const leafLen = 0.16 + 0.08 * leafT;
+        const leafW = leafLen * 0.35 * leafT; // wider, more like real leaves
         // Spread angle: leaves start closed (pointing up) and open outward
-        const spreadAngle = leafT * 1.1; // radians from vertical
+        const spreadAngle = leafT * 1.2; // radians from vertical
 
         for (let side = -1; side <= 1; side += 2) {
           const leafPts = [];
-          const leafSteps = 16;
-          // Rounded oval cotyledon shape
-          for (let j = 0; j <= leafSteps; j++) {
-            const t = j / leafSteps;
-            const a = t * Math.PI * 2;
-            // Oval: wider in middle, pointed at tip and base
-            const along = Math.sin(a) * leafLen; // along the leaf axis
-            const across = Math.sin(a) * Math.sin(t * Math.PI) * leafW; // width bulge
+          const leafSteps = 20;
 
-            // Rotate leaf outward by spreadAngle on the side axis
+          // Top edge — sinusoidal bulge like the flower leaves
+          for (let j = 0; j <= leafSteps; j++) {
+            const lt = j / leafSteps;
+            const along = lt * leafLen;
+            const across = Math.sin(lt * Math.PI) * leafW;
+
+            // Rotate leaf outward by spreadAngle
+            const lx = tipPt.x + side * (Math.sin(spreadAngle) * along + Math.cos(spreadAngle) * across * 0.3);
+            const ly = tipPt.y + Math.cos(spreadAngle) * along - Math.sin(spreadAngle) * across * 0.2;
+            const lz = tipPt.z + across;
+            leafPts.push(new THREE.Vector3(lx, ly, lz));
+          }
+          // Bottom edge (reverse) — narrower underside like the flower leaves
+          for (let j = leafSteps; j >= 0; j--) {
+            const lt = j / leafSteps;
+            const along = lt * leafLen;
+            const across = -Math.sin(lt * Math.PI) * leafW * 0.55;
+
             const lx = tipPt.x + side * (Math.sin(spreadAngle) * along + Math.cos(spreadAngle) * across * 0.3);
             const ly = tipPt.y + Math.cos(spreadAngle) * along - Math.sin(spreadAngle) * Math.abs(across) * 0.2;
             const lz = tipPt.z + across;
             leafPts.push(new THREE.Vector3(lx, ly, lz));
           }
+          // Close the leaf shape
+          leafPts.push(leafPts[0].clone());
+
           sproutGroup.add(new THREE.Line(
             new THREE.BufferGeometry().setFromPoints(leafPts),
             lineMat(lineCol, 0.55 * leafT + 0.25)
           ));
 
-          // Tiny leaf vein (midrib)
+          // Midrib vein like the flower leaves
           const vMid = new THREE.Vector3(
-            tipPt.x + side * Math.sin(spreadAngle) * leafLen * 0.75,
-            tipPt.y + Math.cos(spreadAngle) * leafLen * 0.75,
-            tipPt.z
+            tipPt.x + side * Math.sin(spreadAngle) * leafLen * 0.85,
+            tipPt.y + Math.cos(spreadAngle) * leafLen * 0.85,
+            tipPt.z + 0.01 * leafT
           );
           sproutGroup.add(new THREE.Line(
             new THREE.BufferGeometry().setFromPoints([tipPt.clone(), vMid]),
