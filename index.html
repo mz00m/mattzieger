@@ -3,293 +3,572 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Matt Zieger</title>
+<title>Blueprint Bloom</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #2a2535; overflow: hidden; cursor: crosshair; }
-#wave-canvas {
-  display: block;
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-}
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background: #071222; }
+  canvas { display: block; }
+  #info {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    color: rgba(80,160,220,0.4); font-family: 'Courier New', monospace;
+    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    pointer-events: none; user-select: none;
+  }
 </style>
 </head>
 <body>
-<canvas id="wave-canvas"></canvas>
-
-<!-- Water surface simulation: Sargent watercolor style -->
+<div id="info">blueprint bloom &mdash; click to restart</div>
+<!-- Three.js r128 CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
+/*
+  Blueprint Bloom — A single flower drawn in technical blueprint style.
+  Dark navy background, light blue single-line wireframes, limited shading.
+  Interaction: drag to orbit, scroll to zoom, click to restart bloom.
+  Customize: PETAL_COUNT, BLOOM_DURATION, colors below.
+*/
+
 (function() {
-  const canvas = document.getElementById('wave-canvas');
-  const ctx = canvas.getContext('2d');
+  // === Config ===
+  const PETAL_COUNT = 5;
+  const INNER_PETAL_COUNT = 5;
+  const STAMEN_COUNT = 8;
+  const BLOOM_DURATION = 10; // seconds for full bloom
+  const BG_COLOR = 0x071222;
+  const LINE_COLOR = 0x3c8ec8;
+  const BRIGHT_COLOR = 0x6cc0f0;
+  const DIM_COLOR = 0x1a4870;
+  const GRID_COLOR = 0x0e2040;
+  const WHITE_COLOR = 0xa8d8ff;
 
-  const SCALE = 3;
-  const DAMPING = 0.985;
-  const RIPPLE_RADIUS = 14;
-  const RIPPLE_STRENGTH = 200;
+  // === Scene setup ===
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(BG_COLOR);
+  scene.fog = new THREE.FogExp2(BG_COLOR, 0.025);
 
-  let W, H, simW, simH;
-  let buf1, buf2;
-  let noiseMap, noiseMap2;
+  const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 100);
+  camera.position.set(0, 2, 8);
 
-  const simCanvas = document.createElement('canvas');
-  const simCtx = simCanvas.getContext('2d');
-  let imageData, pixels;
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  document.body.appendChild(renderer.domElement);
 
-  // --- Sargent watercolor palette ---
-  // From "Venetian Canal" (amber/lavender) + "In a Levantine Port" (cerulean/teal)
-  // Each sub-array: [R, G, B]
-  const SHADOWS = [
-    [80, 68, 100],   // lavender shadow
-    [55, 62, 80],    // slate-violet
-    [45, 70, 78],    // deep teal shadow
-    [65, 55, 75],    // muted mauve
-    [50, 65, 72],    // dark aqua
-  ];
-  const MIDS = [
-    [95, 140, 165],  // cerulean blue
-    [80, 130, 135],  // teal-aquamarine
-    [110, 145, 140], // sage-aqua
-    [140, 115, 72],  // raw sienna
-    [120, 100, 65],  // warm ochre
-  ];
-  const LIGHTS = [
-    [210, 190, 130], // golden reflection
-    [225, 205, 155], // warm cream
-    [175, 195, 205], // pale cerulean
-    [240, 222, 175], // bright cream
-    [195, 210, 195], // pale aqua
-  ];
+  // === Lighting — subtle, blueprint feel ===
+  const keyLight = new THREE.DirectionalLight(0x4488cc, 0.8);
+  keyLight.position.set(3, 6, 4);
+  scene.add(keyLight);
 
-  function hash(x, y, seed) {
-    const v = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
-    return v - Math.floor(v); // always 0..1
+  const fillLight = new THREE.DirectionalLight(0x224466, 0.3);
+  fillLight.position.set(-4, 3, -2);
+  scene.add(fillLight);
+
+  const ambient = new THREE.AmbientLight(0x112244, 0.5);
+  scene.add(ambient);
+
+  // === Blueprint grid plane ===
+  const gridHelper = new THREE.GridHelper(20, 40, GRID_COLOR, GRID_COLOR);
+  gridHelper.position.y = -2.5;
+  scene.add(gridHelper);
+
+  // Finer sub-grid
+  const subGrid = new THREE.GridHelper(20, 200, 0x091830, 0x091830);
+  subGrid.position.y = -2.49;
+  scene.add(subGrid);
+
+  // === Flower group ===
+  const flower = new THREE.Group();
+  scene.add(flower);
+
+  // Line material factory
+  function lineMat(color, opacity) {
+    return new THREE.LineBasicMaterial({
+      color: color || LINE_COLOR,
+      transparent: true,
+      opacity: opacity !== undefined ? opacity : 1,
+      depthWrite: false
+    });
   }
 
-  function buildNoise() {
-    noiseMap = new Float32Array(simW * simH);
-    noiseMap2 = new Float32Array(simW * simH);
-    for (let y = 0; y < simH; y++) {
-      for (let x = 0; x < simW; x++) {
-        const i = y * simW + x;
-        // Two independent noise channels, each 0..1
-        noiseMap[i] = hash(x * 0.07, y * 0.07, 1.0) * 0.5
-                    + hash(x * 0.14, y * 0.14, 2.0) * 0.3
-                    + hash(x * 0.28, y * 0.28, 3.0) * 0.2;
-        noiseMap2[i] = hash(x * 0.09, y * 0.09, 10.0) * 0.5
-                     + hash(x * 0.18, y * 0.18, 20.0) * 0.3
-                     + hash(x * 0.36, y * 0.36, 30.0) * 0.2;
-      }
+  // === Build stem as a curve ===
+  const stemGroup = new THREE.Group();
+  flower.add(stemGroup);
+
+  function buildStem(growT) {
+    // Remove old
+    while (stemGroup.children.length) {
+      const c = stemGroup.children[0];
+      c.geometry && c.geometry.dispose();
+      c.material && c.material.dispose();
+      stemGroup.remove(c);
+    }
+
+    if (growT <= 0) return { x: 0, y: -2.5, z: 0 };
+
+    const stemHeight = 4.5 * growT;
+    const points = [];
+    const segments = 40;
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const y = -2.5 + stemHeight * t;
+      const sway = Math.sin(t * Math.PI) * 0.15 * Math.sin(elapsed * 0.6);
+      const x = sway;
+      const z = Math.sin(t * Math.PI * 0.5) * 0.05;
+      points.push(new THREE.Vector3(x, y, z));
+    }
+
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const line = new THREE.Line(geo, lineMat(LINE_COLOR, 0.9));
+    stemGroup.add(line);
+
+    const tip = points[points.length - 1];
+    return { x: tip.x, y: tip.y, z: tip.z };
+  }
+
+  // === Build a petal shape (wireframe bezier curves) ===
+  function createPetalGeo(length, width, openness) {
+    const pts = [];
+    const steps = 30;
+
+    // Left edge
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const y = t * length * openness;
+      const bulge = Math.sin(t * Math.PI);
+      const x = -width * 0.5 * bulge * openness;
+      const z = bulge * length * 0.08 * openness; // slight curvature
+      pts.push(new THREE.Vector3(x, y, z));
+    }
+    // Right edge (reverse)
+    for (let i = steps; i >= 0; i--) {
+      const t = i / steps;
+      const y = t * length * openness;
+      const bulge = Math.sin(t * Math.PI);
+      const x = width * 0.5 * bulge * openness;
+      const z = bulge * length * 0.08 * openness;
+      pts.push(new THREE.Vector3(x, y, z));
+    }
+    // Close
+    pts.push(pts[0].clone());
+
+    return new THREE.BufferGeometry().setFromPoints(pts);
+  }
+
+  // Central vein line
+  function createVeinGeo(length, openness) {
+    const pts = [];
+    const steps = 15;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      pts.push(new THREE.Vector3(0, t * length * openness * 0.9, Math.sin(t * Math.PI) * length * 0.04 * openness));
+    }
+    return new THREE.BufferGeometry().setFromPoints(pts);
+  }
+
+  // === Petal groups ===
+  const petalsOuter = new THREE.Group();
+  const petalsInner = new THREE.Group();
+  const sepalsGroup = new THREE.Group();
+  const stamensGroup = new THREE.Group();
+  const centerGroup = new THREE.Group();
+  flower.add(petalsOuter, petalsInner, sepalsGroup, stamensGroup, centerGroup);
+
+  function clearGroup(g) {
+    while (g.children.length) {
+      const c = g.children[0];
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) c.material.dispose();
+      g.remove(c);
     }
   }
 
-  function init() {
-    W = canvas.width = innerWidth;
-    H = canvas.height = innerHeight;
-    simW = Math.ceil(W / SCALE);
-    simH = Math.ceil(H / SCALE);
-    simCanvas.width = simW;
-    simCanvas.height = simH;
-    buf1 = new Float32Array(simW * simH);
-    buf2 = new Float32Array(simW * simH);
-    imageData = simCtx.createImageData(simW, simH);
-    pixels = imageData.data;
-    buildNoise();
-  }
+  function buildFlowerHead(headPos, bloomOpen, fullBloom, budForm) {
+    clearGroup(petalsOuter);
+    clearGroup(petalsInner);
+    clearGroup(sepalsGroup);
+    clearGroup(stamensGroup);
+    clearGroup(centerGroup);
 
-  function dropRipple(screenX, screenY) {
-    const cx = (screenX / SCALE) | 0;
-    const cy = (screenY / SCALE) | 0;
-    const r = RIPPLE_RADIUS;
-    const r2 = r * r;
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        const d2 = dx * dx + dy * dy;
-        if (d2 > r2) continue;
-        const sx = cx + dx, sy = cy + dy;
-        if (sx < 1 || sx >= simW - 1 || sy < 1 || sy >= simH - 1) continue;
-        const t = Math.sqrt(d2) / r;
-        buf1[sy * simW + sx] += RIPPLE_STRENGTH * (0.5 + 0.5 * Math.cos(Math.PI * t));
+    petalsOuter.position.set(headPos.x, headPos.y, headPos.z);
+    petalsInner.position.set(headPos.x, headPos.y, headPos.z);
+    sepalsGroup.position.set(headPos.x, headPos.y, headPos.z);
+    stamensGroup.position.set(headPos.x, headPos.y, headPos.z);
+    centerGroup.position.set(headPos.x, headPos.y, headPos.z);
+
+    if (budForm <= 0) return;
+
+    const sway = Math.sin(elapsed * 0.6) * 0.05;
+
+    // Sepals
+    for (let i = 0; i < 5; i++) {
+      const angle = (i / 5) * Math.PI * 2;
+      const sepalLen = 0.5 * budForm;
+      const sepalPts = [];
+      const steps = 15;
+      // Curl back as bloom opens
+      const curlBack = bloomOpen * 0.8;
+      for (let j = 0; j <= steps; j++) {
+        const t = j / steps;
+        const r = sepalLen * t;
+        const spread = Math.sin(t * Math.PI) * 0.1 * budForm;
+        const curlAngle = -Math.PI / 2 + curlBack * Math.PI * 0.4 * t;
+        const y = Math.sin(curlAngle + Math.PI / 2) * r;
+        const outR = Math.cos(curlAngle + Math.PI / 2) * r + spread;
+        const x = Math.cos(angle + sway) * outR;
+        const z = Math.sin(angle + sway) * outR;
+        sepalPts.push(new THREE.Vector3(x, y, z));
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(sepalPts);
+      sepalsGroup.add(new THREE.Line(geo, lineMat(DIM_COLOR, 0.6 * budForm)));
+    }
+
+    // Outer petals
+    if (bloomOpen > 0) {
+      for (let i = 0; i < PETAL_COUNT; i++) {
+        const angle = (i / PETAL_COUNT) * Math.PI * 2 + Math.PI / PETAL_COUNT;
+        const petalLen = 1.6;
+        const petalW = 0.9;
+
+        // Create petal outline
+        const petalGeo = createPetalGeo(petalLen, petalW, bloomOpen);
+        const petalLine = new THREE.Line(petalGeo, lineMat(BRIGHT_COLOR, 0.7 + bloomOpen * 0.3));
+
+        // Position: rotate outward from center
+        const spreadAngle = Math.PI / 2 - bloomOpen * Math.PI * 0.35;
+        petalLine.rotation.set(0, 0, 0);
+
+        // Rotate around Y to place around flower
+        const petalPivot = new THREE.Group();
+        petalPivot.rotation.y = angle + sway;
+
+        // Tilt petal outward
+        const tiltGroup = new THREE.Group();
+        tiltGroup.rotation.x = -spreadAngle;
+        tiltGroup.add(petalLine);
+
+        petalPivot.add(tiltGroup);
+        petalsOuter.add(petalPivot);
+
+        // Central vein
+        const veinGeo = createVeinGeo(petalLen, bloomOpen);
+        const veinLine = new THREE.Line(veinGeo, lineMat(DIM_COLOR, 0.4 * bloomOpen));
+        const veinTilt = new THREE.Group();
+        veinTilt.rotation.x = -spreadAngle;
+        veinTilt.add(veinLine);
+        const veinPivot = new THREE.Group();
+        veinPivot.rotation.y = angle + sway;
+        veinPivot.add(veinTilt);
+        petalsOuter.add(veinPivot);
       }
     }
-  }
 
-  function simulate() {
-    for (let y = 1; y < simH - 1; y++) {
-      const row = y * simW;
-      for (let x = 1; x < simW - 1; x++) {
-        const i = row + x;
-        buf2[i] = ((buf1[i-1] + buf1[i+1] + buf1[i-simW] + buf1[i+simW]) * 0.5 - buf2[i]) * DAMPING;
+    // Inner petals (delayed)
+    const innerOpen = Math.max(0, (bloomOpen - 0.3) / 0.7);
+    if (innerOpen > 0) {
+      for (let i = 0; i < INNER_PETAL_COUNT; i++) {
+        const angle = (i / INNER_PETAL_COUNT) * Math.PI * 2;
+        const geo = createPetalGeo(1.1, 0.6, innerOpen);
+        const line = new THREE.Line(geo, lineMat(LINE_COLOR, 0.5 + innerOpen * 0.3));
+
+        const spreadAngle = Math.PI / 2 - innerOpen * Math.PI * 0.28;
+        const pivot = new THREE.Group();
+        pivot.rotation.y = angle + sway * 0.7;
+        const tilt = new THREE.Group();
+        tilt.rotation.x = -spreadAngle;
+        tilt.add(line);
+        pivot.add(tilt);
+        petalsInner.add(pivot);
       }
     }
-    const tmp = buf1; buf1 = buf2; buf2 = tmp;
-  }
 
-  // Palette lookup: pick from array[0..4], interpolating between neighbors
-  function palLerp(pal, t) {
-    // t is 0..1, maps to palette indices 0..4
-    const idx = t * 4;       // 0..4
-    const lo = idx | 0;      // integer part
-    const hi = lo < 4 ? lo + 1 : 4;
-    const frac = idx - lo;
-    const a = pal[lo], b = pal[hi];
-    return [
-      a[0] + (b[0] - a[0]) * frac,
-      a[1] + (b[1] - a[1]) * frac,
-      a[2] + (b[2] - a[2]) * frac,
-    ];
-  }
+    // Stamens
+    if (fullBloom > 0) {
+      for (let i = 0; i < STAMEN_COUNT; i++) {
+        const angle = (i / STAMEN_COUNT) * Math.PI * 2;
+        const len = 0.5 * fullBloom;
+        const pts = [
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(
+            Math.cos(angle) * len * 0.3,
+            len,
+            Math.sin(angle) * len * 0.3
+          )
+        ];
+        const geo = new THREE.BufferGeometry().setFromPoints(pts);
+        stamensGroup.add(new THREE.Line(geo, lineMat(DIM_COLOR, 0.6 * fullBloom)));
 
-  let globalTime = 0;
-
-  function render() {
-    globalTime += 0.016;
-
-    // Slowly drifting light
-    const lt = globalTime * 0.25;
-    const lx = 0.3 + Math.sin(lt) * 0.06;
-    const ly = -0.4 + Math.cos(lt * 0.7) * 0.06;
-    const lz = 0.86;
-
-    // Half-vector for specular
-    const hx = lx, hy = ly, hz = lz + 1;
-    const hlen = Math.sqrt(hx*hx + hy*hy + hz*hz);
-    const nhx = hx/hlen, nhy = hy/hlen, nhz = hz/hlen;
-
-    for (let y = 1; y < simH - 1; y++) {
-      const row = y * simW;
-      const vy = y / simH;
-      for (let x = 1; x < simW - 1; x++) {
-        const i = row + x;
-        const pi = i << 2;
-
-        // Surface normal
-        const dzdx = buf1[i+1] - buf1[i-1];
-        const dzdy = buf1[i+simW] - buf1[i-simW];
-        const nnz = 3.0;
-        const invLen = 1 / Math.sqrt(dzdx*dzdx + dzdy*dzdy + nnz*nnz);
-        const nx = -dzdx * invLen, ny = -dzdy * invLen, nz = nnz * invLen;
-
-        // Diffuse + specular
-        const diffuse = Math.max(0, nx*lx + ny*ly + nz*lz);
-        const specDot = nx*nhx + ny*nhy + nz*nhz;
-        const spec = specDot > 0 ? Math.pow(specDot, 16) : 0;
-        const sparkle = specDot > 0 ? Math.pow(specDot, 80) : 0;
-
-        // Noise (both channels guaranteed 0..1)
-        const n1 = noiseMap[i];
-        const n2 = noiseMap2[i];
-
-        // Brushstroke shimmer (slow time variation)
-        const brush = Math.sin(n1 * 12.0 + globalTime * 0.4) * 0.5 + 0.5;
-
-        // Height
-        const h = buf1[i];
-
-        // --- Color mixing ---
-        // Luminance maps to shadow/mid/light palette position
-        // Use diffuse as primary driver, noise to break it up
-        const lum = Math.max(0, Math.min(1, diffuse * 0.7 + 0.15 + (n1 - 0.5) * 0.2));
-
-        // Pick colors from each tier using different noise offsets
-        const shad = palLerp(SHADOWS, n1);
-        const mid  = palLerp(MIDS, (n2 + brush * 0.2) % 1);
-        const lite = palLerp(LIGHTS, (n1 * 0.6 + n2 * 0.4) % 1);
-
-        // Three-way blend: shadow → mid → light
-        let r, g, b;
-        if (lum < 0.4) {
-          const t = lum / 0.4;
-          r = shad[0] + (mid[0] - shad[0]) * t;
-          g = shad[1] + (mid[1] - shad[1]) * t;
-          b = shad[2] + (mid[2] - shad[2]) * t;
-        } else {
-          const t = (lum - 0.4) / 0.6;
-          r = mid[0] + (lite[0] - mid[0]) * t;
-          g = mid[1] + (lite[1] - mid[1]) * t;
-          b = mid[2] + (lite[2] - mid[2]) * t;
+        // Anther dot (small cross at tip)
+        if (fullBloom > 0.5) {
+          const tip = pts[1];
+          const s = 0.04;
+          const crossPts = [
+            new THREE.Vector3(tip.x - s, tip.y, tip.z),
+            new THREE.Vector3(tip.x + s, tip.y, tip.z),
+          ];
+          const crossPts2 = [
+            new THREE.Vector3(tip.x, tip.y - s, tip.z),
+            new THREE.Vector3(tip.x, tip.y + s, tip.z),
+          ];
+          stamensGroup.add(new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(crossPts),
+            lineMat(BRIGHT_COLOR, fullBloom)
+          ));
+          stamensGroup.add(new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(crossPts2),
+            lineMat(BRIGHT_COLOR, fullBloom)
+          ));
         }
-
-        // Vertical gradient: top = more sky lavender, bottom = deeper
-        r += (1 - vy) * 12;
-        g += (1 - vy) * 8;
-        b += (1 - vy) * 18;
-
-        // Wave height tint
-        if (h > 0) {
-          const ht = Math.min(1, h * 0.006);
-          r += ht * 60;   // golden/amber push
-          g += ht * 45;
-          b -= ht * 10;
-        } else {
-          const ht = Math.min(1, -h * 0.004);
-          // Teal or lavender in troughs
-          if (n2 > 0.5) {
-            g += ht * 25;  // teal
-            b += ht * 18;
-          } else {
-            r += ht * 8;   // lavender
-            b += ht * 28;
-          }
-        }
-
-        // Broad specular: warm gold ↔ pale cerulean
-        const sw = 0.5 + brush * 0.5;
-        r += spec * (160 * sw + 50 * (1-sw));
-        g += spec * (130 * sw + 110 * (1-sw));
-        b += spec * (50 * sw + 140 * (1-sw));
-
-        // Tight sparkle: cream glints
-        r += sparkle * 240;
-        g += sparkle * 230;
-        b += sparkle * 200;
-
-        // Brushstroke noise
-        r += (n1 - 0.5) * 14;
-        g += (n2 - 0.5) * 10;
-        b += (n1 * 0.5 + n2 * 0.5 - 0.5) * 8;
-
-        // Clamp and write
-        pixels[pi]     = r > 255 ? 255 : r < 0 ? 0 : r | 0;
-        pixels[pi + 1] = g > 255 ? 255 : g < 0 ? 0 : g | 0;
-        pixels[pi + 2] = b > 255 ? 255 : b < 0 ? 0 : b | 0;
-        pixels[pi + 3] = 255;
       }
-    }
 
-    simCtx.putImageData(imageData, 0, 0);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(simCanvas, 0, 0, simW, simH, 0, 0, W, H);
+      // Center circle (pistil)
+      const circPts = [];
+      for (let i = 0; i <= 32; i++) {
+        const a = (i / 32) * Math.PI * 2;
+        circPts.push(new THREE.Vector3(Math.cos(a) * 0.12 * fullBloom, Math.sin(a) * 0.12 * fullBloom + 0.15 * fullBloom, 0));
+      }
+      centerGroup.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(circPts),
+        lineMat(WHITE_COLOR, 0.8 * fullBloom)
+      ));
+    }
   }
 
-  // --- Input ---
-  canvas.addEventListener('click', e => dropRipple(e.clientX, e.clientY));
-  canvas.addEventListener('contextmenu', e => e.preventDefault());
-  canvas.addEventListener('touchstart', e => {
-    e.preventDefault();
-    for (const t of e.changedTouches) dropRipple(t.clientX, t.clientY);
-  }, { passive: false });
+  // === Leaves ===
+  const leavesGroup = new THREE.Group();
+  flower.add(leavesGroup);
 
-  let dragging = false;
-  canvas.addEventListener('mousedown', () => { dragging = true; });
-  canvas.addEventListener('mouseup', () => { dragging = false; });
-  canvas.addEventListener('mousemove', e => {
-    if (dragging) dropRipple(e.clientX, e.clientY);
+  function buildLeaves(stemGrow) {
+    clearGroup(leavesGroup);
+
+    const leaf1T = Math.max(0, Math.min(1, (stemGrow - 0.3) * 4));
+    const leaf2T = Math.max(0, Math.min(1, (stemGrow - 0.45) * 4));
+
+    function addLeaf(attachY, side, size, t) {
+      if (t <= 0) return;
+      const sway = Math.sin(elapsed * 0.6) * 0.15;
+      const stemX = Math.sin(((-2.5 - attachY) / -4.5) * Math.PI) * 0.15 * sway;
+
+      const pts = [];
+      const steps = 25;
+      const leafLen = size * t;
+      const leafW = size * 0.3 * t;
+
+      // Top edge
+      for (let i = 0; i <= steps; i++) {
+        const lt = i / steps;
+        const x = lt * leafLen * side;
+        const y = Math.sin(lt * Math.PI) * leafW;
+        const z = Math.sin(lt * Math.PI) * 0.05 * t;
+        pts.push(new THREE.Vector3(stemX + x, attachY + y, z));
+      }
+      // Bottom edge (reverse)
+      for (let i = steps; i >= 0; i--) {
+        const lt = i / steps;
+        const x = lt * leafLen * side;
+        const y = -Math.sin(lt * Math.PI) * leafW * 0.6;
+        const z = Math.sin(lt * Math.PI) * 0.05 * t;
+        pts.push(new THREE.Vector3(stemX + x, attachY + y, z));
+      }
+      pts.push(pts[0].clone());
+
+      leavesGroup.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        lineMat(LINE_COLOR, 0.5 * t)
+      ));
+
+      // Midrib
+      const midPts = [
+        new THREE.Vector3(stemX, attachY, 0),
+        new THREE.Vector3(stemX + leafLen * 0.85 * side, attachY, 0.03 * t)
+      ];
+      leavesGroup.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(midPts),
+        lineMat(DIM_COLOR, 0.4 * t)
+      ));
+    }
+
+    addLeaf(-0.7, 1, 0.9, leaf1T);
+    addLeaf(0.2, -1, 0.7, leaf2T);
+  }
+
+  // === Dimension annotation lines (blueprint detail) ===
+  const annotGroup = new THREE.Group();
+  scene.add(annotGroup);
+
+  function buildAnnotations(stemGrow, headY) {
+    clearGroup(annotGroup);
+    if (stemGrow < 0.5) return;
+
+    const alpha = Math.min(1, (stemGrow - 0.5) * 4) * 0.35;
+    const x = 1.2;
+    const bot = -2.5;
+    const top = headY;
+
+    // Vertical dimension line
+    const vPts = [new THREE.Vector3(x, bot, 0), new THREE.Vector3(x, top, 0)];
+    annotGroup.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(vPts),
+      lineMat(DIM_COLOR, alpha)
+    ));
+
+    // Tick marks
+    const tickSize = 0.12;
+    [bot, top].forEach(y => {
+      annotGroup.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(x - tickSize, y, 0),
+          new THREE.Vector3(x + tickSize, y, 0)
+        ]),
+        lineMat(DIM_COLOR, alpha)
+      ));
+    });
+
+    // Leader lines
+    annotGroup.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0.1, bot, 0), new THREE.Vector3(x - 0.05, bot, 0)
+      ]),
+      lineMat(DIM_COLOR, alpha * 0.5)
+    ));
+    annotGroup.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0.1, top, 0), new THREE.Vector3(x - 0.05, top, 0)
+      ]),
+      lineMat(DIM_COLOR, alpha * 0.5)
+    ));
+  }
+
+  // === Ground cross mark ===
+  const groundMark = new THREE.Group();
+  scene.add(groundMark);
+  {
+    const s = 0.15;
+    const y = -2.5;
+    groundMark.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-s, y, -s), new THREE.Vector3(s, y, s)
+      ]),
+      lineMat(DIM_COLOR, 0.4)
+    ));
+    groundMark.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-s, y, s), new THREE.Vector3(s, y, -s)
+      ]),
+      lineMat(DIM_COLOR, 0.4)
+    ));
+    // Circle around cross
+    const cpts = [];
+    for (let i = 0; i <= 32; i++) {
+      const a = (i / 32) * Math.PI * 2;
+      cpts.push(new THREE.Vector3(Math.cos(a) * s * 1.5, y, Math.sin(a) * s * 1.5));
+    }
+    groundMark.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(cpts),
+      lineMat(DIM_COLOR, 0.3)
+    ));
+  }
+
+  // === Manual orbit controls ===
+  let isDragging = false;
+  let prevMouse = { x: 0, y: 0 };
+  let spherical = { theta: 0, phi: Math.PI / 2.8, radius: 8 };
+
+  renderer.domElement.addEventListener('mousedown', e => {
+    isDragging = true;
+    prevMouse = { x: e.clientX, y: e.clientY };
+  });
+  renderer.domElement.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - prevMouse.x;
+    const dy = e.clientY - prevMouse.y;
+    spherical.theta -= dx * 0.005;
+    spherical.phi = Math.max(0.3, Math.min(Math.PI - 0.3, spherical.phi - dy * 0.005));
+    prevMouse = { x: e.clientX, y: e.clientY };
+  });
+  renderer.domElement.addEventListener('mouseup', () => { isDragging = false; });
+  renderer.domElement.addEventListener('mouseleave', () => { isDragging = false; });
+
+  // Touch
+  renderer.domElement.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      isDragging = true;
+      prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchmove', e => {
+    if (!isDragging || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - prevMouse.x;
+    const dy = e.touches[0].clientY - prevMouse.y;
+    spherical.theta -= dx * 0.005;
+    spherical.phi = Math.max(0.3, Math.min(Math.PI - 0.3, spherical.phi - dy * 0.005));
+    prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchend', () => { isDragging = false; });
+
+  // Zoom
+  renderer.domElement.addEventListener('wheel', e => {
+    spherical.radius = Math.max(3, Math.min(18, spherical.radius + e.deltaY * 0.008));
+  }, { passive: true });
+
+  // Click to restart
+  let bloomTime = 0;
+  renderer.domElement.addEventListener('click', e => {
+    // Only restart if not dragging significantly
+    bloomTime = 0;
   });
 
-  function frame() {
-    simulate();
-    simulate();
-    render();
-    requestAnimationFrame(frame);
+  // === Resize ===
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  // === Reduced motion ===
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // === Animation ===
+  const clock = new THREE.Clock();
+  let elapsed = 0;
+
+  function easeInOut(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2,2)/2; }
+  function clamp01(t) { return Math.max(0, Math.min(1, t)); }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = clock.getDelta();
+    elapsed += dt;
+    bloomTime += dt;
+
+    const bloomProgress = clamp01(bloomTime / BLOOM_DURATION);
+
+    // Phase timings
+    const stemGrow = easeInOut(clamp01(bloomProgress * 3));
+    const budForm = easeInOut(clamp01((bloomProgress - 0.2) * 4));
+    const bloomOpen = easeInOut(clamp01((bloomProgress - 0.4) * 2.0));
+    const fullBloom = easeInOut(clamp01((bloomProgress - 0.7) * 3.3));
+
+    // Build geometry each frame (wireframe rebuilds are cheap)
+    const headPos = buildStem(stemGrow);
+    buildLeaves(stemGrow);
+    buildFlowerHead(headPos, bloomOpen, fullBloom, budForm);
+    buildAnnotations(stemGrow, headPos.y);
+
+    // Camera orbit with gentle auto-rotation
+    if (!isDragging && !prefersReduced) {
+      spherical.theta += dt * 0.08;
+    }
+
+    camera.position.x = spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
+    camera.position.y = spherical.radius * Math.cos(spherical.phi);
+    camera.position.z = spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
+    camera.lookAt(0, 0.3, 0);
+
+    renderer.render(scene, camera);
   }
 
-  init();
-  addEventListener('resize', init);
-  requestAnimationFrame(frame);
+  animate();
 })();
 </script>
-
 </body>
 </html>
