@@ -497,11 +497,11 @@
     clearGroup(seedlingsGroup);
 
     const links = [
-      { url: 'https://jobsdata.ai', label: 'jobsdata.ai' },
-      { url: 'https://linkedin.com/in/mattzieger', label: 'linkedin' },
-      { url: 'https://instagram.com/mattzieger', label: 'instagram' },
-      { url: null, label: null },
-      { url: null, label: null },
+      { url: 'https://jobsdata.ai', label: 'jobsdata.ai', height: 0.85 },
+      { url: 'https://linkedin.com/in/mattzieger', label: 'linkedin', height: 0.7 },
+      { url: 'https://instagram.com/mattzieger', label: 'instagram', height: 0.55 },
+      { url: null, label: null, height: 0.5 },
+      { url: null, label: null, height: 0.45 },
     ];
 
     // Shuffle placement angles but keep them spaced out
@@ -526,7 +526,7 @@
         angle: angle,
         url: links[i].url,
         label: links[i].label,
-        height: 0.4 + Math.random() * 0.25, // varying heights
+        height: links[i].height, // taller for linked seedlings
         leafAngle: Math.random() * Math.PI * 2,
       });
     }
