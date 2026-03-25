@@ -485,8 +485,8 @@
   const SEEDLING_DELAY = 1.5; // seconds after bloom starts — sprout alongside the flower
   const SEEDLING_STAGGER = 1.8; // seconds between each seedling popping up
   const EXTRA_SEEDLING_COUNT = 15; // additional decorative seedlings
-  const EXTRA_SEEDLING_DELAY = SEEDLING_DELAY + SEEDLING_COUNT * SEEDLING_STAGGER + 1.5; // start after the first 5 finish
-  const EXTRA_SEEDLING_STAGGER = 0.6; // seconds between each extra seedling
+  const EXTRA_SEEDLING_DELAY = SEEDLING_DELAY + SEEDLING_COUNT * SEEDLING_STAGGER; // start right after the first 5
+  const EXTRA_SEEDLING_STAGGER = 0.25; // seconds between each extra seedling
   const seedlingsGroup = new THREE.Group();
   scene.add(seedlingsGroup);
 
