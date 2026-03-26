@@ -92,14 +92,23 @@
   const flower = new THREE.Group();
   scene.add(flower);
 
-  // Line material factory
+  // Line material factory — cached to avoid per-frame allocations
+  const materialCache = new Map();
   function lineMat(color, opacity) {
-    return new THREE.LineBasicMaterial({
-      color: color || LINE_COLOR,
-      transparent: true,
-      opacity: opacity !== undefined ? opacity : 1,
-      depthWrite: false
-    });
+    const c = color instanceof THREE.Color ? color.getHex() : (color || LINE_COLOR);
+    const o = Math.round((opacity !== undefined ? opacity : 1) * 20) / 20; // quantize to 0.05
+    const key = c + '_' + o;
+    let mat = materialCache.get(key);
+    if (!mat) {
+      mat = new THREE.LineBasicMaterial({
+        color: c,
+        transparent: true,
+        opacity: o,
+        depthWrite: false
+      });
+      materialCache.set(key, mat);
+    }
+    return mat;
   }
 
   // === Build stem as a curve ===
@@ -189,7 +198,7 @@
     while (g.children.length) {
       const c = g.children[0];
       if (c.geometry) c.geometry.dispose();
-      if (c.material) c.material.dispose();
+      // Materials are cached — don't dispose them
       g.remove(c);
     }
   }
@@ -484,7 +493,7 @@
   const SEEDLING_COUNT = 5;
   const SEEDLING_DELAY = 1.5; // seconds after bloom starts — sprout alongside the flower
   const SEEDLING_STAGGER = 1.8; // seconds between each seedling popping up
-  const EXTRA_SEEDLING_COUNT = 120; // additional decorative seedlings
+  const EXTRA_SEEDLING_COUNT = 50; // additional decorative seedlings
   const EXTRA_SEEDLING_DELAY = SEEDLING_DELAY + SEEDLING_COUNT * SEEDLING_STAGGER; // start right after the first 5
   const seedlingsGroup = new THREE.Group();
   scene.add(seedlingsGroup);
@@ -542,6 +551,11 @@
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
 
+      // Pre-compute faded color to avoid per-frame allocation
+      const fadeFactor = clamp01((dist - 2.8) / 5.0);
+      const preColor = new THREE.Color(DIM_COLOR);
+      preColor.lerp(new THREE.Color(0x0a1a2a), fadeFactor * 0.8);
+
       seedlingData.push({
         x, z,
         dist, // store distance for color fading
@@ -551,6 +565,7 @@
         height: 0.25 + Math.random() * 0.45, // various heights
         leafAngle: Math.random() * Math.PI * 2,
         isExtra: true,
+        color: preColor,
       });
     }
   }
@@ -570,7 +585,7 @@
         const ei = i - SEEDLING_COUNT;
         const t = ei / (EXTRA_SEEDLING_COUNT - 1); // 0..1
         // Cubic ease-in: later seedlings appear much more slowly
-        const maxTime = 60; // total seconds for all extra seedlings
+        const maxTime = 20; // total seconds for all extra seedlings
         seedlingStart = EXTRA_SEEDLING_DELAY + t * t * t * maxTime;
       } else {
         seedlingStart = SEEDLING_DELAY + i * SEEDLING_STAGGER;
@@ -584,13 +599,8 @@
       let lineCol;
       if (sd.url) {
         lineCol = BRIGHT_COLOR;
-      } else if (sd.isExtra && sd.dist) {
-        // Fade color toward background as distance increases
-        const fadeFactor = clamp01((sd.dist - 2.8) / 5.0); // 0 at closest, 1 at farthest
-        const baseColor = new THREE.Color(DIM_COLOR);
-        const fadeColor = new THREE.Color(0x0a1a2a); // very dark blue, near background
-        baseColor.lerp(fadeColor, fadeFactor * 0.8);
-        lineCol = baseColor;
+      } else if (sd.isExtra && sd.color) {
+        lineCol = sd.color;
       } else {
         lineCol = LINE_COLOR;
       }
@@ -603,7 +613,7 @@
 
       // Curved stem — starts underground, arcs upward like a real sprout
       const stemPts = [];
-      const steps = 20;
+      const steps = 10;
       for (let j = 0; j <= steps; j++) {
         const t = j / steps;
         // Hypocotyl arch: starts bent, straightens as it grows
@@ -629,7 +639,7 @@
 
         for (let side = -1; side <= 1; side += 2) {
           const leafPts = [];
-          const leafSteps = 20;
+          const leafSteps = 10;
 
           // Top edge — sinusoidal bulge like the flower leaves
           for (let j = 0; j <= leafSteps; j++) {
@@ -836,6 +846,7 @@
 
   let bloomTime = 0;
   let animationDone = false;
+  let flowerDone = false;
 
   // === Resize ===
   window.addEventListener('resize', () => {
@@ -870,14 +881,19 @@
 
     // Only rebuild geometry while animating; once done, use group transforms for sway
     if (!animationDone) {
-      const headPos = buildStem(stemGrow);
-      buildLeaves(stemGrow);
-      buildFlowerHead(headPos, bloomOpen, fullBloom, budForm);
-      buildAnnotations(stemGrow, headPos.y);
+      // Flower parts: stop rebuilding once bloom is fully open
+      if (!flowerDone) {
+        const headPos = buildStem(stemGrow);
+        buildLeaves(stemGrow);
+        buildFlowerHead(headPos, bloomOpen, fullBloom, budForm);
+        buildAnnotations(stemGrow, headPos.y);
+        if (bloomProgress >= 1) flowerDone = true;
+      }
+
       buildSeedlings(bloomProgress);
 
       // Check if all animations are complete
-      const lastSeedlingEnd = EXTRA_SEEDLING_DELAY + 60 + 1.2; // matches cubic easing maxTime
+      const lastSeedlingEnd = EXTRA_SEEDLING_DELAY + 20 + 1.2; // matches cubic easing maxTime
       if (bloomTime > lastSeedlingEnd && bloomProgress >= 1) {
         animationDone = true;
       }
