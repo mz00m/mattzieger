@@ -631,6 +631,48 @@
         lineMat(lineCol, sd.url ? 0.8 + growT * 0.2 : (sd.isExtra ? (0.35 + growT * 0.25) * (1 - (sd.dist ? clamp01((sd.dist - 2.8) / 5.0) * 0.5 : 0)) : 0.6 + growT * 0.4))
       ));
 
+      // Small stem leaves partway down for budding seedlings
+      if (sd.bud && growT > 0.4) {
+        const stemLeafT = clamp01((growT - 0.4) / 0.6);
+        // Two pairs of small leaves at 40% and 65% up the stem
+        const leafPositions = [0.4, 0.65];
+        for (let lp = 0; lp < leafPositions.length; lp++) {
+          const stemIdx = Math.floor(leafPositions[lp] * steps);
+          const basePt = stemPts[stemIdx];
+          const smallLeafLen = (0.08 + 0.05 * stemLeafT) * (1 - lp * 0.2);
+          const smallLeafW = smallLeafLen * 0.35 * stemLeafT;
+          const smallSpread = stemLeafT * 1.4;
+
+          for (let side = -1; side <= 1; side += 2) {
+            const slPts = [];
+            const slSteps = 8;
+            for (let j = 0; j <= slSteps; j++) {
+              const lt = j / slSteps;
+              const along = lt * smallLeafLen;
+              const across = Math.sin(lt * Math.PI) * smallLeafW;
+              const lx = basePt.x + side * (Math.sin(smallSpread) * along + Math.cos(smallSpread) * across * 0.3);
+              const ly = basePt.y + Math.cos(smallSpread) * along - Math.sin(smallSpread) * across * 0.2;
+              const lz = basePt.z + across;
+              slPts.push(new THREE.Vector3(lx, ly, lz));
+            }
+            for (let j = slSteps; j >= 0; j--) {
+              const lt = j / slSteps;
+              const along = lt * smallLeafLen;
+              const across = -Math.sin(lt * Math.PI) * smallLeafW * 0.5;
+              const lx = basePt.x + side * (Math.sin(smallSpread) * along + Math.cos(smallSpread) * across * 0.3);
+              const ly = basePt.y + Math.cos(smallSpread) * along - Math.sin(smallSpread) * Math.abs(across) * 0.2;
+              const lz = basePt.z + across;
+              slPts.push(new THREE.Vector3(lx, ly, lz));
+            }
+            slPts.push(slPts[0].clone());
+            sproutGroup.add(new THREE.Line(
+              new THREE.BufferGeometry().setFromPoints(slPts),
+              lineMat(lineCol, 0.4 * stemLeafT + 0.2)
+            ));
+          }
+        }
+      }
+
       // Cotyledon leaves — two rounded leaves that open outward from the tip
       if (growT > 0.3) {
         const leafT = clamp01((growT - 0.3) / 0.7);
