@@ -509,11 +509,11 @@
     clearGroup(seedlingsGroup);
 
     const links = [
-      { url: 'https://jobsdata.ai', label: 'jobsdata.ai', height: 1.28, bud: true },
+      { url: 'https://jobsdata.ai', label: 'jobsdata.ai', height: 1.28, bud: true, leaves: [0.4, 0.65] },
       { url: 'https://linkedin.com/in/mattzieger', label: 'linkedin', height: 0.9 },
       { url: 'https://instagram.com/mattzieger', label: 'instagram', height: 0.55 },
       { url: 'https://opportunityai.org', label: 'Opportunity AI', height: 0.8 },
-      { url: 'https://www.gitlabfoundation.org/futureofwork', label: 'AI for Economic Opportunity Fund', height: 0.6 },
+      { url: 'https://www.gitlabfoundation.org/futureofwork', label: 'AI for Economic Opportunity Fund', height: 1.28, bud: true, leaves: [0.5] },
       { url: 'https://nightsky.mattzieger.com', label: 'night sky', height: 0.25 },
       { url: 'https://www.thekidswillbealright.com/', label: 'the kids will be alright', height: 0.3 },
       { url: 'https://bejoyful.ai', label: 'bejoyful.ai', height: 0.5 },
@@ -543,6 +543,7 @@
         label: links[i].label,
         height: links[i].height, // taller for linked seedlings
         bud: !!links[i].bud,
+        leaves: links[i].leaves || null,
         leafAngle: Math.random() * Math.PI * 2,
         isExtra: false,
       });
@@ -633,10 +634,9 @@
       ));
 
       // Small stem leaves partway down for budding seedlings
-      if (sd.bud && growT > 0.4) {
+      if (sd.leaves && growT > 0.4) {
         const stemLeafT = clamp01((growT - 0.4) / 0.6);
-        // Two pairs of small leaves at 40% and 65% up the stem
-        const leafPositions = [0.4, 0.65];
+        const leafPositions = sd.leaves;
         for (let lp = 0; lp < leafPositions.length; lp++) {
           const stemIdx = Math.floor(leafPositions[lp] * steps);
           const basePt = stemPts[stemIdx];
