@@ -7,814 +7,740 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { overflow: hidden; background: #050e1a; font-family: 'Courier New', monospace; color: #6cc0f0; }
-  canvas { display: block; }
-
-  #ui-overlay {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: none; z-index: 10;
+  body {
+    overflow: hidden; background: #071222;
+    font-family: 'Courier New', monospace; color: #3c8ec8;
   }
-  #ui-overlay > * { pointer-events: auto; }
+  canvas { display: block; cursor: crosshair; }
+
+  /* ── Blueprint UI elements ── */
+  .panel {
+    background: rgba(7,18,34,0.88);
+    border: 1px solid rgba(60,142,200,0.25);
+    padding: 10px 14px; border-radius: 1px;
+  }
 
   #header {
-    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
-    text-align: center; pointer-events: none;
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    text-align: center; pointer-events: none; user-select: none;
   }
   #header h1 {
-    font-size: 13px; letter-spacing: 3px; text-transform: uppercase;
-    color: rgba(108,192,240,0.6); font-weight: normal; margin-bottom: 4px;
+    font-size: 12px; letter-spacing: 4px; text-transform: uppercase;
+    color: rgba(60,142,200,0.5); font-weight: normal; margin-bottom: 3px;
   }
   #header .sub {
-    font-size: 10px; letter-spacing: 2px; color: rgba(108,192,240,0.3);
+    font-size: 9px; letter-spacing: 2px; color: rgba(60,142,200,0.28);
     text-transform: uppercase;
   }
 
-  #status {
-    position: absolute; top: 16px; left: 16px;
-    font-size: 10px; letter-spacing: 1px; color: rgba(108,192,240,0.5);
-    line-height: 1.8;
+  #stats {
+    position: absolute; top: 14px; left: 14px;
+    font-size: 9px; letter-spacing: 1px; color: rgba(60,142,200,0.4);
+    line-height: 2; text-transform: uppercase; pointer-events: none;
   }
-  #status .count { color: #6cc0f0; }
+  #stats .val { color: #3c8ec8; }
 
   #controls {
-    position: absolute; top: 16px; right: 16px;
-    display: flex; flex-direction: column; gap: 6px;
+    position: absolute; top: 14px; right: 14px;
+    display: flex; flex-direction: column; gap: 5px;
   }
-  .ctrl-btn {
-    background: rgba(7,18,34,0.85); border: 1px solid rgba(60,142,200,0.3);
-    color: #6cc0f0; font-family: 'Courier New', monospace; font-size: 10px;
-    letter-spacing: 1px; text-transform: uppercase; padding: 6px 12px;
-    cursor: pointer; transition: all 0.2s; border-radius: 2px;
-  }
-  .ctrl-btn:hover { border-color: rgba(60,142,200,0.7); background: rgba(20,40,70,0.85); }
-  .ctrl-btn.active { border-color: #6cc0f0; color: #fff; }
-
-  #time-bar {
-    position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 12px;
+  .btn {
     background: rgba(7,18,34,0.85); border: 1px solid rgba(60,142,200,0.2);
-    padding: 8px 16px; border-radius: 2px;
+    color: rgba(60,142,200,0.5); font-family: 'Courier New', monospace;
+    font-size: 9px; letter-spacing: 1px; text-transform: uppercase;
+    padding: 5px 10px; cursor: pointer; transition: all 0.2s; border-radius: 1px;
   }
-  #time-bar label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: rgba(108,192,240,0.5); }
-  #time-slider {
-    width: 200px; accent-color: #3c8ec8;
-  }
-  #time-display {
-    font-size: 11px; color: #6cc0f0; min-width: 180px; text-align: center;
-  }
-  #time-bar button {
-    background: none; border: 1px solid rgba(60,142,200,0.3); color: #6cc0f0;
-    font-family: 'Courier New', monospace; font-size: 10px; padding: 4px 8px;
-    cursor: pointer; border-radius: 2px;
-  }
-  #time-bar button:hover { border-color: #6cc0f0; }
+  .btn:hover { border-color: rgba(60,142,200,0.5); }
+  .btn.on { border-color: #3c8ec8; color: #8ee8ff; }
 
-  #tooltip {
-    position: absolute; pointer-events: none; user-select: none;
-    color: #6cc0f0; font-family: 'Courier New', monospace;
-    font-size: 11px; letter-spacing: 1px;
-    background: rgba(7,18,34,0.92); border: 1px solid rgba(60,142,200,0.4);
-    padding: 8px 12px; border-radius: 2px; opacity: 0;
-    transition: opacity 0.15s; white-space: nowrap; z-index: 20;
-    line-height: 1.6;
+  /* ── Upcoming passes panel ── */
+  #passes {
+    position: absolute; bottom: 60px; left: 14px;
+    max-width: 320px; max-height: 260px; overflow-y: auto;
   }
-  #tooltip.visible { opacity: 1; }
-
-  #compass {
-    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
-    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
-    color: rgba(108,192,240,0.3); pointer-events: none;
+  #passes h2 {
+    font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+    color: rgba(60,142,200,0.4); font-weight: normal; margin-bottom: 8px;
+    border-bottom: 1px solid rgba(60,142,200,0.12); padding-bottom: 6px;
   }
+  .pass-item {
+    font-size: 9px; line-height: 1.9; letter-spacing: 0.5px;
+    color: rgba(60,142,200,0.45); border-bottom: 1px solid rgba(60,142,200,0.06);
+    padding: 4px 0; cursor: pointer; transition: color 0.15s;
+  }
+  .pass-item:hover { color: #8ee8ff; }
+  .pass-item .name { color: #3c8ec8; text-transform: uppercase; }
+  .pass-item .bright { color: #8ee8ff; }
+  .pass-item .dim { color: rgba(60,142,200,0.3); }
+  .pass-item .time { color: rgba(142,232,255,0.6); }
 
+  /* ── Time bar ── */
+  #timebar {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 10px;
+    font-size: 9px; letter-spacing: 1px; text-transform: uppercase;
+  }
+  #timebar input[type=range] { width: 160px; accent-color: #1a4870; }
+  #time-display { color: rgba(60,142,200,0.45); min-width: 160px; text-align: center; }
+
+  /* ── Tooltip ── */
+  #tip {
+    position: absolute; pointer-events: none; z-index: 20;
+    font-size: 9px; letter-spacing: 0.5px; line-height: 1.9;
+    color: #3c8ec8; background: rgba(7,18,34,0.92);
+    border: 1px solid rgba(60,142,200,0.3);
+    padding: 8px 12px; border-radius: 1px;
+    opacity: 0; transition: opacity 0.12s;
+    text-transform: uppercase;
+  }
+  #tip.show { opacity: 1; }
+
+  /* ── Legend ── */
   #legend {
-    position: absolute; bottom: 16px; right: 16px;
-    font-size: 10px; line-height: 2; color: rgba(108,192,240,0.5);
+    position: absolute; bottom: 14px; right: 14px;
+    font-size: 9px; line-height: 2.2; color: rgba(60,142,200,0.35);
+    text-transform: uppercase; letter-spacing: 1px; pointer-events: none;
   }
-  .legend-dot {
-    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-    margin-right: 6px; vertical-align: middle;
-  }
-
-  #loading-screen {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: #050e1a; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; z-index: 100;
-    transition: opacity 0.5s;
-  }
-  #loading-screen.fade { opacity: 0; pointer-events: none; }
-  #loading-screen .spinner {
-    width: 40px; height: 40px; border: 2px solid rgba(60,142,200,0.2);
-    border-top-color: #6cc0f0; border-radius: 50%;
-    animation: spin 1s linear infinite; margin-bottom: 16px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  #loading-screen .msg {
-    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
-    color: rgba(108,192,240,0.5);
+  .dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    margin-right: 5px; vertical-align: middle;
   }
 
-  #location-prompt {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(5,14,26,0.95); display: flex; flex-direction: column;
-    align-items: center; justify-content: center; z-index: 200;
+  /* ── Location prompt ── */
+  #loc-prompt {
+    position: fixed; inset: 0; background: #071222;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; z-index: 100;
   }
-  #location-prompt .box {
-    background: rgba(7,18,34,0.95); border: 1px solid rgba(60,142,200,0.3);
-    padding: 32px 40px; border-radius: 4px; text-align: center; max-width: 400px;
+  #loc-prompt .box {
+    text-align: center; max-width: 360px;
   }
-  #location-prompt h2 {
-    font-size: 13px; letter-spacing: 3px; text-transform: uppercase;
-    font-weight: normal; margin-bottom: 12px; color: #6cc0f0;
+  #loc-prompt h2 {
+    font-size: 12px; letter-spacing: 4px; text-transform: uppercase;
+    font-weight: normal; margin-bottom: 6px; color: rgba(60,142,200,0.5);
   }
-  #location-prompt p {
-    font-size: 11px; color: rgba(108,192,240,0.5); line-height: 1.8;
-    margin-bottom: 20px; letter-spacing: 1px;
+  #loc-prompt p {
+    font-size: 9px; color: rgba(60,142,200,0.3); line-height: 2;
+    margin-bottom: 20px; letter-spacing: 1px; text-transform: uppercase;
   }
-  #location-prompt .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  #location-prompt .btn {
-    background: rgba(20,40,70,0.85); border: 1px solid rgba(60,142,200,0.4);
-    color: #6cc0f0; font-family: 'Courier New', monospace; font-size: 11px;
-    letter-spacing: 1px; padding: 10px 20px; cursor: pointer; border-radius: 2px;
-    transition: all 0.2s;
+  #loc-prompt .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  #loc-prompt input {
+    background: rgba(7,18,34,0.9); border: 1px solid rgba(60,142,200,0.2);
+    color: #3c8ec8; font-family: 'Courier New', monospace; font-size: 10px;
+    padding: 7px 10px; width: 85px; text-align: center; border-radius: 1px;
+    margin: 0 3px;
   }
-  #location-prompt .btn:hover { border-color: #6cc0f0; color: #fff; }
-  #location-prompt .btn.primary { border-color: #6cc0f0; }
-  #manual-input {
-    display: none; margin-top: 16px;
+  #loc-prompt input::placeholder { color: rgba(60,142,200,0.2); }
+  #manual-row { display: none; margin-top: 14px; }
+
+  /* ── Loading ── */
+  #loading {
+    position: fixed; inset: 0; background: #071222;
+    display: none; flex-direction: column; align-items: center;
+    justify-content: center; z-index: 99;
   }
-  #manual-input input {
-    background: rgba(7,18,34,0.9); border: 1px solid rgba(60,142,200,0.3);
-    color: #6cc0f0; font-family: 'Courier New', monospace; font-size: 11px;
-    padding: 8px 12px; width: 100px; text-align: center; border-radius: 2px;
-    margin: 0 4px;
+  .spin {
+    width: 30px; height: 30px; border: 1px solid rgba(60,142,200,0.15);
+    border-top-color: #3c8ec8; border-radius: 50%;
+    animation: sp 1s linear infinite; margin-bottom: 14px;
   }
-  #manual-input input::placeholder { color: rgba(108,192,240,0.3); }
-  #manual-input button { margin-top: 12px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  #load-msg {
+    font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+    color: rgba(60,142,200,0.35);
+  }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(60,142,200,0.15); border-radius: 2px; }
 </style>
 </head>
 <body>
 
-<div id="location-prompt">
+<!-- Location prompt -->
+<div id="loc-prompt">
   <div class="box">
-    <h2>Night Sky Tracker</h2>
-    <p>Track satellites, rocket bodies, and debris<br>visible from your location in real time</p>
+    <h2>Night Sky</h2>
+    <p>Track satellites, rockets &amp; debris overhead</p>
     <div class="actions">
-      <button class="btn primary" id="btn-geo">Use My Location</button>
-      <button class="btn" id="btn-manual-toggle">Enter Coordinates</button>
+      <button class="btn" id="btn-geo" style="padding:8px 18px;font-size:10px;">Use My Location</button>
+      <button class="btn" id="btn-man" style="padding:8px 18px;font-size:10px;">Enter Coords</button>
     </div>
-    <div id="manual-input">
-      <div style="margin-bottom:8px;">
-        <input type="text" id="inp-lat" placeholder="Lat" style="width:90px">
-        <input type="text" id="inp-lon" placeholder="Lon" style="width:90px">
-      </div>
-      <button class="btn primary" id="btn-manual-go">Go</button>
+    <div id="manual-row">
+      <input id="inp-lat" placeholder="Lat">
+      <input id="inp-lon" placeholder="Lon">
+      <button class="btn" id="btn-go" style="margin-top:10px;padding:6px 16px;">Go</button>
     </div>
   </div>
 </div>
 
-<div id="loading-screen" style="display:none;">
-  <div class="spinner"></div>
-  <div class="msg" id="loading-msg">Fetching orbital data...</div>
+<!-- Loading -->
+<div id="loading"><div class="spin"></div><div id="load-msg">Acquiring signal...</div></div>
+
+<!-- Main UI -->
+<div id="header"><h1>Night Sky</h1><div class="sub" id="loc-label"></div></div>
+
+<div id="stats">
+  <div>Tracked: <span class="val" id="n-total">0</span></div>
+  <div>Above horizon: <span class="val" id="n-vis">0</span></div>
 </div>
 
-<div id="ui-overlay">
-  <div id="header">
-    <h1>Night Sky</h1>
-    <div class="sub" id="location-label"></div>
-  </div>
-
-  <div id="status">
-    <div>Satellites: <span class="count" id="sat-count">0</span></div>
-    <div>Rocket bodies: <span class="count" id="rb-count">0</span></div>
-    <div>Debris: <span class="count" id="deb-count">0</span></div>
-    <div>Above horizon: <span class="count" id="vis-count">0</span></div>
-  </div>
-
-  <div id="controls">
-    <button class="ctrl-btn active" data-cat="satellites" id="toggle-sat">Satellites</button>
-    <button class="ctrl-btn active" data-cat="rocketbodies" id="toggle-rb">Rockets</button>
-    <button class="ctrl-btn" data-cat="debris" id="toggle-deb">Debris</button>
-    <button class="ctrl-btn" id="toggle-grid">Grid</button>
-    <button class="ctrl-btn" id="toggle-labels">Labels</button>
-  </div>
-
-  <div id="time-bar">
-    <label>Time</label>
-    <button id="time-back">&lt;</button>
-    <input type="range" id="time-slider" min="-720" max="720" value="0" step="1">
-    <button id="time-fwd">&gt;</button>
-    <div id="time-display"></div>
-    <button id="time-now">Now</button>
-  </div>
-
-  <div id="compass">Drag to look around — Scroll to zoom</div>
-
-  <div id="legend">
-    <div><span class="legend-dot" style="background:#4fc3f7;"></span>Satellite</div>
-    <div><span class="legend-dot" style="background:#ff8a65;"></span>Rocket Body</div>
-    <div><span class="legend-dot" style="background:#ef5350;"></span>Debris</div>
-  </div>
+<div id="controls">
+  <button class="btn on" id="t-sat" data-c="sat">Satellites</button>
+  <button class="btn on" id="t-rb" data-c="rb">Rockets</button>
+  <button class="btn on" id="t-deb" data-c="deb">Debris</button>
+  <button class="btn" id="t-arcs">Arcs</button>
+  <button class="btn" id="t-grid">Grid</button>
 </div>
 
-<div id="tooltip"></div>
+<div id="passes" class="panel" style="display:none;">
+  <h2>Visible — next 30 min</h2>
+  <div id="pass-list"></div>
+</div>
 
-<!-- Three.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<!-- satellite.js for SGP4 propagation -->
+<div id="timebar" class="panel">
+  <button class="btn" id="t-back">&lt;</button>
+  <input type="range" id="t-slider" min="-360" max="360" value="0">
+  <button class="btn" id="t-fwd">&gt;</button>
+  <div id="time-display"></div>
+  <button class="btn" id="t-now">Now</button>
+</div>
+
+<div id="legend">
+  <div><span class="dot" style="background:#3c8ec8;"></span>Satellite</div>
+  <div><span class="dot" style="background:#8ee8ff;"></span>Rocket body</div>
+  <div><span class="dot" style="background:#1a4870;"></span>Debris</div>
+</div>
+
+<div id="tip"></div>
+
+<!-- libs -->
 <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
-
 <script>
-(function () {
+(function() {
   'use strict';
 
-  // ── Config ──
-  const COLORS = {
-    satellite:  0x4fc3f7,
-    rocketbody: 0xff8a65,
-    debris:     0xef5350,
-    grid:       0x1a3a5c,
-    horizon:    0x3c8ec8,
+  // ═══════════════════════════════════════
+  //  CONFIG — Blueprint palette
+  // ═══════════════════════════════════════
+  const BG        = '#071222';
+  const LINE      = '#3c8ec8';
+  const BRIGHT    = '#8ee8ff';
+  const DIM       = '#1a4870';
+  const GRID_COL  = '#0e2040';
+  const CAT_COLORS = { sat: LINE, rb: BRIGHT, deb: DIM };
+
+  const TLE_URLS = {
+    sat: [
+      'https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=tle',
+      'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle',
+    ],
+    rb: [
+      'https://celestrak.org/NORAD/elements/gp.php?GROUP=rocket-body&FORMAT=tle',
+    ],
+    deb: [
+      'https://celestrak.org/NORAD/elements/gp.php?GROUP=cosmos-2251-debris&FORMAT=tle',
+      'https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-33-debris&FORMAT=tle',
+      'https://celestrak.org/NORAD/elements/gp.php?GROUP=1999-025&FORMAT=tle',
+    ],
   };
 
-  const TLE_SOURCES = {
-    satellites:  'https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=tle',
-    rocketbodies:'https://celestrak.org/NORAD/elements/gp.php?GROUP=rocket-body&FORMAT=tle',
-    debris:      'https://celestrak.org/NORAD/elements/gp.php?GROUP=cosmos-2251-debris&FORMAT=tle',
-  };
+  const PROXY = 'https://api.allorigins.win/raw?url=';
 
-  const PROXY_PREFIX = 'https://api.allorigins.win/raw?url=';
+  // ═══════════════════════════════════════
+  //  STATE
+  // ═══════════════════════════════════════
+  let obs = { lat: 0, lon: 0, alt: 0 };
+  let objects = [];            // { name, satrec, cat }
+  let tOff = 0;               // time offset in minutes
+  let show = { sat: true, rb: true, deb: true };
+  let showArcs = false, showGrid = false;
+  let canvas, ctx, W, H, cx, cy, R;
+  let mouseX = -1, mouseY = -1;
+  let hovered = null;          // object index
+  let upcomingPasses = [];
+  let highlightedName = null;
 
-  // ── State ──
-  let observer = { lat: 0, lon: 0, alt: 0 };
-  let spaceObjects = [];   // { name, satrec, category }
-  let timeOffsetMin = 0;
-  let showCategories = { satellites: true, rocketbodies: true, debris: false };
-  let showGrid = false;
-  let showLabels = false;
-
-  // ── Three.js setup ──
-  let scene, camera, renderer, raycaster, mouse;
-  let skyGroup, gridGroup, labelSprites = [];
-  let objectMeshes = [];   // { mesh, obj index }
-  let hoveredIndex = -1;
-
-  // ── DOM ──
   const $ = id => document.getElementById(id);
-  const tooltip = $('tooltip');
 
   // ═══════════════════════════════════════
   //  LOCATION
   // ═══════════════════════════════════════
-  $('btn-geo').addEventListener('click', () => {
-    if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+  $('btn-geo').onclick = () => {
+    if (!navigator.geolocation) { alert('No geolocation'); return; }
     $('btn-geo').textContent = 'Locating...';
     navigator.geolocation.getCurrentPosition(
-      pos => startApp(pos.coords.latitude, pos.coords.longitude, pos.coords.altitude || 0),
-      () => {
-        $('btn-geo').textContent = 'Use My Location';
-        alert('Could not get location. Please enter coordinates manually.');
-      },
+      p => start(p.coords.latitude, p.coords.longitude, p.coords.altitude || 0),
+      () => { $('btn-geo').textContent = 'Use My Location'; alert('Location denied — enter manually.'); },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  });
-
-  $('btn-manual-toggle').addEventListener('click', () => {
-    $('manual-input').style.display = $('manual-input').style.display === 'none' ? 'block' : 'block';
-  });
-
-  $('btn-manual-go').addEventListener('click', () => {
-    const lat = parseFloat($('inp-lat').value);
-    const lon = parseFloat($('inp-lon').value);
-    if (isNaN(lat) || isNaN(lon)) { alert('Enter valid lat/lon'); return; }
-    startApp(lat, lon, 0);
-  });
+  };
+  $('btn-man').onclick = () => $('manual-row').style.display = 'block';
+  $('btn-go').onclick = () => {
+    const la = parseFloat($('inp-lat').value), lo = parseFloat($('inp-lon').value);
+    if (isNaN(la) || isNaN(lo)) { alert('Invalid coordinates'); return; }
+    start(la, lo, 0);
+  };
 
   // ═══════════════════════════════════════
   //  START
   // ═══════════════════════════════════════
-  function startApp(lat, lon, alt) {
-    observer = { lat, lon, alt };
-    $('location-prompt').style.display = 'none';
-    $('loading-screen').style.display = 'flex';
-    $('location-label').textContent =
-      lat.toFixed(2) + '° ' + (lat >= 0 ? 'N' : 'S') + ', ' +
-      lon.toFixed(2) + '° ' + (lon >= 0 ? 'E' : 'W');
+  function start(lat, lon, alt) {
+    obs = { lat, lon, alt };
+    $('loc-prompt').style.display = 'none';
+    $('loading').style.display = 'flex';
+    $('loc-label').textContent =
+      Math.abs(lat).toFixed(2) + '°' + (lat >= 0 ? 'N' : 'S') + '  ' +
+      Math.abs(lon).toFixed(2) + '°' + (lon >= 0 ? 'E' : 'W');
 
-    initThree();
-    fetchAllTLEs();
+    initCanvas();
+    fetchAll();
   }
 
   // ═══════════════════════════════════════
-  //  FETCH TLE DATA
+  //  CANVAS (2D polar sky chart — blueprint style)
   // ═══════════════════════════════════════
-  async function fetchAllTLEs() {
-    const results = await Promise.allSettled(
-      Object.entries(TLE_SOURCES).map(([cat, url]) => fetchTLE(url, cat))
-    );
+  function initCanvas() {
+    canvas = document.createElement('canvas');
+    document.body.insertBefore(canvas, document.body.firstChild);
+    ctx = canvas.getContext('2d');
+    resize();
+    window.addEventListener('resize', resize);
 
-    let totalParsed = 0;
-    results.forEach(r => { if (r.status === 'fulfilled') totalParsed += r.value; });
-
-    if (totalParsed === 0) {
-      $('loading-msg').textContent = 'Retrying with CORS proxy...';
-      const proxyResults = await Promise.allSettled(
-        Object.entries(TLE_SOURCES).map(([cat, url]) =>
-          fetchTLE(PROXY_PREFIX + encodeURIComponent(url), cat)
-        )
-      );
-      proxyResults.forEach(r => { if (r.status === 'fulfilled') totalParsed += r.value; });
-    }
-
-    if (totalParsed === 0) {
-      $('loading-msg').textContent = 'Could not fetch data. Using built-in ISS TLE.';
-      loadFallbackTLE();
-      await new Promise(r => setTimeout(r, 1000));
-    }
-
-    updateCounts();
-    $('loading-screen').classList.add('fade');
-    setTimeout(() => $('loading-screen').style.display = 'none', 600);
-    animate();
+    canvas.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+    canvas.addEventListener('mouseleave', () => { mouseX = -1; mouseY = -1; });
   }
 
-  async function fetchTLE(url, category) {
-    $('loading-msg').textContent = 'Fetching ' + category + '...';
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(resp.status);
-    const text = await resp.text();
-    return parseTLE(text, category);
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    cx = W / 2;
+    cy = H / 2;
+    R = Math.min(W, H) * 0.42;
   }
 
-  function parseTLE(text, category) {
+  // Azimuth/elevation → pixel position on polar chart
+  // Zenith at center, horizon at edge
+  function skyToXY(az, el) {
+    const r = R * (1 - el / 90);           // 90° → center, 0° → edge
+    const a = (az - 90) * Math.PI / 180;   // N at top
+    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+  }
+
+  // ═══════════════════════════════════════
+  //  FETCH TLE
+  // ═══════════════════════════════════════
+  async function fetchAll() {
+    let total = 0;
+
+    for (const [cat, urls] of Object.entries(TLE_URLS)) {
+      for (const url of urls) {
+        $('load-msg').textContent = 'Loading ' + cat + '...';
+        const n = await tryFetch(url, cat);
+        total += n;
+      }
+    }
+
+    if (total === 0) {
+      // retry with proxy
+      $('load-msg').textContent = 'Retrying with proxy...';
+      for (const [cat, urls] of Object.entries(TLE_URLS)) {
+        for (const url of urls) {
+          total += await tryFetch(PROXY + encodeURIComponent(url), cat);
+        }
+      }
+    }
+
+    if (total === 0) { fallback(); }
+
+    computeUpcoming();
+    $('passes').style.display = 'block';
+    $('loading').style.display = 'none';
+    loop();
+  }
+
+  async function tryFetch(url, cat) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return 0;
+      return parseTLE(await r.text(), cat);
+    } catch { return 0; }
+  }
+
+  function parseTLE(text, cat) {
     const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
-    let count = 0;
+    let n = 0;
     for (let i = 0; i < lines.length - 2; i++) {
       if (lines[i + 1].startsWith('1 ') && lines[i + 2].startsWith('2 ')) {
-        const name = lines[i];
-        const tleLine1 = lines[i + 1];
-        const tleLine2 = lines[i + 2];
         try {
-          const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
-          if (satrec.error === 0) {
-            spaceObjects.push({ name, satrec, category });
-            count++;
-          }
-        } catch (e) { /* skip bad entries */ }
+          const sr = satellite.twoline2satrec(lines[i + 1], lines[i + 2]);
+          if (sr.error === 0) { objects.push({ name: lines[i], satrec: sr, cat }); n++; }
+        } catch {}
         i += 2;
       }
     }
-    return count;
+    return n;
   }
 
-  function loadFallbackTLE() {
-    const issLines = [
-      'ISS (ZARYA)',
-      '1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9002',
-      '2 25544  51.6400 208.9163 0006703 300.2547  59.7856 15.49560532999999'
-    ];
-    parseTLE(issLines.join('\n'), 'satellites');
-  }
-
-  // ═══════════════════════════════════════
-  //  SATELLITE POSITION MATH
-  // ═══════════════════════════════════════
-  function getCurrentDate() {
-    return new Date(Date.now() + timeOffsetMin * 60000);
-  }
-
-  function getSatLookAngles(satrec, date) {
-    const gmst = satellite.gstime(date);
-    const posVel = satellite.propagate(satrec, date);
-    if (!posVel.position) return null;
-
-    const observerGd = {
-      longitude: satellite.degreesToRadians(observer.lon),
-      latitude:  satellite.degreesToRadians(observer.lat),
-      height:    observer.alt / 1000  // km
-    };
-
-    const posEcf = satellite.eciToEcf(posVel.position, gmst);
-    const lookAngles = satellite.ecfToLookAngles(observerGd, posEcf);
-
-    return {
-      azimuth:   satellite.degreesLat(lookAngles.azimuth),   // degrees
-      elevation: satellite.degreesLong(lookAngles.elevation), // degrees
-      range:     lookAngles.rangeSat,                         // km
-      position:  posVel.position,
-      velocity:  posVel.velocity,
-    };
-  }
-
-  // Convert azimuth/elevation to 3D sky dome position
-  function lookAnglesToSkyPos(az, el) {
-    const r = 100;
-    const azRad = (az - 90) * Math.PI / 180; // rotate so N is forward
-    const elRad = el * Math.PI / 180;
-    const cosEl = Math.cos(elRad);
-    return new THREE.Vector3(
-      r * cosEl * Math.cos(azRad),
-      r * Math.sin(elRad),
-      -r * cosEl * Math.sin(azRad)
+  function fallback() {
+    parseTLE(
+      'ISS (ZARYA)\n1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9002\n2 25544  51.6400 208.9163 0006703 300.2547  59.7856 15.49560532999999',
+      'sat'
     );
   }
 
   // ═══════════════════════════════════════
-  //  THREE.JS SCENE
+  //  LOOK ANGLES
   // ═══════════════════════════════════════
-  function initThree() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050e1a);
+  function now() { return new Date(Date.now() + tOff * 60000); }
 
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
-    camera.position.set(0, 10, 0.01);
-    camera.lookAt(0, 50, 0);
-
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    document.body.insertBefore(renderer.domElement, document.body.firstChild);
-
-    raycaster = new THREE.Raycaster();
-    raycaster.params.Points.threshold = 2;
-    mouse = new THREE.Vector2(-999, -999);
-
-    skyGroup = new THREE.Group();
-    scene.add(skyGroup);
-
-    gridGroup = new THREE.Group();
-    gridGroup.visible = showGrid;
-    scene.add(gridGroup);
-
-    createHorizonCircle();
-    createAltAzGrid();
-    createCardinalLabels();
-
-    // Interaction
-    setupInteraction();
-    window.addEventListener('resize', onResize);
-  }
-
-  function createHorizonCircle() {
-    const geo = new THREE.BufferGeometry();
-    const pts = [];
-    for (let i = 0; i <= 360; i++) {
-      const a = i * Math.PI / 180;
-      pts.push(100 * Math.cos(a), 0, -100 * Math.sin(a));
-    }
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    const mat = new THREE.LineBasicMaterial({ color: COLORS.horizon, opacity: 0.4, transparent: true });
-    scene.add(new THREE.Line(geo, mat));
-  }
-
-  function createAltAzGrid() {
-    const mat = new THREE.LineBasicMaterial({ color: COLORS.grid, opacity: 0.15, transparent: true });
-
-    // Altitude circles at 15, 30, 45, 60, 75
-    for (let alt = 15; alt <= 75; alt += 15) {
-      const pts = [];
-      for (let az = 0; az <= 360; az += 2) {
-        const p = lookAnglesToSkyPos(az, alt);
-        pts.push(p.x, p.y, p.z);
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-      gridGroup.add(new THREE.Line(geo, mat));
-    }
-
-    // Azimuth lines every 30 degrees
-    for (let az = 0; az < 360; az += 30) {
-      const pts = [];
-      for (let alt = 0; alt <= 90; alt += 2) {
-        const p = lookAnglesToSkyPos(az, alt);
-        pts.push(p.x, p.y, p.z);
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-      gridGroup.add(new THREE.Line(geo, mat));
-    }
-  }
-
-  function createCardinalLabels() {
-    const dirs = [
-      { label: 'N', az: 0 }, { label: 'NE', az: 45 },
-      { label: 'E', az: 90 }, { label: 'SE', az: 135 },
-      { label: 'S', az: 180 }, { label: 'SW', az: 225 },
-      { label: 'W', az: 270 }, { label: 'NW', az: 315 },
-    ];
-    dirs.forEach(d => {
-      const pos = lookAnglesToSkyPos(d.az, -2);
-      const sprite = makeTextSprite(d.label, {
-        fontSize: d.label.length === 1 ? 28 : 20,
-        color: 'rgba(60,142,200,0.5)'
-      });
-      sprite.position.copy(pos);
-      sprite.scale.set(8, 4, 1);
-      scene.add(sprite);
-    });
-
-    // Zenith label
-    const zenith = makeTextSprite('ZENITH', { fontSize: 18, color: 'rgba(60,142,200,0.3)' });
-    zenith.position.set(0, 100, 0);
-    zenith.scale.set(10, 5, 1);
-    scene.add(zenith);
-  }
-
-  function makeTextSprite(text, opts = {}) {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 256; canvas.height = 128;
-    ctx.font = (opts.fontSize || 24) + 'px Courier New';
-    ctx.fillStyle = opts.color || '#6cc0f0';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, 128, 64);
-
-    const tex = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-    return new THREE.Sprite(mat);
-  }
-
-  // ═══════════════════════════════════════
-  //  UPDATE OBJECTS
-  // ═══════════════════════════════════════
-  function updateSpaceObjects() {
-    // Clear previous
-    objectMeshes.forEach(om => skyGroup.remove(om.mesh));
-    objectMeshes = [];
-    labelSprites.forEach(s => skyGroup.remove(s));
-    labelSprites = [];
-
-    const date = getCurrentDate();
-    let counts = { satellites: 0, rocketbodies: 0, debris: 0 };
-    let visCount = 0;
-
-    // Batched geometry per category
-    const batches = {
-      satellites:  { positions: [], indices: [] },
-      rocketbodies:{ positions: [], indices: [] },
-      debris:      { positions: [], indices: [] },
+  function lookAngles(satrec, date) {
+    const gmst = satellite.gstime(date);
+    const pv = satellite.propagate(satrec, date);
+    if (!pv.position) return null;
+    const ecf = satellite.eciToEcf(pv.position, gmst);
+    const la = satellite.ecfToLookAngles(
+      { longitude: satellite.degreesToRadians(obs.lon),
+        latitude:  satellite.degreesToRadians(obs.lat),
+        height:    obs.alt / 1000 },
+      ecf
+    );
+    return {
+      az:  satellite.degreesLat(la.azimuth),
+      el:  satellite.degreesLong(la.elevation),
+      rng: la.rangeSat,
+      vel: pv.velocity
     };
-
-    spaceObjects.forEach((obj, idx) => {
-      if (!showCategories[obj.category]) return;
-
-      const la = getSatLookAngles(obj.satrec, date);
-      if (!la) return;
-
-      counts[obj.category]++;
-
-      if (la.elevation < 0) return; // below horizon
-      visCount++;
-
-      const pos = lookAnglesToSkyPos(la.azimuth, la.elevation);
-      const batch = batches[obj.category];
-      batch.positions.push(pos.x, pos.y, pos.z);
-      batch.indices.push(idx);
-
-      // Labels for high-elevation bright objects
-      if (showLabels && la.elevation > 15 && obj.category === 'satellites') {
-        const sprite = makeTextSprite(obj.name.substring(0, 20), { fontSize: 16, color: 'rgba(79,195,247,0.6)' });
-        sprite.position.copy(pos);
-        sprite.position.y += 2;
-        sprite.scale.set(12, 6, 1);
-        skyGroup.add(sprite);
-        labelSprites.push(sprite);
-      }
-    });
-
-    // Create point clouds
-    Object.entries(batches).forEach(([cat, batch]) => {
-      if (batch.positions.length === 0) return;
-
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(batch.positions, 3));
-
-      const colorKey = cat === 'rocketbodies' ? 'rocketbody' : (cat === 'debris' ? 'debris' : 'satellite');
-      const mat = new THREE.PointsMaterial({
-        color: COLORS[colorKey],
-        size: cat === 'satellites' ? 3 : 2,
-        sizeAttenuation: false,
-        transparent: true,
-        opacity: cat === 'debris' ? 0.5 : 0.85,
-        depthTest: false,
-      });
-
-      const points = new THREE.Points(geo, mat);
-      points.userData = { category: cat, indices: batch.indices };
-      skyGroup.add(points);
-      objectMeshes.push({ mesh: points, indices: batch.indices, category: cat });
-    });
-
-    $('sat-count').textContent = counts.satellites;
-    $('rb-count').textContent = counts.rocketbodies;
-    $('deb-count').textContent = counts.debris;
-    $('vis-count').textContent = visCount;
-  }
-
-  function updateCounts() {
-    const counts = { satellites: 0, rocketbodies: 0, debris: 0 };
-    spaceObjects.forEach(o => counts[o.category]++);
-    $('sat-count').textContent = counts.satellites;
-    $('rb-count').textContent = counts.rocketbodies;
-    $('deb-count').textContent = counts.debris;
   }
 
   // ═══════════════════════════════════════
-  //  INTERACTION
+  //  UPCOMING PASSES (next 30 min)
   // ═══════════════════════════════════════
-  function setupInteraction() {
-    let isDragging = false, prevX = 0, prevY = 0;
-    let phi = Math.PI / 3, theta = 0; // start looking ~60° up, north
+  function computeUpcoming() {
+    upcomingPasses = [];
+    const t0 = now();
 
-    function updateCamera() {
-      const r = 0.01;
-      camera.position.set(0, 0, 0);
-      camera.lookAt(
-        r * Math.sin(phi) * Math.cos(theta),
-        r * Math.cos(phi),
-        r * Math.sin(phi) * Math.sin(theta)
-      );
-    }
-    updateCamera();
+    objects.forEach((obj, idx) => {
+      if (obj.cat === 'deb') return; // skip debris for pass list
+      let maxEl = -90, bestAz = 0, bestTime = null;
+      let isVisible = false;
 
-    renderer.domElement.addEventListener('pointerdown', e => {
-      isDragging = true; prevX = e.clientX; prevY = e.clientY;
-    });
-    window.addEventListener('pointermove', e => {
-      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-
-      if (!isDragging) return;
-      const dx = e.clientX - prevX;
-      const dy = e.clientY - prevY;
-      theta -= dx * 0.004;
-      phi = Math.max(0.05, Math.min(Math.PI / 2, phi + dy * 0.004));
-      prevX = e.clientX; prevY = e.clientY;
-      updateCamera();
-    });
-    window.addEventListener('pointerup', () => isDragging = false);
-
-    renderer.domElement.addEventListener('wheel', e => {
-      camera.fov = Math.max(20, Math.min(120, camera.fov + e.deltaY * 0.05));
-      camera.updateProjectionMatrix();
-    }, { passive: true });
-
-    // Touch support
-    let lastTouchDist = 0;
-    renderer.domElement.addEventListener('touchstart', e => {
-      if (e.touches.length === 1) {
-        isDragging = true;
-        prevX = e.touches[0].clientX;
-        prevY = e.touches[0].clientY;
-      } else if (e.touches.length === 2) {
-        lastTouchDist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-      }
-    }, { passive: true });
-    renderer.domElement.addEventListener('touchmove', e => {
-      if (e.touches.length === 1 && isDragging) {
-        const dx = e.touches[0].clientX - prevX;
-        const dy = e.touches[0].clientY - prevY;
-        theta -= dx * 0.004;
-        phi = Math.max(0.05, Math.min(Math.PI / 2, phi + dy * 0.004));
-        prevX = e.touches[0].clientX;
-        prevY = e.touches[0].clientY;
-        updateCamera();
-      } else if (e.touches.length === 2) {
-        const dist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-        camera.fov = Math.max(20, Math.min(120, camera.fov - (dist - lastTouchDist) * 0.1));
-        camera.updateProjectionMatrix();
-        lastTouchDist = dist;
-      }
-    }, { passive: true });
-    renderer.domElement.addEventListener('touchend', () => isDragging = false, { passive: true });
-  }
-
-  // Hover detection
-  function checkHover() {
-    raycaster.setFromCamera(mouse, camera);
-    let closest = null, closestDist = Infinity;
-
-    objectMeshes.forEach(om => {
-      const intersects = raycaster.intersectObject(om.mesh);
-      if (intersects.length > 0 && intersects[0].distanceToRay < closestDist) {
-        closestDist = intersects[0].distanceToRay;
-        closest = { om, pointIndex: intersects[0].index };
-      }
-    });
-
-    if (closest) {
-      const objIdx = closest.om.indices[closest.pointIndex];
-      const obj = spaceObjects[objIdx];
-      const date = getCurrentDate();
-      const la = getSatLookAngles(obj.satrec, date);
-
-      let html = '<strong>' + obj.name + '</strong><br>';
-      html += 'Type: ' + obj.category + '<br>';
-      if (la) {
-        html += 'Az: ' + la.azimuth.toFixed(1) + '°  El: ' + la.elevation.toFixed(1) + '°<br>';
-        html += 'Range: ' + la.range.toFixed(0) + ' km';
-        if (la.velocity) {
-          const speed = Math.sqrt(la.velocity.x**2 + la.velocity.y**2 + la.velocity.z**2);
-          html += '<br>Speed: ' + speed.toFixed(1) + ' km/s';
+      // scan every 30 seconds for 30 minutes
+      for (let s = 0; s <= 1800; s += 30) {
+        const t = new Date(t0.getTime() + s * 1000);
+        const la = lookAngles(obj.satrec, t);
+        if (!la) continue;
+        if (la.el > 0) {
+          isVisible = true;
+          if (la.el > maxEl) {
+            maxEl = la.el;
+            bestAz = la.az;
+            bestTime = t;
+          }
         }
       }
 
-      tooltip.innerHTML = html;
-      tooltip.classList.add('visible');
-      const rect = renderer.domElement.getBoundingClientRect();
-      const px = (mouse.x * 0.5 + 0.5) * rect.width;
-      const py = (-mouse.y * 0.5 + 0.5) * rect.height;
-      tooltip.style.left = (px + 15) + 'px';
-      tooltip.style.top = (py - 10) + 'px';
-    } else {
-      tooltip.classList.remove('visible');
+      if (isVisible && maxEl > 5) {
+        upcomingPasses.push({ idx, name: obj.name, maxEl, bestAz, bestTime, cat: obj.cat });
+      }
+    });
+
+    // sort by peak elevation (brightest/best first)
+    upcomingPasses.sort((a, b) => b.maxEl - a.maxEl);
+    upcomingPasses = upcomingPasses.slice(0, 20);
+    renderPassList();
+  }
+
+  function renderPassList() {
+    const el = $('pass-list');
+    if (upcomingPasses.length === 0) {
+      el.innerHTML = '<div class="pass-item dim">No objects above horizon</div>';
+      return;
     }
+    el.innerHTML = upcomingPasses.map((p, i) => {
+      const t = p.bestTime;
+      const timeStr = t.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+      const bright = p.maxEl > 45 ? ' bright' : '';
+      const dir = azToDir(p.bestAz);
+      return '<div class="pass-item" data-name="' + p.name + '">' +
+        '<span class="name' + bright + '">' + p.name.substring(0, 22) + '</span> ' +
+        '<span class="dim">·</span> ' +
+        '<span class="time">' + timeStr + '</span> ' +
+        '<span class="dim">·</span> ' +
+        dir + ' ' + p.bestAz.toFixed(0) + '° az ' +
+        '<span class="dim">·</span> ' +
+        p.maxEl.toFixed(0) + '° peak' +
+        '</div>';
+    }).join('');
+
+    // hover highlight
+    el.querySelectorAll('.pass-item').forEach(item => {
+      item.addEventListener('mouseenter', () => highlightedName = item.dataset.name);
+      item.addEventListener('mouseleave', () => highlightedName = null);
+    });
+  }
+
+  function azToDir(az) {
+    const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+    return dirs[Math.round(az / 45) % 8];
+  }
+
+  // ═══════════════════════════════════════
+  //  DRAW
+  // ═══════════════════════════════════════
+  function draw() {
+    ctx.fillStyle = BG;
+    ctx.fillRect(0, 0, W, H);
+
+    drawGrid();
+    drawCardinals();
+
+    const date = now();
+    let visCount = 0, totalCount = 0;
+    hovered = null;
+    let closestDist = 14;
+
+    // collect visible objects
+    const visible = [];
+    objects.forEach((obj, idx) => {
+      if (!show[obj.cat]) return;
+      const la = lookAngles(obj.satrec, date);
+      if (!la) return;
+      totalCount++;
+      if (la.el < 0) return;
+      visCount++;
+      visible.push({ idx, obj, la });
+    });
+
+    // Draw arcs first (behind dots)
+    if (showArcs) {
+      visible.forEach(v => drawArc(v.obj, v.la, date));
+    }
+
+    // Draw dots
+    visible.forEach(v => {
+      const { obj, la, idx } = v;
+      const p = skyToXY(la.az, la.el);
+      const col = CAT_COLORS[obj.cat];
+      const isHighlighted = obj.name === highlightedName;
+      const size = isHighlighted ? 5 : (obj.cat === 'deb' ? 1.5 : 2.5);
+
+      // Glow for highlighted
+      if (isHighlighted) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+        ctx.fillStyle = col + '18';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+        ctx.fillStyle = col + '30';
+        ctx.fill();
+      }
+
+      // Dot
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
+      ctx.fillStyle = isHighlighted ? BRIGHT : col;
+      ctx.globalAlpha = obj.cat === 'deb' ? 0.4 : 0.85;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // Label for highlighted
+      if (isHighlighted) {
+        ctx.font = '9px Courier New';
+        ctx.fillStyle = BRIGHT;
+        ctx.textAlign = 'left';
+        ctx.fillText(obj.name.substring(0, 22).toUpperCase(), p.x + 10, p.y - 6);
+        ctx.fillStyle = DIM;
+        ctx.fillText(
+          'AZ ' + la.az.toFixed(1) + '°  EL ' + la.el.toFixed(1) + '°  ' +
+          la.rng.toFixed(0) + ' KM',
+          p.x + 10, p.y + 6
+        );
+      }
+
+      // Hover detection
+      if (mouseX >= 0) {
+        const dx = mouseX - p.x, dy = mouseY - p.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < closestDist) { closestDist = d; hovered = { obj, la, px: p.x, py: p.y }; }
+      }
+    });
+
+    // Stats
+    $('n-total').textContent = totalCount;
+    $('n-vis').textContent = visCount;
+
+    // Tooltip
+    const tip = $('tip');
+    if (hovered) {
+      const h = hovered;
+      const speed = h.la.vel ? Math.sqrt(h.la.vel.x**2 + h.la.vel.y**2 + h.la.vel.z**2).toFixed(1) : '?';
+      const catLabel = { sat: 'satellite', rb: 'rocket body', deb: 'debris' }[h.obj.cat];
+      tip.innerHTML =
+        '<div style="color:' + BRIGHT + '">' + h.obj.name + '</div>' +
+        catLabel + '<br>' +
+        'az ' + h.la.az.toFixed(1) + '°  el ' + h.la.el.toFixed(1) + '°<br>' +
+        'range ' + h.la.rng.toFixed(0) + ' km<br>' +
+        'speed ' + speed + ' km/s';
+      tip.style.left = (h.px + 16) + 'px';
+      tip.style.top = (h.py - 16) + 'px';
+      tip.classList.add('show');
+    } else {
+      tip.classList.remove('show');
+    }
+  }
+
+  // Draw orbital arc (trajectory over next 60 min)
+  function drawArc(obj, currentLa, date) {
+    const col = CAT_COLORS[obj.cat];
+    ctx.beginPath();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 0.6;
+    let started = false;
+
+    for (let m = 0; m <= 60; m += 1) {
+      const t = new Date(date.getTime() + m * 60000);
+      const la = lookAngles(obj.satrec, t);
+      if (!la || la.el < 0) {
+        if (started) { ctx.stroke(); ctx.beginPath(); started = false; }
+        continue;
+      }
+      const p = skyToXY(la.az, la.el);
+      if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+      else ctx.lineTo(p.x, p.y);
+
+      // Tick marks every 15 min
+      if (m > 0 && m % 15 === 0) {
+        ctx.fillStyle = col;
+        ctx.globalAlpha = 0.5;
+        ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
+        ctx.globalAlpha = 1;
+      }
+    }
+    if (started) {
+      ctx.globalAlpha = obj.cat === 'deb' ? 0.15 : 0.25;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Blueprint grid — altitude/azimuth circles
+  function drawGrid() {
+    ctx.strokeStyle = GRID_COL;
+    ctx.lineWidth = 0.5;
+
+    // Horizon circle
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.strokeStyle = LINE;
+    ctx.globalAlpha = 0.25;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    if (!showGrid) return;
+
+    ctx.strokeStyle = GRID_COL;
+    ctx.globalAlpha = 0.4;
+
+    // Altitude rings at 15° intervals
+    for (let alt = 15; alt <= 75; alt += 15) {
+      const r = R * (1 - alt / 90);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // label
+      ctx.font = '8px Courier New';
+      ctx.fillStyle = GRID_COL;
+      ctx.textAlign = 'center';
+      ctx.fillText(alt + '°', cx + r + 14, cy + 3);
+    }
+
+    // Azimuth lines every 30°
+    for (let az = 0; az < 360; az += 30) {
+      const a = (az - 90) * Math.PI / 180;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a));
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Cardinal direction labels
+  function drawCardinals() {
+    const dirs = [
+      { l: 'N', az: 0 }, { l: 'E', az: 90 },
+      { l: 'S', az: 180 }, { l: 'W', az: 270 }
+    ];
+    ctx.font = '11px Courier New';
+    ctx.fillStyle = LINE;
+    ctx.globalAlpha = 0.35;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    dirs.forEach(d => {
+      const a = (d.az - 90) * Math.PI / 180;
+      const r = R + 16;
+      ctx.fillText(d.l, cx + r * Math.cos(a), cy + r * Math.sin(a));
+    });
+
+    // Zenith crosshair
+    ctx.beginPath();
+    ctx.moveTo(cx - 4, cy); ctx.lineTo(cx + 4, cy);
+    ctx.moveTo(cx, cy - 4); ctx.lineTo(cx, cy + 4);
+    ctx.strokeStyle = DIM;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
   }
 
   // ═══════════════════════════════════════
   //  CONTROLS
   // ═══════════════════════════════════════
-  function setupControls() {
-    // Category toggles
-    ['toggle-sat', 'toggle-rb', 'toggle-deb'].forEach(id => {
-      $(id).addEventListener('click', function() {
-        this.classList.toggle('active');
-        const cat = this.dataset.cat;
-        showCategories[cat] = this.classList.contains('active');
-      });
-    });
+  ['t-sat', 't-rb', 't-deb'].forEach(id => {
+    $(id).onclick = function() {
+      this.classList.toggle('on');
+      show[this.dataset.c] = this.classList.contains('on');
+    };
+  });
+  $('t-arcs').onclick = function() {
+    showArcs = !showArcs;
+    this.classList.toggle('on', showArcs);
+  };
+  $('t-grid').onclick = function() {
+    showGrid = !showGrid;
+    this.classList.toggle('on', showGrid);
+  };
 
-    $('toggle-grid').addEventListener('click', function() {
-      showGrid = !showGrid;
-      this.classList.toggle('active', showGrid);
-      gridGroup.visible = showGrid;
-    });
+  const slider = $('t-slider');
+  slider.oninput = () => { tOff = parseInt(slider.value); };
+  $('t-back').onclick = () => { tOff = Math.max(-360, tOff - 10); slider.value = tOff; };
+  $('t-fwd').onclick = () => { tOff = Math.min(360, tOff + 10); slider.value = tOff; };
+  $('t-now').onclick = () => { tOff = 0; slider.value = 0; };
 
-    $('toggle-labels').addEventListener('click', function() {
-      showLabels = !showLabels;
-      this.classList.toggle('active', showLabels);
-    });
+  // ═══════════════════════════════════════
+  //  LOOP
+  // ═══════════════════════════════════════
+  let lastPassUpdate = 0;
 
-    // Time controls
-    const slider = $('time-slider');
-    slider.addEventListener('input', () => {
-      timeOffsetMin = parseInt(slider.value);
-    });
-    $('time-back').addEventListener('click', () => {
-      timeOffsetMin = Math.max(-720, timeOffsetMin - 15);
-      slider.value = timeOffsetMin;
-    });
-    $('time-fwd').addEventListener('click', () => {
-      timeOffsetMin = Math.min(720, timeOffsetMin + 15);
-      slider.value = timeOffsetMin;
-    });
-    $('time-now').addEventListener('click', () => {
-      timeOffsetMin = 0;
-      slider.value = 0;
-    });
-  }
-  setupControls();
+  function loop() {
+    draw();
 
-  function updateTimeDisplay() {
-    const d = getCurrentDate();
+    // Update time display
+    const d = now();
     $('time-display').textContent = d.toLocaleString(undefined, {
       month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      hour12: false
-    }) + ' UTC' + (d.getTimezoneOffset() > 0 ? '-' : '+') +
-      Math.abs(Math.floor(d.getTimezoneOffset() / 60));
-  }
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    });
 
-  // ═══════════════════════════════════════
-  //  RENDER LOOP
-  // ═══════════════════════════════════════
-  let lastUpdate = 0;
+    // Refresh upcoming passes every 60s
+    const t = performance.now();
+    if (t - lastPassUpdate > 60000) { computeUpcoming(); lastPassUpdate = t; }
 
-  function animate() {
-    requestAnimationFrame(animate);
-
-    const now = performance.now();
-    // Update positions every 2 seconds (SGP4 is expensive with many objects)
-    if (now - lastUpdate > 2000) {
-      updateSpaceObjects();
-      updateTimeDisplay();
-      lastUpdate = now;
-    }
-
-    checkHover();
-    renderer.render(scene, camera);
-  }
-
-  function onResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    requestAnimationFrame(loop);
   }
 
 })();
