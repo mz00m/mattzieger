@@ -512,8 +512,8 @@
       { url: 'https://jobsdata.ai', label: 'jobsdata.ai', height: 1.28, bud: true, leaves: [0.4, 0.65] },
       { url: 'https://linkedin.com/in/mattzieger', label: 'linkedin', height: 0.9 },
       { url: 'https://instagram.com/mattzieger', label: 'instagram', height: 0.55 },
-      { url: 'https://opportunityai.org', label: 'Opportunity AI', height: 0.8 },
-      { url: 'https://www.gitlabfoundation.org/futureofwork', label: 'AI for Economic Opportunity Fund', height: 1.28, bud: true, leaves: [0.5] },
+      { url: 'https://opportunityai.org', label: 'Opportunity AI', height: 1.28, bud: 'open', leaves: [0.4, 0.65] },
+      { url: 'https://www.gitlabfoundation.org/futureofwork', label: 'AI for Economic Opportunity Fund', height: 1.6, bud: 'open', leaves: [0.35, 0.55, 0.75] },
       { url: 'https://nightsky.mattzieger.com', label: 'night sky', height: 0.25 },
       { url: 'https://www.thekidswillbealright.com/', label: 'the kids will be alright', height: 0.3 },
       { url: 'https://bejoyful.ai', label: 'bejoyful.ai', height: 0.5 },
@@ -542,7 +542,7 @@
         url: links[i].url,
         label: links[i].label,
         height: links[i].height, // taller for linked seedlings
-        bud: !!links[i].bud,
+        bud: links[i].bud || false,
         leaves: links[i].leaves || null,
         leafAngle: Math.random() * Math.PI * 2,
         isExtra: false,
@@ -755,9 +755,12 @@
       if (sd.bud && growT > 0.6) {
         const budT = clamp01((growT - 0.6) / 0.4);
         const tipPt = stemPts[stemPts.length - 1];
-        const budR = 0.06 + 0.04 * budT;
-        const budH = 0.1 + 0.06 * budT;
-        // Draw 3 overlapping petal outlines forming a closed bud
+        const isOpen = sd.bud === 'open';
+        const budScale = isOpen ? 1.5 : 1.0;
+        const budR = (0.06 + 0.04 * budT) * budScale;
+        const budH = (0.1 + 0.06 * budT) * budScale;
+        const openAmount = isOpen ? budT * 0.35 : 0; // petals splay outward
+        // Draw 3 overlapping petal outlines forming a bud
         for (let p = 0; p < 3; p++) {
           const pa = (p / 3) * Math.PI * 2;
           const petalPts = [];
@@ -765,15 +768,37 @@
           for (let j = 0; j <= petalSteps; j++) {
             const t = j / petalSteps;
             const bulge = Math.sin(t * Math.PI);
-            const px = tipPt.x + Math.cos(pa) * bulge * budR;
+            // For open bud, petals flare outward near the top
+            const flare = isOpen ? openAmount * t * t : 0;
+            const px = tipPt.x + Math.cos(pa) * bulge * (budR + flare * 0.15);
             const py = tipPt.y + t * budH;
-            const pz = tipPt.z + Math.sin(pa) * bulge * budR;
+            const pz = tipPt.z + Math.sin(pa) * bulge * (budR + flare * 0.15);
             petalPts.push(new THREE.Vector3(px, py, pz));
           }
           sproutGroup.add(new THREE.Line(
             new THREE.BufferGeometry().setFromPoints(petalPts),
             lineMat(BRIGHT_COLOR, 0.5 + 0.4 * budT)
           ));
+        }
+        if (isOpen) {
+          // Additional outer petals curling back slightly
+          for (let p = 0; p < 3; p++) {
+            const pa = (p / 3) * Math.PI * 2 + Math.PI / 3; // offset from inner petals
+            const outerPts = [];
+            for (let j = 0; j <= 8; j++) {
+              const t = j / 8;
+              const bulge = Math.sin(t * Math.PI);
+              const curl = t * t * openAmount * 0.25;
+              const px = tipPt.x + Math.cos(pa) * (bulge * budR * 1.15 + curl);
+              const py = tipPt.y + t * budH * 0.9;
+              const pz = tipPt.z + Math.sin(pa) * (bulge * budR * 1.15 + curl);
+              outerPts.push(new THREE.Vector3(px, py, pz));
+            }
+            sproutGroup.add(new THREE.Line(
+              new THREE.BufferGeometry().setFromPoints(outerPts),
+              lineMat(BRIGHT_COLOR, 0.35 + 0.3 * budT)
+            ));
+          }
         }
         // Small pointed tip at the top of the bud
         const tipTop = new THREE.Vector3(tipPt.x, tipPt.y + budH + 0.02 * budT, tipPt.z);
