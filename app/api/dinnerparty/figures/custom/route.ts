@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { HistoricalFigure } from '@/lib/figures';
 import {
   generateCustomFigure,
   addCustomFigure,
@@ -9,6 +10,30 @@ import {
 export async function GET() {
   const figures = getCustomFigures();
   return NextResponse.json({ figures });
+}
+
+// PUT: Register an already-created custom figure (e.g. from session storage)
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { figure } = body as { figure: HistoricalFigure };
+
+    if (!figure?.id || !figure?.name) {
+      return NextResponse.json(
+        { error: 'Valid figure object with id and name is required' },
+        { status: 400 }
+      );
+    }
+
+    addCustomFigure(figure);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('Register custom figure error:', error);
+    return NextResponse.json(
+      { error: 'Failed to register custom figure' },
+      { status: 500 }
+    );
+  }
 }
 
 // POST: Create a new custom figure

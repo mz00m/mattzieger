@@ -5,12 +5,13 @@ import type { ConversationExchange } from '@/lib/conversationOrchestrator';
 import type { CharacterKnowledgeBase } from '@/lib/researchAgent';
 import { useAudio } from '@/lib/useAudio';
 import { getUniqueVoiceProfile, getNarratorVoiceId, getWebSpeechVoice, getVoiceSettingsForPersonality } from '@/lib/voiceProfiles';
-import { FIGURES } from '@/lib/figures';
+import { FIGURES, type HistoricalFigure } from '@/lib/figures';
 
 interface ConversationPlayerProps {
   exchanges: ConversationExchange[];
   guests: CharacterKnowledgeBase[];
   voiceAssignments?: Record<string, { voiceId: string; voiceName: string }>;
+  customFigures?: HistoricalFigure[];
   isPlaying: boolean;
   onTogglePlay: () => void;
   audioEnabled: boolean;
@@ -43,6 +44,7 @@ export default function ConversationPlayer({
   exchanges,
   guests,
   voiceAssignments = {},
+  customFigures = [],
   isPlaying,
   onTogglePlay,
   audioEnabled,
@@ -62,6 +64,15 @@ export default function ConversationPlayer({
   const usedVoiceIds = useRef(new Set<string>());
 
   const guestMap = new Map(guests.map((g, i) => [g.figureId, { ...g, colorIndex: i }]));
+
+  // Combined figure lookup: hardcoded FIGURES + custom figures from session
+  const allFigures = useRef([...FIGURES, ...customFigures]);
+  allFigures.current = [...FIGURES, ...customFigures];
+  const findFigure = useCallback((speaker: string, normalizedId: string) => {
+    return allFigures.current.find((f) => f.id === speaker)
+      || allFigures.current.find((f) => f.id === normalizedId)
+      || allFigures.current.find((f) => f.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === normalizedId);
+  }, []);
 
   // Audio system
   const { speak, stop, isSpeaking } = useAudio({
@@ -115,8 +126,7 @@ export default function ConversationPlayer({
       // Check if we already assigned a voice to this figure in this session
       const cached = figureVoiceMap.current.get(figureKey);
       if (cached) {
-        const figure = FIGURES.find((f) => f.id === exchange.speaker)
-          || FIGURES.find((f) => f.id === speakerId);
+        const figure = findFigure(exchange.speaker, speakerId);
         const webVoice = figure
           ? getWebSpeechVoice(figure.nationality, figure.voicePersonality, figure.id)
           : { lang: 'en-US', pitch: 1, rate: 1, voiceIndex: 0 };
@@ -124,9 +134,7 @@ export default function ConversationPlayer({
       } else {
         // First time this figure speaks — assign them a unique voice
         const discovered = voiceAssignments[exchange.speaker] || voiceAssignments[speakerId];
-        const figure = FIGURES.find((f) => f.id === exchange.speaker)
-          || FIGURES.find((f) => f.id === speakerId)
-          || FIGURES.find((f) => f.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === speakerId);
+        const figure = findFigure(exchange.speaker, speakerId);
 
         let voiceId: string;
         let voiceSettings: { stability: number; similarity_boost: number; style: number; use_speaker_boost: boolean };

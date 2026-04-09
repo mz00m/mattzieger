@@ -108,9 +108,15 @@ export default function DinnerPartyPage() {
   const currentStep = selectedGuests.length >= 2 ? (selectedTopic ? 3 : 2) : 1;
 
   const handleBeginEvening = () => {
+    // Identify custom figures (not in the hardcoded FIGURES array)
+    const hardcodedIds = new Set(FIGURES.map((f) => f.id));
+    const customFigureData = selectedGuests
+      .filter((g) => !hardcodedIds.has(g.id));
+
     const sessionData = {
       id: crypto.randomUUID(),
       figureIds: selectedGuests.map((g) => g.id),
+      customFigures: customFigureData.length > 0 ? customFigureData : undefined,
       depth: researchDepth,
       topic: selectedTopic,
       topicCategory,

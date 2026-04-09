@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ResearchProgress from '@/components/ResearchProgress';
 import { getFromClientCache, setInClientCache } from '@/lib/researchCache';
-import { FIGURES } from '@/lib/figures';
+import { FIGURES, type HistoricalFigure } from '@/lib/figures';
 
 const KNOWN_FEMALE_IDS = new Set([
   'simone-de-beauvoir', 'hannah-arendt', 'simone-weil', 'marie-curie',
@@ -23,6 +23,7 @@ const KNOWN_FEMALE_IDS = new Set([
 interface SessionData {
   id: string;
   figureIds: string[];
+  customFigures?: HistoricalFigure[];
   depth: 'quick' | 'deep';
   topic: string;
   topicCategory: string;
@@ -148,16 +149,41 @@ export default function ResearchPage() {
 
     const sessionData: SessionData = JSON.parse(stored);
 
+    // Build a combined lookup of all figures (hardcoded + custom)
+    const customFigureMap = new Map<string, HistoricalFigure>();
+    if (sessionData.customFigures) {
+      for (const cf of sessionData.customFigures) {
+        customFigureMap.set(cf.id, cf);
+      }
+      // Register custom figures with the server so the research API can find them
+      for (const cf of sessionData.customFigures) {
+        try {
+          await fetch('/api/dinnerparty/figures/custom', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ figure: cf }),
+          });
+        } catch {
+          // Non-fatal — research API may still find it
+        }
+      }
+    }
+    const findFigure = (id: string): HistoricalFigure | undefined =>
+      FIGURES.find((f) => f.id === id) || customFigureMap.get(id);
+
     // Initialize statuses
-    const initialStatuses = sessionData.figureIds.map((id) => ({
-      figureId: id,
-      figureName: id
-        .replace(/-/g, ' ')
-        .replace(/\b\w/g, (l) => l.toUpperCase()),
-      stage: 'waiting',
-      progress: 2,
-      complete: false,
-    }));
+    const initialStatuses = sessionData.figureIds.map((id) => {
+      const fig = findFigure(id);
+      return {
+        figureId: id,
+        figureName: fig?.name || id
+          .replace(/-/g, ' ')
+          .replace(/\b\w/g, (l) => l.toUpperCase()),
+        stage: 'waiting',
+        progress: 2,
+        complete: false,
+      };
+    });
     setStatuses(initialStatuses);
 
     // Research all figures in parallel with slight stagger (200ms apart)
@@ -179,9 +205,17 @@ export default function ResearchPage() {
     let voiceAssignments: Record<string, { voiceId: string; voiceName: string }> = {};
     try {
       const figureRequests = sessionData.figureIds.map((id) => {
-        const figure = FIGURES.find((f) => f.id === id);
-        const gender: 'male' | 'female' = KNOWN_FEMALE_IDS.has(id) ? 'female' : 'male';
-        // Determine age from birth/death dates
+        const figure = findFigure(id);
+        // Detect gender: check known set, or guess from voicePersonality/name for custom figures
+        let gender: 'male' | 'female' = 'male';
+        if (KNOWN_FEMALE_IDS.has(id)) {
+          gender = 'female';
+        } else if (figure) {
+          const vp = (figure.voicePersonality + ' ' + figure.name).toLowerCase();
+          if (vp.includes('female') || vp.includes('woman') || vp.includes('her ') || vp.includes('she ') || vp.includes('actress') || vp.includes('queen') || vp.includes('empress')) {
+            gender = 'female';
+          }
+        }
         let age: 'young' | 'middle_aged' | 'old' | undefined;
         if (figure) {
           const vp = figure.voicePersonality.toLowerCase();
