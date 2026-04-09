@@ -490,10 +490,10 @@
   }
 
   // === Seedlings ===
-  const SEEDLING_COUNT = 8;
+  const SEEDLING_COUNT = 9;
   const SEEDLING_DELAY = 1.5; // seconds after bloom starts — sprout alongside the flower
   const SEEDLING_STAGGER = 1.8; // seconds between each seedling popping up
-  const EXTRA_SEEDLING_COUNT = 50; // additional decorative seedlings
+  const EXTRA_SEEDLING_COUNT = 25; // additional decorative seedlings
   const EXTRA_SEEDLING_DELAY = SEEDLING_DELAY + SEEDLING_COUNT * SEEDLING_STAGGER; // start right after the first 5
   const seedlingsGroup = new THREE.Group();
   scene.add(seedlingsGroup);
@@ -506,6 +506,7 @@
   function initSeedlings() {
     seedlingData.length = 0;
     seedlingHitboxes.length = 0;
+    seedlingCache.clear();
     clearGroup(seedlingsGroup);
 
     const links = [
@@ -517,6 +518,7 @@
       { url: 'https://nightsky.mattzieger.com', label: 'night sky', height: 0.25 },
       { url: 'https://www.thekidswillbealright.com/', label: 'the kids will be alright', height: 0.3 },
       { url: 'https://bejoyful.ai', label: 'bejoyful.ai', height: 0.5 },
+      { url: 'https://mattzieger.com/dinnerparty', label: 'dinner party', height: 0.45 },
     ];
 
     // Shuffle placement angles but keep them spaced out
@@ -578,12 +580,40 @@
 
   initSeedlings();
 
+  // Cache for fully-grown seedling groups to avoid per-frame rebuilds
+  const seedlingCache = new Map(); // index -> { group, hitboxes }
+
+  function clearSeedlingCache() {
+    seedlingCache.forEach(cached => {
+      clearGroup(cached.group);
+    });
+    seedlingCache.clear();
+  }
+
   function buildSeedlings(bloomProgress) {
-    clearGroup(seedlingsGroup);
+    // Remove only non-cached children; rebuild active ones
+    const toRemove = [];
+    for (let ci = seedlingsGroup.children.length - 1; ci >= 0; ci--) {
+      const child = seedlingsGroup.children[ci];
+      if (!child.userData._cached) {
+        if (child.geometry) child.geometry.dispose();
+        toRemove.push(child);
+      }
+    }
+    for (const child of toRemove) seedlingsGroup.remove(child);
     seedlingHitboxes.length = 0;
+
+    // Re-add cached hitboxes
+    seedlingCache.forEach(cached => {
+      for (const hb of cached.hitboxes) seedlingHitboxes.push(hb);
+    });
 
     for (let i = 0; i < seedlingData.length; i++) {
       const sd = seedlingData[i];
+
+      // Skip if already cached (fully grown)
+      if (seedlingCache.has(i)) continue;
+
       // Staggered appearance — extra seedlings use their own delay
       let seedlingStart;
       if (sd.isExtra) {
@@ -591,7 +621,7 @@
         const ei = i - SEEDLING_COUNT;
         const t = ei / (EXTRA_SEEDLING_COUNT - 1); // 0..1
         // Cubic ease-in: later seedlings appear much more slowly
-        const maxTime = 20; // total seconds for all extra seedlings
+        const maxTime = 12; // total seconds for all extra seedlings
         seedlingStart = EXTRA_SEEDLING_DELAY + t * t * t * maxTime;
       } else {
         seedlingStart = SEEDLING_DELAY + i * SEEDLING_STAGGER;
@@ -877,14 +907,23 @@
       }
 
       // Invisible hitbox for raycasting (only for linked seedlings)
+      const cachedHitboxes = [];
       if (sd.url && growT > 0.3) {
-        const hitGeo = new THREE.CylinderGeometry(0.22, 0.22, sproutH + 0.4, 8);
+        const hitGeo = new THREE.CylinderGeometry(0.22, 0.22, sproutH + 0.4, 4);
         const hitMat = new THREE.MeshBasicMaterial({ visible: false });
         const hitMesh = new THREE.Mesh(hitGeo, hitMat);
         hitMesh.position.set(sd.x, groundY + sproutH * 0.5, sd.z);
         hitMesh.userData = { url: sd.url, label: sd.label, index: i };
         seedlingsGroup.add(hitMesh);
         seedlingHitboxes.push(hitMesh);
+        cachedHitboxes.push(hitMesh);
+      }
+
+      // Cache fully-grown seedlings so they aren't rebuilt every frame
+      if (growT >= 1) {
+        sproutGroup.userData._cached = true;
+        for (const hb of cachedHitboxes) hb.userData._cached = true;
+        seedlingCache.set(i, { group: sproutGroup, hitboxes: cachedHitboxes });
       }
     }
   }
@@ -1043,7 +1082,7 @@
       buildSeedlings(bloomProgress);
 
       // Check if all animations are complete
-      const lastSeedlingEnd = EXTRA_SEEDLING_DELAY + 20 + 1.2; // matches cubic easing maxTime
+      const lastSeedlingEnd = EXTRA_SEEDLING_DELAY + 12 + 1.2; // matches cubic easing maxTime
       if (bloomTime > lastSeedlingEnd && bloomProgress >= 1) {
         animationDone = true;
       }
