@@ -4,6 +4,21 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ResearchProgress from '@/components/ResearchProgress';
 import { getFromClientCache, setInClientCache } from '@/lib/researchCache';
+import { FIGURES } from '@/lib/figures';
+
+const KNOWN_FEMALE_IDS = new Set([
+  'simone-de-beauvoir', 'hannah-arendt', 'simone-weil', 'marie-curie',
+  'ada-lovelace', 'rosalind-franklin', 'rachel-carson', 'jane-austen',
+  'virginia-woolf', 'toni-morrison', 'zora-neale-hurston', 'octavia-butler',
+  'harriet-tubman', 'eleanor-roosevelt', 'ida-b-wells', 'sojourner-truth',
+  'angela-davis', 'joan-rivers', 'moms-mabley', 'nora-ephron',
+  'phyllis-diller', 'nina-simone', 'billie-holiday', 'aretha-franklin',
+  'patti-smith', 'grace-hopper', 'bell-hooks', 'roxane-gay', 'brene-brown',
+  'susan-sontag', 'frida-kahlo', 'georgia-okeeffe', 'maya-angelou',
+  'mary-wollstonecraft', 'cleopatra', 'marie-antoinette', 'hypatia',
+  'harriet-beecher-stowe', 'sylvia-plath', 'mary-shelley', 'emily-dickinson',
+  'ella-fitzgerald', 'wu-zetian', 'amelia-earhart',
+]);
 
 interface SessionData {
   id: string;
@@ -160,10 +175,54 @@ export default function ResearchPage() {
       }
     }
 
+    // Match voices for all figures using ElevenLabs voice discovery
+    let voiceAssignments: Record<string, { voiceId: string; voiceName: string }> = {};
+    try {
+      const figureRequests = sessionData.figureIds.map((id) => {
+        const figure = FIGURES.find((f) => f.id === id);
+        const gender: 'male' | 'female' = KNOWN_FEMALE_IDS.has(id) ? 'female' : 'male';
+        // Determine age from birth/death dates
+        let age: 'young' | 'middle_aged' | 'old' | undefined;
+        if (figure) {
+          const vp = figure.voicePersonality.toLowerCase();
+          if (vp.includes('young') || vp.includes('youthful')) age = 'young';
+          else if (vp.includes('elder') || vp.includes('wise old') || vp.includes('aged')) age = 'old';
+          else age = 'middle_aged';
+        }
+        return {
+          figureId: id,
+          gender,
+          nationality: figure?.nationality || 'American',
+          voicePersonality: figure?.voicePersonality || '',
+          age,
+        };
+      });
+
+      const voiceResponse = await fetch('/api/dinnerparty/voices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ figures: figureRequests }),
+      });
+
+      if (voiceResponse.ok) {
+        const voiceData = await voiceResponse.json();
+        for (const assignment of voiceData.assignments || []) {
+          voiceAssignments[assignment.figureId] = {
+            voiceId: assignment.voiceId,
+            voiceName: assignment.voiceName,
+          };
+        }
+        console.log(`[Research] Matched ${Object.keys(voiceAssignments).length} voices from ElevenLabs library`);
+      }
+    } catch (err) {
+      console.warn('[Research] Voice discovery failed, will use fallback voices:', err);
+    }
+
     // Store results and navigate
     const fullSession = {
       ...sessionData,
       researchResults: results,
+      voiceAssignments,
     };
     sessionStorage.setItem(
       `dinner-session-${sessionId}`,

@@ -4,12 +4,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ConversationExchange } from '@/lib/conversationOrchestrator';
 import type { CharacterKnowledgeBase } from '@/lib/researchAgent';
 import { useAudio } from '@/lib/useAudio';
-import { getVoiceProfile, getNarratorVoiceId, getWebSpeechVoice } from '@/lib/voiceProfiles';
+import { getVoiceProfile, getNarratorVoiceId, getWebSpeechVoice, getVoiceSettingsForPersonality } from '@/lib/voiceProfiles';
 import { FIGURES } from '@/lib/figures';
 
 interface ConversationPlayerProps {
   exchanges: ConversationExchange[];
   guests: CharacterKnowledgeBase[];
+  voiceAssignments?: Record<string, { voiceId: string; voiceName: string }>;
   isPlaying: boolean;
   onTogglePlay: () => void;
   audioEnabled: boolean;
@@ -41,6 +42,7 @@ function getGuestBorderColor(index: number): string {
 export default function ConversationPlayer({
   exchanges,
   guests,
+  voiceAssignments = {},
   isPlaying,
   onTogglePlay,
   audioEnabled,
@@ -104,11 +106,30 @@ export default function ConversationPlayer({
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
 
+      // Check for dynamically discovered voice first (from ElevenLabs library)
+      const discovered = voiceAssignments[exchange.speaker] || voiceAssignments[speakerId];
+
       const figure = FIGURES.find((f) => f.id === exchange.speaker)
         || FIGURES.find((f) => f.id === speakerId)
         || FIGURES.find((f) => f.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === speakerId);
 
-      if (figure) {
+      if (discovered) {
+        // Use the discovered voice from the user's ElevenLabs library
+        // with personality-tuned settings
+        const voiceSettings = figure
+          ? getVoiceSettingsForPersonality(figure.voicePersonality, figure.category)
+          : { stability: 0.4, similarity_boost: 0.65, style: 0.5, use_speaker_boost: true };
+        const webVoice = figure
+          ? getWebSpeechVoice(figure.nationality, figure.voicePersonality, figure.id)
+          : { lang: 'en-US', pitch: 1, rate: 1, voiceIndex: 0 };
+        speak(
+          exchange.text,
+          discovered.voiceId,
+          voiceSettings,
+          webVoice
+        );
+      } else if (figure) {
+        // Fall back to hardcoded voice profile
         const profile = getVoiceProfile(figure.id, figure.voicePersonality, figure.category, figure.nationality);
         const webVoice = getWebSpeechVoice(figure.nationality, figure.voicePersonality, figure.id);
         speak(

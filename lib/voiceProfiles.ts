@@ -334,6 +334,19 @@ export function getNarratorVoiceId(): string {
   return VOICES_NARRATOR[0];
 }
 
+/**
+ * Get voice settings tuned for a figure's personality archetype.
+ * Used with dynamically discovered voices (from voiceDiscovery.ts).
+ */
+export function getVoiceSettingsForPersonality(
+  voicePersonality: string,
+  categories: string[]
+): { stability: number; similarity_boost: number; style: number; use_speaker_boost: boolean } {
+  const archetype = detectArchetype(voicePersonality, categories);
+  const settings = ARCHETYPE_SETTINGS[archetype];
+  return { ...settings, use_speaker_boost: true };
+}
+
 // ---------------------------------------------------------------------------
 // Web Speech API fallback
 // ---------------------------------------------------------------------------
