@@ -108,9 +108,15 @@ export default function DinnerPartyPage() {
   const currentStep = selectedGuests.length >= 2 ? (selectedTopic ? 3 : 2) : 1;
 
   const handleBeginEvening = () => {
+    // Identify custom figures (not in the hardcoded FIGURES array)
+    const hardcodedIds = new Set(FIGURES.map((f) => f.id));
+    const customFigureData = selectedGuests
+      .filter((g) => !hardcodedIds.has(g.id));
+
     const sessionData = {
       id: crypto.randomUUID(),
       figureIds: selectedGuests.map((g) => g.id),
+      customFigures: customFigureData.length > 0 ? customFigureData : undefined,
       depth: researchDepth,
       topic: selectedTopic,
       topicCategory,
@@ -171,6 +177,9 @@ export default function DinnerPartyPage() {
           userName={userName}
           maxGuests={MAX_GUESTS + (userParticipating ? 1 : 0)}
         />
+
+        {/* Add a new character */}
+        <CustomFigureCreator onFigureCreated={handleCustomFigureCreated} />
 
         {/* Topic — always visible, inline */}
         <div className="bg-white border border-dinner-border rounded-xl p-4 shadow-sm">
@@ -300,9 +309,6 @@ export default function DinnerPartyPage() {
             />
           ))}
         </div>
-
-        {/* Custom figure creator */}
-        <CustomFigureCreator onFigureCreated={handleCustomFigureCreated} />
 
         {filteredFigures.length === 0 && (
           <div className="text-center py-12">

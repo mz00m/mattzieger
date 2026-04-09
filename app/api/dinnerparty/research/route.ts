@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFigureById } from '@/lib/figures';
+import { findFigureById } from '@/lib/customFigures';
 import { quickResearch, deepResearch } from '@/lib/researchAgent';
 import { getFromServerCache, setInServerCache } from '@/lib/researchCache';
 
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ result: cached, cached: true });
     }
 
-    const figure = getFigureById(figureId);
+    const figure = findFigureById(figureId);
     if (!figure) {
       return NextResponse.json(
         { error: `Figure not found: ${figureId}` },

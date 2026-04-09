@@ -8,6 +8,7 @@ import TopicSelector from '@/components/TopicSelector';
 import type { DinnerSession, ConversationExchange } from '@/lib/conversationOrchestrator';
 import type { CharacterKnowledgeBase } from '@/lib/researchAgent';
 import type { TopicCategory } from '@/lib/prompts';
+import type { HistoricalFigure } from '@/lib/figures';
 
 export default function DinnerPage() {
   const params = useParams();
@@ -29,6 +30,8 @@ export default function DinnerPage() {
 
   // Voice assignments from discovery
   const [voiceAssignments, setVoiceAssignments] = useState<Record<string, { voiceId: string; voiceName: string }>>({});
+  // Custom figures from session (not in hardcoded FIGURES array)
+  const [customFigures, setCustomFigures] = useState<HistoricalFigure[]>([]);
 
   // User interaction — always available
   const [showUserInput, setShowUserInput] = useState(false);
@@ -67,6 +70,10 @@ export default function DinnerPage() {
     // Load voice assignments from discovery phase
     if (data.voiceAssignments) {
       setVoiceAssignments(data.voiceAssignments);
+    }
+    // Load custom figures so ConversationPlayer can look them up
+    if (data.customFigures) {
+      setCustomFigures(data.customFigures);
     }
 
     setSession(dinnerSession);
@@ -305,6 +312,7 @@ export default function DinnerPage() {
             exchanges={exchanges}
             guests={session?.guests || []}
             voiceAssignments={voiceAssignments}
+            customFigures={customFigures}
             isPlaying={isPlaying}
             onTogglePlay={() => setIsPlaying(!isPlaying)}
             audioEnabled={audioEnabled}
