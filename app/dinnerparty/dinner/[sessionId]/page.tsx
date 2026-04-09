@@ -27,6 +27,9 @@ export default function DinnerPage() {
   const [volume, setVolume] = useState(0.8);
   const [currentExchangeIndex, setCurrentExchangeIndex] = useState(0);
 
+  // Voice assignments from discovery
+  const [voiceAssignments, setVoiceAssignments] = useState<Record<string, { voiceId: string; voiceName: string }>>({});
+
   // User interaction — always available
   const [showUserInput, setShowUserInput] = useState(false);
 
@@ -60,6 +63,11 @@ export default function DinnerPage() {
       exchanges: [],
       roundNumber: 0,
     };
+
+    // Load voice assignments from discovery phase
+    if (data.voiceAssignments) {
+      setVoiceAssignments(data.voiceAssignments);
+    }
 
     setSession(dinnerSession);
     setIsLoading(false);
@@ -296,6 +304,7 @@ export default function DinnerPage() {
           <ConversationPlayer
             exchanges={exchanges}
             guests={session?.guests || []}
+            voiceAssignments={voiceAssignments}
             isPlaying={isPlaying}
             onTogglePlay={() => setIsPlaying(!isPlaying)}
             audioEnabled={audioEnabled}
