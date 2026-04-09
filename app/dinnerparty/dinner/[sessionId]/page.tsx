@@ -23,6 +23,7 @@ export default function DinnerPage() {
   // Player state
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [volume, setVolume] = useState(0.8);
   const [currentExchangeIndex, setCurrentExchangeIndex] = useState(0);
   const [listeningMode, setListeningMode] = useState(false);
 
@@ -70,7 +71,8 @@ export default function DinnerPage() {
   const generateRound = useCallback(
     async (
       action: 'start' | 'continue' | 'user-spoke',
-      userInput?: string
+      userInput?: string,
+      sessionOverrides?: Partial<DinnerSession>
     ) => {
       if (!session || isGenerating) return;
 
@@ -80,6 +82,7 @@ export default function DinnerPage() {
       try {
         const currentSession: DinnerSession = {
           ...session,
+          ...sessionOverrides,
           exchanges,
           roundNumber: session.roundNumber + (action === 'start' ? 0 : 1),
         };
@@ -160,13 +163,12 @@ export default function DinnerPage() {
   // Change topic mid-dinner
   const handleTopicChange = (newTopic: string, category: TopicCategory) => {
     if (!session) return;
-    // Map TopicCategory (underscore) to DinnerSession topicCategory format (hyphen)
     const mappedCategory = category === 'current_events' ? 'current-events' as const : category;
     setSession((prev) =>
       prev ? { ...prev, topic: newTopic, topicCategory: mappedCategory } : null
     );
     setShowTopicChanger(false);
-    generateRound('continue');
+    generateRound('continue', undefined, { topic: newTopic, topicCategory: mappedCategory });
   };
 
   // Export transcript
@@ -338,6 +340,8 @@ export default function DinnerPage() {
             onTogglePlay={() => setIsPlaying(!isPlaying)}
             playbackSpeed={playbackSpeed}
             onSpeedChange={setPlaybackSpeed}
+            volume={volume}
+            onVolumeChange={setVolume}
             currentExchangeIndex={currentExchangeIndex}
             onExchangeChange={setCurrentExchangeIndex}
             listeningMode={listeningMode}
