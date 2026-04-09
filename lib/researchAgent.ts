@@ -26,6 +26,7 @@ export interface CharacterKnowledgeBase {
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+const FAST_MODEL = 'claude-haiku-4-5-20251001'; // Faster model for quick research
 
 interface ClaudeMessage {
   role: 'user' | 'assistant';
@@ -35,7 +36,8 @@ interface ClaudeMessage {
 async function callClaude(
   systemPrompt: string,
   messages: ClaudeMessage[],
-  maxTokens = 4096
+  maxTokens = 4096,
+  useFastModel = false
 ): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -50,7 +52,7 @@ async function callClaude(
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: useFastModel ? FAST_MODEL : MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages,
@@ -141,9 +143,12 @@ export async function quickResearch(
       'Return ONLY valid JSON, no markdown fences or commentary.',
     ].join('\n');
 
-    const raw = await callClaude(systemPrompt, [
-      { role: 'user', content: userMessage },
-    ]);
+    const raw = await callClaude(
+      systemPrompt,
+      [{ role: 'user', content: userMessage }],
+      2048,  // Shorter responses = faster
+      true   // Use Haiku for speed
+    );
 
     const parsed = parseJsonResponse<Partial<CharacterKnowledgeBase>>(raw);
 
