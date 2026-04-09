@@ -25,7 +25,7 @@ export interface CharacterKnowledgeBase {
 // ---------------------------------------------------------------------------
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-latest';
+const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
 
 interface ClaudeMessage {
   role: 'user' | 'assistant';
