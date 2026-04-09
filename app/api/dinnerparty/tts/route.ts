@@ -55,9 +55,9 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('ElevenLabs error:', errorText);
+      console.error(`[TTS] ElevenLabs error for voice ${effectiveVoiceId}: ${response.status} ${errorText}`);
       return NextResponse.json(
-        { error: 'TTS generation failed', fallback: 'webspeech' },
+        { error: 'TTS generation failed', voiceId: effectiveVoiceId, fallback: 'webspeech' },
         { status: 503 }
       );
     }

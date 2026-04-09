@@ -92,7 +92,7 @@ export function useAudio({ onEnd, playbackRate = 1 }: UseAudioOptions = {}) {
   const speakWithWebSpeech = useCallback(
     (
       text: string,
-      options?: { lang?: string; pitch?: number; rate?: number }
+      options?: { lang?: string; pitch?: number; rate?: number; voiceIndex?: number }
     ): boolean => {
       if (typeof window === 'undefined' || !window.speechSynthesis) {
         return false;
@@ -103,13 +103,17 @@ export function useAudio({ onEnd, playbackRate = 1 }: UseAudioOptions = {}) {
       utterance.pitch = options?.pitch || 1;
       utterance.rate = (options?.rate || 1) * playbackRate;
 
-      // Try to find a matching voice
+      // Pick a voice: prefer different voices for different characters
       const voices = window.speechSynthesis.getVoices();
-      const matchingVoice = voices.find(
-        (v) => v.lang.startsWith(utterance.lang.split('-')[0])
-      );
-      if (matchingVoice) {
-        utterance.voice = matchingVoice;
+      const langPrefix = utterance.lang.split('-')[0];
+      const matchingVoices = voices.filter((v) => v.lang.startsWith(langPrefix));
+      if (matchingVoices.length > 0) {
+        const idx = (options?.voiceIndex ?? 0) % matchingVoices.length;
+        utterance.voice = matchingVoices[idx];
+      } else if (voices.length > 0) {
+        // No lang match — pick any voice by index
+        const idx = (options?.voiceIndex ?? 0) % voices.length;
+        utterance.voice = voices[idx];
       }
 
       utterance.onend = () => {
@@ -136,7 +140,7 @@ export function useAudio({ onEnd, playbackRate = 1 }: UseAudioOptions = {}) {
       text: string,
       elevenLabsVoiceId?: string,
       voiceSettings?: VoiceSettings,
-      webSpeechOptions?: { lang?: string; pitch?: number; rate?: number }
+      webSpeechOptions?: { lang?: string; pitch?: number; rate?: number; voiceIndex?: number }
     ) => {
       stop();
 

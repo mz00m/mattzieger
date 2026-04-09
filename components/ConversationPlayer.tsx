@@ -107,7 +107,7 @@ export default function ConversationPlayer({
 
       if (figure) {
         const profile = getVoiceProfile(figure.id, figure.voicePersonality, figure.category, figure.nationality);
-        const webVoice = getWebSpeechVoice(figure.nationality, figure.voicePersonality);
+        const webVoice = getWebSpeechVoice(figure.nationality, figure.voicePersonality, figure.id);
         speak(
           exchange.text,
           profile.elevenLabsVoiceId,

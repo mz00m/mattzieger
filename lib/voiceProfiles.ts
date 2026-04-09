@@ -23,37 +23,21 @@ export type VoiceArchetype =
 
 // ---------------------------------------------------------------------------
 // ElevenLabs pre-made voice IDs
+// Only using voices guaranteed available on all ElevenLabs accounts
 // ---------------------------------------------------------------------------
 
-// Male voices
+// Male voices (core pre-made)
+const V_ADAM    = 'pNInz6obpgDQGcFmaJgB';  // Deep narration
 const V_ANTONI  = 'ErXwobaYiN019PkySvjV';  // Well-rounded, calm
 const V_ARNOLD  = 'VR6AewLTigWG4xSOukaG';  // Deep, authoritative
-const V_ADAM    = 'pNInz6obpgDQGcFmaJgB';  // Deep narration
 const V_JOSH    = 'TxGEqnHWrfWFTfGW9XjX';  // Warm, conversational
 const V_SAM     = 'yoZ06aMxZJJ28mfd3POQ';  // Warm, narrative
-const V_JAMES   = 'ZQe5CZNOzWyzPSCn5a3c';  // Calm, authoritative
-const V_DANIEL  = 'onwK4e9ZLuTAKqWW03F9';  // British, measured
-const V_CALLUM  = 'N2lVS1w4EtoT3dr4eOWO';  // British, lively
-const V_CLYDE   = '2EiwWnXFnvU5JabPnv8n';  // Deep, gruff
-const V_ETHAN   = 'g5CIjZEefAph4nQFvHAz';  // Young, energetic
-const V_FIN     = 'D38z5RcWu1voky8WS1ja';  // Irish, smooth
-const V_HARRY   = 'SOYHLrjzK2X1ezoPC6cr';  // British, young
-const V_JOSEPH  = 'Zlb1dXrM653N07WRdFW3';  // British, middle-aged
-const V_LIAM    = 'TX3LPaxmHKxFdv7VOQHJ';  // Young American
-const V_MICHAEL = 'flq6f7yk4E4fJM5XTYuZ';  // Older American
-const V_PATRICK = 'ODq5zmih8GrVes37Dizd';  // Middle-aged American
-const V_THOMAS  = 'GBv7mTt0atIp3Br8iCZE';  // Calm American
 
-// Female voices
+// Female voices (core pre-made)
 const V_RACHEL  = '21m00Tcm4TlvDq8ikWAM';  // Calm, warm
 const V_BELLA   = 'EXAVITQu4vr4xnSDxMaL';  // Soft, gentle
-const V_EMILY   = 'MF3mGyEYCl7XYWbV9V6O';  // Calm, gentle
-const V_DOROTHY = 'ThT5KcBeYPX3keUQqHPh';  // Pleasant, warm
 const V_DOMI    = 'AZnzlk1XvdvUeBnXmlld';  // Strong, confident
-const V_FREYA   = 'jsCqWAovK2LkecY7zXl4';  // Nordic, strong
-const V_LILY    = 'pFZP5JQG7iQjIQuC4Bku';  // British female
-const V_GLINDA  = 'z9fAnlkpzviPz146aGWa';  // Warm, theatrical
-const V_JESSIE  = 't0jbNlBVZ17f02VDIeMI';  // Raspy, intense
+const V_ELLI    = 'MF3mGyEYCl7XYWbV9V6O';  // Young, gentle
 
 // ---------------------------------------------------------------------------
 // Per-figure voice overrides — hand-picked for recognizable characters
@@ -67,127 +51,130 @@ interface VoiceOverride {
   style: number;
 }
 
+// Voice differentiation strategy: 9 core voices x varied settings = distinct characters
+// Each figure gets a unique voice + settings combo. Even same voice sounds very
+// different with stability 0.2 vs 0.6, or style 0.3 vs 0.9.
 const FIGURE_VOICE_OVERRIDES: Record<string, VoiceOverride> = {
   // === PHILOSOPHY ===
-  'socrates':            { voiceId: V_JOSH,    stability: 0.40, similarity_boost: 0.60, style: 0.50 }, // Warm questioner
-  'plato':               { voiceId: V_JAMES,   stability: 0.45, similarity_boost: 0.60, style: 0.45 }, // Dignified, measured
-  'aristotle':           { voiceId: V_PATRICK,  stability: 0.45, similarity_boost: 0.60, style: 0.40 }, // Professorial
-  'nietzsche':           { voiceId: V_CLYDE,   stability: 0.20, similarity_boost: 0.60, style: 0.90 }, // Intense, dramatic
-  'simone-de-beauvoir':  { voiceId: V_RACHEL,  stability: 0.30, similarity_boost: 0.65, style: 0.70 }, // Intellectual, passionate
-  'hannah-arendt':       { voiceId: V_EMILY,   stability: 0.40, similarity_boost: 0.60, style: 0.55 }, // Precise, measured
-  'bertrand-russell':    { voiceId: V_DANIEL,  stability: 0.40, similarity_boost: 0.60, style: 0.50 }, // British, wry
-  'simone-weil':         { voiceId: V_BELLA,   stability: 0.45, similarity_boost: 0.55, style: 0.40 }, // Quiet intensity
-  'albert-camus':        { voiceId: V_SAM,     stability: 0.35, similarity_boost: 0.60, style: 0.60 }, // Warm, Mediterranean
-  'lao-tzu':             { voiceId: V_THOMAS,  stability: 0.55, similarity_boost: 0.50, style: 0.35 }, // Serene, unhurried
-  'confucius':           { voiceId: V_JAMES,   stability: 0.50, similarity_boost: 0.55, style: 0.40 }, // Dignified elder
-  'ibn-rushd':           { voiceId: V_ADAM,    stability: 0.45, similarity_boost: 0.60, style: 0.45 }, // Scholarly warmth
-  'mary-wollstonecraft': { voiceId: V_DOMI,   stability: 0.30, similarity_boost: 0.65, style: 0.75 }, // Passionate, direct
-  'john-stuart-mill':    { voiceId: V_JOSEPH,  stability: 0.45, similarity_boost: 0.55, style: 0.40 }, // Measured Victorian
-  'immanuel-kant':       { voiceId: V_MICHAEL, stability: 0.50, similarity_boost: 0.55, style: 0.30 }, // Precise monotone
-  'sigmund-freud':       { voiceId: V_ARNOLD,  stability: 0.40, similarity_boost: 0.60, style: 0.55 }, // Deep, probing
-  'noam-chomsky':        { voiceId: V_PATRICK, stability: 0.45, similarity_boost: 0.55, style: 0.40 }, // Measured, precise
+  'socrates':            { voiceId: V_JOSH,    stability: 0.40, similarity_boost: 0.60, style: 0.50 },
+  'plato':               { voiceId: V_ADAM,    stability: 0.50, similarity_boost: 0.55, style: 0.35 },
+  'aristotle':           { voiceId: V_SAM,     stability: 0.45, similarity_boost: 0.60, style: 0.40 },
+  'nietzsche':           { voiceId: V_ARNOLD,  stability: 0.15, similarity_boost: 0.60, style: 0.95 },
+  'simone-de-beauvoir':  { voiceId: V_RACHEL,  stability: 0.30, similarity_boost: 0.65, style: 0.70 },
+  'hannah-arendt':       { voiceId: V_ELLI,    stability: 0.40, similarity_boost: 0.60, style: 0.55 },
+  'bertrand-russell':    { voiceId: V_ANTONI,  stability: 0.45, similarity_boost: 0.55, style: 0.45 },
+  'simone-weil':         { voiceId: V_BELLA,   stability: 0.50, similarity_boost: 0.55, style: 0.35 },
+  'albert-camus':        { voiceId: V_SAM,     stability: 0.30, similarity_boost: 0.60, style: 0.65 },
+  'lao-tzu':             { voiceId: V_ADAM,    stability: 0.60, similarity_boost: 0.50, style: 0.25 },
+  'confucius':           { voiceId: V_JOSH,    stability: 0.55, similarity_boost: 0.55, style: 0.30 },
+  'ibn-rushd':           { voiceId: V_ADAM,    stability: 0.45, similarity_boost: 0.60, style: 0.45 },
+  'mary-wollstonecraft': { voiceId: V_DOMI,   stability: 0.30, similarity_boost: 0.65, style: 0.75 },
+  'john-stuart-mill':    { voiceId: V_ANTONI,  stability: 0.50, similarity_boost: 0.55, style: 0.35 },
+  'immanuel-kant':       { voiceId: V_SAM,     stability: 0.55, similarity_boost: 0.50, style: 0.25 },
+  'sigmund-freud':       { voiceId: V_ARNOLD,  stability: 0.40, similarity_boost: 0.60, style: 0.55 },
+  'noam-chomsky':        { voiceId: V_JOSH,    stability: 0.45, similarity_boost: 0.55, style: 0.40 },
 
   // === SCIENCE ===
-  'marie-curie':         { voiceId: V_RACHEL,  stability: 0.45, similarity_boost: 0.55, style: 0.40 }, // Quiet determination
-  'richard-feynman':     { voiceId: V_JOSH,    stability: 0.20, similarity_boost: 0.60, style: 0.90 }, // Enthusiastic New Yorker
-  'charles-darwin':      { voiceId: V_CALLUM,  stability: 0.45, similarity_boost: 0.55, style: 0.40 }, // Gentle British
-  'ada-lovelace':        { voiceId: V_LILY,    stability: 0.40, similarity_boost: 0.60, style: 0.60 }, // Victorian British
-  'alan-turing':         { voiceId: V_HARRY,   stability: 0.50, similarity_boost: 0.50, style: 0.35 }, // Shy, British
-  'nikola-tesla':        { voiceId: V_ANTONI,  stability: 0.25, similarity_boost: 0.60, style: 0.80 }, // Intense visionary
-  'albert-einstein':     { voiceId: V_ANTONI,  stability: 0.40, similarity_boost: 0.60, style: 0.55 }, // Warm, avuncular
-  'carl-sagan':          { voiceId: V_ADAM,    stability: 0.30, similarity_boost: 0.65, style: 0.75 }, // Rich baritone, awe
-  'rachel-carson':       { voiceId: V_DOROTHY, stability: 0.40, similarity_boost: 0.60, style: 0.55 }, // Gentle, measured
-  'rosalind-franklin':   { voiceId: V_EMILY,   stability: 0.45, similarity_boost: 0.55, style: 0.45 }, // Direct, precise
-  'neil-degrasse-tyson': { voiceId: V_ARNOLD,  stability: 0.25, similarity_boost: 0.65, style: 0.85 }, // Deep, enthusiastic
-  'stephen-hawking':     { voiceId: V_DANIEL,  stability: 0.60, similarity_boost: 0.50, style: 0.30 }, // Measured, careful
-  'isaac-newton':        { voiceId: V_JOSEPH,  stability: 0.50, similarity_boost: 0.55, style: 0.35 }, // Precise, British
+  'marie-curie':         { voiceId: V_RACHEL,  stability: 0.50, similarity_boost: 0.55, style: 0.35 },
+  'richard-feynman':     { voiceId: V_JOSH,    stability: 0.15, similarity_boost: 0.65, style: 0.90 },
+  'charles-darwin':      { voiceId: V_ANTONI,  stability: 0.50, similarity_boost: 0.55, style: 0.40 },
+  'ada-lovelace':        { voiceId: V_BELLA,   stability: 0.40, similarity_boost: 0.60, style: 0.55 },
+  'alan-turing':         { voiceId: V_SAM,     stability: 0.50, similarity_boost: 0.50, style: 0.30 },
+  'nikola-tesla':        { voiceId: V_ANTONI,  stability: 0.20, similarity_boost: 0.65, style: 0.85 },
+  'albert-einstein':     { voiceId: V_JOSH,    stability: 0.35, similarity_boost: 0.60, style: 0.55 },
+  'carl-sagan':          { voiceId: V_ADAM,    stability: 0.25, similarity_boost: 0.70, style: 0.80 },
+  'rachel-carson':       { voiceId: V_ELLI,    stability: 0.45, similarity_boost: 0.60, style: 0.50 },
+  'rosalind-franklin':   { voiceId: V_RACHEL,  stability: 0.45, similarity_boost: 0.55, style: 0.45 },
+  'neil-degrasse-tyson': { voiceId: V_ARNOLD,  stability: 0.20, similarity_boost: 0.70, style: 0.90 },
+  'stephen-hawking':     { voiceId: V_SAM,     stability: 0.60, similarity_boost: 0.50, style: 0.20 },
+  'isaac-newton':        { voiceId: V_ADAM,    stability: 0.50, similarity_boost: 0.55, style: 0.35 },
 
   // === LITERATURE ===
-  'shakespeare':         { voiceId: V_CALLUM,  stability: 0.25, similarity_boost: 0.60, style: 0.85 }, // Theatrical British
-  'jane-austen':         { voiceId: V_DOROTHY, stability: 0.40, similarity_boost: 0.60, style: 0.60 }, // Proper, witty
-  'mark-twain':          { voiceId: V_SAM,     stability: 0.25, similarity_boost: 0.60, style: 0.80 }, // Warm storyteller
-  'virginia-woolf':      { voiceId: V_BELLA,   stability: 0.35, similarity_boost: 0.60, style: 0.65 }, // Lyrical, flowing
-  'james-baldwin':       { voiceId: V_LIAM,    stability: 0.30, similarity_boost: 0.65, style: 0.80 }, // Passionate, direct
-  'toni-morrison':       { voiceId: V_DOMI,    stability: 0.30, similarity_boost: 0.65, style: 0.75 }, // Commanding storyteller
-  'oscar-wilde':         { voiceId: V_CALLUM,  stability: 0.25, similarity_boost: 0.60, style: 0.90 }, // Witty, theatrical British
-  'george-orwell':       { voiceId: V_DANIEL,  stability: 0.40, similarity_boost: 0.60, style: 0.50 }, // Crisp British
-  'david-foster-wallace':{ voiceId: V_ETHAN,   stability: 0.25, similarity_boost: 0.55, style: 0.75 }, // Rapid, digressive
-  'zora-neale-hurston':  { voiceId: V_GLINDA,  stability: 0.30, similarity_boost: 0.60, style: 0.75 }, // Warm, Southern
-  'franz-kafka':         { voiceId: V_THOMAS,  stability: 0.45, similarity_boost: 0.50, style: 0.40 }, // Quiet, unsettling
-  'jorge-luis-borges':   { voiceId: V_FIN,     stability: 0.40, similarity_boost: 0.55, style: 0.55 }, // Smooth, literary
-  'fyodor-dostoevsky':   { voiceId: V_CLYDE,   stability: 0.30, similarity_boost: 0.55, style: 0.70 }, // Deep, tormented
-  'octavia-butler':      { voiceId: V_JESSIE,  stability: 0.35, similarity_boost: 0.60, style: 0.65 }, // Intense, visionary
-  'emily-dickinson':     { voiceId: V_BELLA,   stability: 0.50, similarity_boost: 0.55, style: 0.45 }, // Quiet, precise
-  'mary-shelley':        { voiceId: V_LILY,    stability: 0.35, similarity_boost: 0.60, style: 0.60 }, // Gothic British
-  'maya-angelou':        { voiceId: V_DOMI,    stability: 0.30, similarity_boost: 0.65, style: 0.80 }, // Strong, poetic
+  'shakespeare':         { voiceId: V_ARNOLD,  stability: 0.20, similarity_boost: 0.60, style: 0.90 },
+  'jane-austen':         { voiceId: V_BELLA,   stability: 0.45, similarity_boost: 0.60, style: 0.55 },
+  'mark-twain':          { voiceId: V_SAM,     stability: 0.20, similarity_boost: 0.60, style: 0.85 },
+  'virginia-woolf':      { voiceId: V_BELLA,   stability: 0.30, similarity_boost: 0.65, style: 0.70 },
+  'james-baldwin':       { voiceId: V_JOSH,    stability: 0.25, similarity_boost: 0.65, style: 0.80 },
+  'toni-morrison':       { voiceId: V_DOMI,    stability: 0.30, similarity_boost: 0.65, style: 0.75 },
+  'oscar-wilde':         { voiceId: V_ANTONI,  stability: 0.15, similarity_boost: 0.60, style: 0.95 },
+  'george-orwell':       { voiceId: V_SAM,     stability: 0.45, similarity_boost: 0.55, style: 0.45 },
+  'david-foster-wallace':{ voiceId: V_JOSH,    stability: 0.20, similarity_boost: 0.55, style: 0.80 },
+  'zora-neale-hurston':  { voiceId: V_RACHEL,  stability: 0.25, similarity_boost: 0.65, style: 0.75 },
+  'franz-kafka':         { voiceId: V_ADAM,    stability: 0.50, similarity_boost: 0.50, style: 0.30 },
+  'jorge-luis-borges':   { voiceId: V_ANTONI,  stability: 0.40, similarity_boost: 0.55, style: 0.50 },
+  'fyodor-dostoevsky':   { voiceId: V_ARNOLD,  stability: 0.30, similarity_boost: 0.55, style: 0.70 },
+  'octavia-butler':      { voiceId: V_DOMI,    stability: 0.35, similarity_boost: 0.60, style: 0.65 },
+  'emily-dickinson':     { voiceId: V_BELLA,   stability: 0.55, similarity_boost: 0.55, style: 0.35 },
+  'mary-shelley':        { voiceId: V_ELLI,    stability: 0.35, similarity_boost: 0.60, style: 0.60 },
+  'maya-angelou':        { voiceId: V_DOMI,    stability: 0.25, similarity_boost: 0.70, style: 0.85 },
 
   // === POLITICS & CIVIL RIGHTS ===
-  'frederick-douglass':  { voiceId: V_ADAM,    stability: 0.30, similarity_boost: 0.65, style: 0.80 }, // Deep, powerful orator
-  'harriet-tubman':      { voiceId: V_FREYA,   stability: 0.35, similarity_boost: 0.60, style: 0.70 }, // Strong, determined
-  'martin-luther-king-jr': { voiceId: V_ARNOLD, stability: 0.25, similarity_boost: 0.70, style: 0.90 }, // Deep, soaring oratory
-  'malcolm-x':           { voiceId: V_CLYDE,   stability: 0.25, similarity_boost: 0.65, style: 0.85 }, // Sharp, intense
-  'nelson-mandela':      { voiceId: V_JAMES,   stability: 0.35, similarity_boost: 0.65, style: 0.65 }, // Dignified, warm
-  'mahatma-gandhi':      { voiceId: V_THOMAS,  stability: 0.45, similarity_boost: 0.55, style: 0.45 }, // Gentle, unwavering
-  'eleanor-roosevelt':   { voiceId: V_DOROTHY, stability: 0.40, similarity_boost: 0.60, style: 0.55 }, // Dignified, warm
-  'winston-churchill':   { voiceId: V_JOSEPH,  stability: 0.30, similarity_boost: 0.65, style: 0.80 }, // British, commanding
-  'ida-b-wells':         { voiceId: V_JESSIE,  stability: 0.30, similarity_boost: 0.65, style: 0.75 }, // Fierce, relentless
-  'sojourner-truth':     { voiceId: V_FREYA,   stability: 0.30, similarity_boost: 0.65, style: 0.80 }, // Powerful, spiritual
-  'angela-davis':        { voiceId: V_DOMI,    stability: 0.25, similarity_boost: 0.65, style: 0.85 }, // Fierce, intellectual
-  'abraham-lincoln':     { voiceId: V_MICHAEL, stability: 0.40, similarity_boost: 0.60, style: 0.50 }, // Folksy, measured
-  'barack-obama':        { voiceId: V_JOSH,    stability: 0.35, similarity_boost: 0.65, style: 0.70 }, // Warm, measured charisma
+  'frederick-douglass':  { voiceId: V_ADAM,    stability: 0.25, similarity_boost: 0.70, style: 0.85 },
+  'harriet-tubman':      { voiceId: V_DOMI,    stability: 0.30, similarity_boost: 0.65, style: 0.70 },
+  'martin-luther-king-jr': { voiceId: V_ARNOLD, stability: 0.20, similarity_boost: 0.75, style: 0.95 },
+  'malcolm-x':           { voiceId: V_ADAM,    stability: 0.20, similarity_boost: 0.70, style: 0.90 },
+  'nelson-mandela':      { voiceId: V_JOSH,    stability: 0.35, similarity_boost: 0.65, style: 0.60 },
+  'mahatma-gandhi':      { voiceId: V_SAM,     stability: 0.50, similarity_boost: 0.55, style: 0.40 },
+  'eleanor-roosevelt':   { voiceId: V_RACHEL,  stability: 0.40, similarity_boost: 0.60, style: 0.50 },
+  'winston-churchill':   { voiceId: V_ARNOLD,  stability: 0.30, similarity_boost: 0.65, style: 0.80 },
+  'ida-b-wells':         { voiceId: V_DOMI,    stability: 0.25, similarity_boost: 0.65, style: 0.80 },
+  'sojourner-truth':     { voiceId: V_RACHEL,  stability: 0.25, similarity_boost: 0.70, style: 0.80 },
+  'angela-davis':        { voiceId: V_DOMI,    stability: 0.20, similarity_boost: 0.70, style: 0.90 },
+  'abraham-lincoln':     { voiceId: V_SAM,     stability: 0.40, similarity_boost: 0.60, style: 0.50 },
+  'barack-obama':        { voiceId: V_JOSH,    stability: 0.30, similarity_boost: 0.70, style: 0.70 },
 
   // === COMEDY ===
-  'george-carlin':       { voiceId: V_ETHAN,   stability: 0.15, similarity_boost: 0.55, style: 0.95 }, // Rapid, punchy
-  'richard-pryor':       { voiceId: V_LIAM,    stability: 0.20, similarity_boost: 0.55, style: 0.90 }, // Energetic, vulnerable
-  'robin-williams':      { voiceId: V_CALLUM,  stability: 0.10, similarity_boost: 0.55, style: 0.95 }, // Manic, shapeshifting
-  'joan-rivers':         { voiceId: V_JESSIE,  stability: 0.15, similarity_boost: 0.55, style: 0.95 }, // Rapid, sharp
-  'lenny-bruce':         { voiceId: V_FIN,     stability: 0.20, similarity_boost: 0.55, style: 0.85 }, // Cool, provocative
-  'moms-mabley':         { voiceId: V_GLINDA,  stability: 0.25, similarity_boost: 0.55, style: 0.85 }, // Warm, folksy
-  'bill-hicks':          { voiceId: V_CLYDE,   stability: 0.20, similarity_boost: 0.55, style: 0.90 }, // Intense, Southern growl
-  'nora-ephron':         { voiceId: V_EMILY,   stability: 0.30, similarity_boost: 0.60, style: 0.75 }, // Witty, conversational
-  'phyllis-diller':      { voiceId: V_GLINDA,  stability: 0.15, similarity_boost: 0.55, style: 0.95 }, // Wild, cackling
+  'george-carlin':       { voiceId: V_JOSH,    stability: 0.10, similarity_boost: 0.60, style: 0.95 },
+  'richard-pryor':       { voiceId: V_SAM,     stability: 0.15, similarity_boost: 0.60, style: 0.90 },
+  'robin-williams':      { voiceId: V_ANTONI,  stability: 0.10, similarity_boost: 0.55, style: 0.95 },
+  'joan-rivers':         { voiceId: V_DOMI,    stability: 0.10, similarity_boost: 0.60, style: 0.95 },
+  'lenny-bruce':         { voiceId: V_ARNOLD,  stability: 0.20, similarity_boost: 0.55, style: 0.85 },
+  'moms-mabley':         { voiceId: V_RACHEL,  stability: 0.20, similarity_boost: 0.60, style: 0.85 },
+  'bill-hicks':          { voiceId: V_ADAM,    stability: 0.15, similarity_boost: 0.60, style: 0.90 },
+  'nora-ephron':         { voiceId: V_ELLI,    stability: 0.25, similarity_boost: 0.60, style: 0.75 },
+  'phyllis-diller':      { voiceId: V_BELLA,   stability: 0.10, similarity_boost: 0.60, style: 0.95 },
 
   // === MUSIC ===
-  'mozart':              { voiceId: V_HARRY,   stability: 0.20, similarity_boost: 0.55, style: 0.85 }, // Young, manic
-  'beethoven':           { voiceId: V_ARNOLD,  stability: 0.30, similarity_boost: 0.60, style: 0.70 }, // Deep, passionate
-  'louis-armstrong':     { voiceId: V_SAM,     stability: 0.25, similarity_boost: 0.60, style: 0.80 }, // Warm, gravelly
-  'nina-simone':         { voiceId: V_JESSIE,  stability: 0.25, similarity_boost: 0.65, style: 0.80 }, // Raw, intense
-  'bob-dylan':           { voiceId: V_FIN,     stability: 0.35, similarity_boost: 0.50, style: 0.60 }, // Cryptic, nasal drawl
-  'billie-holiday':      { voiceId: V_BELLA,   stability: 0.30, similarity_boost: 0.65, style: 0.75 }, // Smoky, vulnerable
-  'miles-davis':         { voiceId: V_CLYDE,   stability: 0.40, similarity_boost: 0.50, style: 0.50 }, // Cool, minimal
-  'freddie-mercury':     { voiceId: V_CALLUM,  stability: 0.15, similarity_boost: 0.60, style: 0.95 }, // Theatrical, flamboyant
-  'johnny-cash':         { voiceId: V_ADAM,    stability: 0.40, similarity_boost: 0.60, style: 0.55 }, // Deep, steady bass
-  'aretha-franklin':     { voiceId: V_DOMI,    stability: 0.25, similarity_boost: 0.65, style: 0.85 }, // Powerful, soulful
-  'david-bowie':         { voiceId: V_DANIEL,  stability: 0.20, similarity_boost: 0.60, style: 0.85 }, // British, chameleonic
-  'leonard-cohen':       { voiceId: V_MICHAEL, stability: 0.40, similarity_boost: 0.55, style: 0.55 }, // Deep, measured poetry
-  'patti-smith':         { voiceId: V_FREYA,   stability: 0.25, similarity_boost: 0.60, style: 0.80 }, // Raw, punk energy
+  'mozart':              { voiceId: V_ANTONI,  stability: 0.15, similarity_boost: 0.60, style: 0.90 },
+  'beethoven':           { voiceId: V_ARNOLD,  stability: 0.25, similarity_boost: 0.65, style: 0.75 },
+  'louis-armstrong':     { voiceId: V_SAM,     stability: 0.20, similarity_boost: 0.65, style: 0.80 },
+  'nina-simone':         { voiceId: V_DOMI,    stability: 0.20, similarity_boost: 0.70, style: 0.85 },
+  'bob-dylan':           { voiceId: V_SAM,     stability: 0.35, similarity_boost: 0.50, style: 0.55 },
+  'billie-holiday':      { voiceId: V_BELLA,   stability: 0.25, similarity_boost: 0.70, style: 0.75 },
+  'miles-davis':         { voiceId: V_ADAM,    stability: 0.45, similarity_boost: 0.50, style: 0.40 },
+  'freddie-mercury':     { voiceId: V_JOSH,    stability: 0.10, similarity_boost: 0.65, style: 0.95 },
+  'johnny-cash':         { voiceId: V_ADAM,    stability: 0.40, similarity_boost: 0.65, style: 0.50 },
+  'aretha-franklin':     { voiceId: V_DOMI,    stability: 0.20, similarity_boost: 0.70, style: 0.90 },
+  'david-bowie':         { voiceId: V_ANTONI,  stability: 0.15, similarity_boost: 0.60, style: 0.90 },
+  'leonard-cohen':       { voiceId: V_ADAM,    stability: 0.45, similarity_boost: 0.55, style: 0.45 },
+  'patti-smith':         { voiceId: V_RACHEL,  stability: 0.20, similarity_boost: 0.65, style: 0.80 },
 
   // === TECHNOLOGY ===
-  'steve-jobs':          { voiceId: V_PATRICK, stability: 0.30, similarity_boost: 0.65, style: 0.80 }, // Intense, visionary
-  'grace-hopper':        { voiceId: V_DOROTHY, stability: 0.35, similarity_boost: 0.60, style: 0.65 }, // No-nonsense, sharp
-  'tim-berners-lee':     { voiceId: V_DANIEL,  stability: 0.45, similarity_boost: 0.55, style: 0.40 }, // Quiet British
-  'aaron-swartz':        { voiceId: V_ETHAN,   stability: 0.35, similarity_boost: 0.55, style: 0.65 }, // Young, passionate
-  'buckminster-fuller':  { voiceId: V_SAM,     stability: 0.25, similarity_boost: 0.55, style: 0.70 }, // Energetic visionary
+  'steve-jobs':          { voiceId: V_ARNOLD,  stability: 0.25, similarity_boost: 0.70, style: 0.85 },
+  'grace-hopper':        { voiceId: V_RACHEL,  stability: 0.35, similarity_boost: 0.60, style: 0.60 },
+  'tim-berners-lee':     { voiceId: V_SAM,     stability: 0.50, similarity_boost: 0.55, style: 0.35 },
+  'aaron-swartz':        { voiceId: V_JOSH,    stability: 0.30, similarity_boost: 0.60, style: 0.70 },
+  'buckminster-fuller':  { voiceId: V_SAM,     stability: 0.20, similarity_boost: 0.60, style: 0.75 },
 
   // === MODERN THINKERS ===
-  'christopher-hitchens': { voiceId: V_JOSEPH,  stability: 0.25, similarity_boost: 0.65, style: 0.85 }, // British, devastating
-  'susan-sontag':        { voiceId: V_RACHEL,  stability: 0.35, similarity_boost: 0.60, style: 0.65 }, // Intellectual, commanding
-  'bell-hooks':          { voiceId: V_EMILY,   stability: 0.35, similarity_boost: 0.60, style: 0.65 }, // Warm, accessible
-  'cornel-west':         { voiceId: V_ARNOLD,  stability: 0.20, similarity_boost: 0.65, style: 0.90 }, // Rhythmic, jazzy preacher
-  'ta-nehisi-coates':    { voiceId: V_LIAM,    stability: 0.35, similarity_boost: 0.60, style: 0.65 }, // Thoughtful, lyrical
-  'roxane-gay':          { voiceId: V_DOMI,    stability: 0.35, similarity_boost: 0.60, style: 0.65 }, // Direct, honest
-  'malcolm-gladwell':    { voiceId: V_FIN,     stability: 0.30, similarity_boost: 0.60, style: 0.70 }, // Smooth storyteller
-  'yuval-noah-harari':   { voiceId: V_ANTONI,  stability: 0.40, similarity_boost: 0.55, style: 0.50 }, // Clear, panoramic
-  'brene-brown':         { voiceId: V_GLINDA,  stability: 0.30, similarity_boost: 0.60, style: 0.70 }, // Warm, Southern
-  'frida-kahlo':         { voiceId: V_JESSIE,  stability: 0.25, similarity_boost: 0.65, style: 0.80 }, // Intense, passionate
-  'leonardo-da-vinci':   { voiceId: V_FIN,     stability: 0.35, similarity_boost: 0.60, style: 0.60 }, // Curious polymath
+  'christopher-hitchens': { voiceId: V_ARNOLD,  stability: 0.20, similarity_boost: 0.70, style: 0.90 },
+  'susan-sontag':        { voiceId: V_RACHEL,  stability: 0.35, similarity_boost: 0.60, style: 0.60 },
+  'bell-hooks':          { voiceId: V_ELLI,    stability: 0.35, similarity_boost: 0.60, style: 0.60 },
+  'cornel-west':         { voiceId: V_ARNOLD,  stability: 0.15, similarity_boost: 0.70, style: 0.95 },
+  'ta-nehisi-coates':    { voiceId: V_JOSH,    stability: 0.35, similarity_boost: 0.60, style: 0.65 },
+  'roxane-gay':          { voiceId: V_DOMI,    stability: 0.35, similarity_boost: 0.60, style: 0.60 },
+  'malcolm-gladwell':    { voiceId: V_ANTONI,  stability: 0.30, similarity_boost: 0.60, style: 0.70 },
+  'yuval-noah-harari':   { voiceId: V_SAM,     stability: 0.40, similarity_boost: 0.55, style: 0.50 },
+  'brene-brown':         { voiceId: V_BELLA,   stability: 0.30, similarity_boost: 0.60, style: 0.65 },
+  'frida-kahlo':         { voiceId: V_DOMI,    stability: 0.20, similarity_boost: 0.70, style: 0.85 },
+  'leonardo-da-vinci':   { voiceId: V_ANTONI,  stability: 0.35, similarity_boost: 0.60, style: 0.55 },
 
   // === OTHER ===
-  'adam-smith':          { voiceId: V_DANIEL,  stability: 0.45, similarity_boost: 0.55, style: 0.40 }, // Scottish, measured
-  'karl-marx':           { voiceId: V_ARNOLD,  stability: 0.30, similarity_boost: 0.60, style: 0.75 }, // Deep, forceful
-  'rumi':                { voiceId: V_THOMAS,  stability: 0.40, similarity_boost: 0.55, style: 0.60 }, // Mystic, flowing
-  'amelia-earhart':      { voiceId: V_FREYA,   stability: 0.35, similarity_boost: 0.60, style: 0.65 }, // Bold, adventurous
-  'cleopatra':           { voiceId: V_DOMI,    stability: 0.30, similarity_boost: 0.65, style: 0.75 }, // Commanding, regal
+  'adam-smith':          { voiceId: V_SAM,     stability: 0.45, similarity_boost: 0.55, style: 0.40 },
+  'karl-marx':           { voiceId: V_ARNOLD,  stability: 0.25, similarity_boost: 0.65, style: 0.80 },
+  'rumi':                { voiceId: V_ADAM,    stability: 0.45, similarity_boost: 0.55, style: 0.55 },
+  'amelia-earhart':      { voiceId: V_DOMI,    stability: 0.35, similarity_boost: 0.60, style: 0.65 },
+  'cleopatra':           { voiceId: V_DOMI,    stability: 0.25, similarity_boost: 0.70, style: 0.80 },
 };
 
 // ---------------------------------------------------------------------------
@@ -212,12 +199,12 @@ const ARCHETYPE_SETTINGS: Record<
 // Fallback voice pools by nationality/accent (for unmapped figures)
 // ---------------------------------------------------------------------------
 
-const VOICES_BRITISH_MALE  = [V_DANIEL, V_CALLUM, V_JOSEPH, V_HARRY];
-const VOICES_DEEP_MALE     = [V_ARNOLD, V_ADAM, V_CLYDE];
-const VOICES_WARM_MALE     = [V_JOSH, V_SAM, V_THOMAS, V_PATRICK];
-const VOICES_ENERGETIC_MALE = [V_ETHAN, V_LIAM, V_FIN];
-const VOICES_FEMALE_WARM   = [V_RACHEL, V_BELLA, V_EMILY, V_DOROTHY];
-const VOICES_FEMALE_STRONG = [V_DOMI, V_FREYA, V_JESSIE, V_LILY];
+const VOICES_BRITISH_MALE  = [V_ANTONI, V_SAM];
+const VOICES_DEEP_MALE     = [V_ARNOLD, V_ADAM];
+const VOICES_WARM_MALE     = [V_JOSH, V_SAM, V_ANTONI];
+const VOICES_ENERGETIC_MALE = [V_JOSH, V_ARNOLD];
+const VOICES_FEMALE_WARM   = [V_RACHEL, V_BELLA, V_ELLI];
+const VOICES_FEMALE_STRONG = [V_DOMI, V_RACHEL];
 const VOICES_NARRATOR      = [V_ADAM, V_RACHEL];
 
 // ---------------------------------------------------------------------------
@@ -353,8 +340,9 @@ export function getNarratorVoiceId(): string {
 
 export function getWebSpeechVoice(
   nationality: string,
-  voicePersonality: string
-): { lang: string; pitch: number; rate: number } {
+  voicePersonality: string,
+  figureId?: string
+): { lang: string; pitch: number; rate: number; voiceIndex: number } {
   const nat = nationality.toLowerCase();
   const vp = voicePersonality.toLowerCase();
 
@@ -368,13 +356,25 @@ export function getWebSpeechVoice(
   else if (nat.includes('russian')) lang = 'ru-RU';
   else if (nat.includes('indian')) lang = 'en-IN';
 
+  // Base pitch/rate from personality
   let pitch = 1.0;
   let rate = 1.0;
 
-  if (vp.includes('deep') || vp.includes('gravelly') || vp.includes('bass')) pitch = 0.8;
-  if (vp.includes('high') || vp.includes('bright') || vp.includes('energetic')) pitch = 1.2;
-  if (vp.includes('slow') || vp.includes('deliberate') || vp.includes('measured')) rate = 0.85;
-  if (vp.includes('rapid') || vp.includes('energetic') || vp.includes('fast')) rate = 1.15;
+  if (vp.includes('deep') || vp.includes('gravelly') || vp.includes('bass')) pitch = 0.7;
+  if (vp.includes('high') || vp.includes('bright') || vp.includes('energetic')) pitch = 1.3;
+  if (vp.includes('slow') || vp.includes('deliberate') || vp.includes('measured')) rate = 0.8;
+  if (vp.includes('rapid') || vp.includes('energetic') || vp.includes('fast')) rate = 1.2;
 
-  return { lang, pitch, rate };
+  // Per-figure hash-based variation so different figures get different pitch/rate
+  // even when they share the same nationality/personality keywords
+  const hash = figureId ? hashCode(figureId) : 0;
+  const pitchOffset = ((hash % 7) - 3) * 0.08;   // -0.24 to +0.24
+  const rateOffset = (((hash >> 4) % 5) - 2) * 0.06; // -0.12 to +0.12
+  pitch = Math.max(0.5, Math.min(1.8, pitch + pitchOffset));
+  rate = Math.max(0.7, Math.min(1.4, rate + rateOffset));
+
+  // voiceIndex: used to pick different browser voices from the available list
+  const voiceIndex = hash % 20;
+
+  return { lang, pitch, rate, voiceIndex };
 }
