@@ -266,9 +266,57 @@ function detectArchetype(
   return 'default';
 }
 
+// All available premade voice IDs for dedup fallback rotation
+const ALL_MALE_VOICES = [V_ADAM, V_ANTONI, V_ARNOLD, V_JOSH, V_SAM];
+const ALL_FEMALE_VOICES = [V_RACHEL, V_BELLA, V_DOMI, V_ELLI];
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/**
+ * Get a voice profile for a figure, ensuring it doesn't collide with
+ * voices already assigned to other figures in the same session.
+ *
+ * @param usedVoiceIds - Set of voice IDs already assigned to other figures
+ */
+export function getUniqueVoiceProfile(
+  figureId: string,
+  voicePersonality: string,
+  categories: string[],
+  nationality: string | undefined,
+  usedVoiceIds: Set<string>
+): VoiceProfile {
+  // Get the default profile (may collide)
+  const profile = getVoiceProfile(figureId, voicePersonality, categories, nationality);
+
+  // If the voice isn't already taken, use it
+  if (!usedVoiceIds.has(profile.elevenLabsVoiceId)) {
+    return profile;
+  }
+
+  // Voice collision — pick an unused voice from the right gender pool
+  const isFemale = KNOWN_FEMALE_IDS.has(figureId);
+  const pool = isFemale ? ALL_FEMALE_VOICES : ALL_MALE_VOICES;
+
+  // Try to find an unused voice from the matching pool
+  for (const voiceId of pool) {
+    if (!usedVoiceIds.has(voiceId)) {
+      return { ...profile, elevenLabsVoiceId: voiceId };
+    }
+  }
+
+  // All same-gender voices used — try the other gender pool
+  const otherPool = isFemale ? ALL_MALE_VOICES : ALL_FEMALE_VOICES;
+  for (const voiceId of otherPool) {
+    if (!usedVoiceIds.has(voiceId)) {
+      return { ...profile, elevenLabsVoiceId: voiceId };
+    }
+  }
+
+  // All 9 voices used (very unlikely with typical 3-6 guests) — return original
+  return profile;
+}
 
 export function getVoiceProfile(
   figureId: string,
