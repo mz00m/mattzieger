@@ -196,7 +196,6 @@ export default function DinnerPartyPage() {
                 onSelect={(topic, cat) => {
                   setSelectedTopic(topic);
                   setTopicCategory(cat);
-                  setShowTopicPanel(false);
                 }}
               />
             </div>
