@@ -10,19 +10,19 @@ const config: Config = {
     extend: {
       colors: {
         dinner: {
-          bg: '#0a0a0f',
-          card: '#14141f',
-          border: '#2a2a3a',
-          gold: '#c9a96e',
-          'gold-light': '#e8d5a8',
-          'gold-dim': '#8a7340',
-          cream: '#f5f0e8',
-          wine: '#6b2d3e',
-          'wine-light': '#8b3d4e',
-          candle: '#f4c430',
-          'text-primary': '#e8e0d0',
-          'text-secondary': '#a09880',
-          'text-dim': '#605848',
+          bg: '#F8F5F0',           // warm cream background
+          card: '#FFFFFF',          // clean white cards
+          border: '#E6DDD1',        // warm light border
+          gold: '#9A7B56',          // cognac/amber accent (readable on light)
+          'gold-light': '#C4A87A',  // softer gold for highlights
+          'gold-dim': '#7A6240',    // deep amber
+          cream: '#2A2118',         // espresso (main text on light bg)
+          wine: '#8B3A4A',          // rich wine accent
+          'wine-light': '#A85465',  // lighter wine for hover
+          candle: '#D4A030',        // warm amber glow
+          'text-primary': '#2A2118',  // espresso
+          'text-secondary': '#6B5E52', // warm brown
+          'text-dim': '#A89888',      // warm tan
         },
       },
       fontFamily: {

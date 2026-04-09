@@ -5,14 +5,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap');
 
 :root {
-  --dinner-bg: #0a0a0f;
-  --dinner-card: #14141f;
-  --dinner-border: #2a2a3a;
-  --dinner-gold: #c9a96e;
-  --dinner-gold-light: #e8d5a8;
-  --dinner-cream: #f5f0e8;
-  --dinner-wine: #6b2d3e;
-  --dinner-candle: #f4c430;
+  --dinner-bg: #F8F5F0;
+  --dinner-card: #FFFFFF;
+  --dinner-border: #E6DDD1;
+  --dinner-gold: #9A7B56;
+  --dinner-gold-light: #C4A87A;
+  --dinner-cream: #2A2118;
+  --dinner-wine: #8B3A4A;
+  --dinner-candle: #D4A030;
 }
 
 /* Scrollbar styling for dinner party pages */

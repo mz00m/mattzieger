@@ -21,16 +21,16 @@ interface ConversationPlayerProps {
 
 function getGuestColor(index: number): string {
   const colors = [
-    'text-blue-300', 'text-emerald-300', 'text-amber-300',
-    'text-pink-300', 'text-purple-300', 'text-cyan-300',
+    'text-blue-700', 'text-emerald-700', 'text-amber-700',
+    'text-pink-700', 'text-purple-700', 'text-cyan-700',
   ];
   return colors[index % colors.length];
 }
 
 function getGuestBorderColor(index: number): string {
   const colors = [
-    'border-blue-700/40', 'border-emerald-700/40', 'border-amber-700/40',
-    'border-pink-700/40', 'border-purple-700/40', 'border-cyan-700/40',
+    'border-blue-300', 'border-emerald-300', 'border-amber-300',
+    'border-pink-300', 'border-purple-300', 'border-cyan-300',
   ];
   return colors[index % colors.length];
 }
@@ -94,8 +94,17 @@ export default function ConversationPlayer({
         { lang: 'en-US', pitch: 1, rate: 0.9 }
       );
     } else if (exchange.speaker && exchange.speaker !== 'user') {
-      // Find the figure's voice profile
-      const figure = FIGURES.find((f) => f.id === exchange.speaker);
+      // Normalize speaker ID to kebab-case (Claude sometimes returns different formats)
+      const speakerId = exchange.speaker
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+      // Find the figure — try exact match first, then normalized
+      const figure = FIGURES.find((f) => f.id === exchange.speaker)
+        || FIGURES.find((f) => f.id === speakerId)
+        || FIGURES.find((f) => f.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === speakerId);
+
       if (figure) {
         const profile = getVoiceProfile(figure.id, figure.voicePersonality, figure.category, figure.nationality);
         const webVoice = getWebSpeechVoice(figure.nationality, figure.voicePersonality);
@@ -106,8 +115,21 @@ export default function ConversationPlayer({
           webVoice
         );
       } else {
-        // Unknown speaker — use default
-        speak(exchange.text, getNarratorVoiceId(), undefined, { lang: 'en-US', pitch: 1, rate: 1 });
+        // Use the voice profile directly even without a FIGURES match —
+        // this handles custom figures by using archetype detection
+        const guest = guestMap.get(exchange.speaker) || guestMap.get(speakerId);
+        if (guest) {
+          const profile = getVoiceProfile(
+            guest.figureId,
+            guest.speechPatterns || '',
+            [],
+          );
+          speak(exchange.text, profile.elevenLabsVoiceId, profile.voiceSettings);
+        } else {
+          // True fallback — use default voice with archetype settings
+          const profile = getVoiceProfile(speakerId, '', []);
+          speak(exchange.text, profile.elevenLabsVoiceId, profile.voiceSettings);
+        }
       }
     } else {
       // User speech or unknown — skip audio, just advance after a pause

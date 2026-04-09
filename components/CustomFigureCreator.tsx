@@ -119,7 +119,7 @@ export default function CustomFigureCreator({
       </div>
 
       {error && (
-        <p className="text-red-400 text-xs">{error}</p>
+        <p className="text-red-600 text-xs">{error}</p>
       )}
 
       {isCreating && (
