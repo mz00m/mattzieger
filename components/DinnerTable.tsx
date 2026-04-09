@@ -13,6 +13,32 @@ interface DinnerTableProps {
   maxGuests: number;
 }
 
+// Pick figures spread across different categories so the default list isn't all philosophy
+function spreadByCategory(figures: HistoricalFigure[], count: number): HistoricalFigure[] {
+  const byCategory = new Map<string, HistoricalFigure[]>();
+  for (const f of figures) {
+    const cat = f.category[0] || 'Other';
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat)!.push(f);
+  }
+  const result: HistoricalFigure[] = [];
+  const seen = new Set<string>();
+  const categories = Array.from(byCategory.keys());
+  let round = 0;
+  while (result.length < count && round < 20) {
+    for (const cat of categories) {
+      const pool = byCategory.get(cat)!;
+      if (round < pool.length && !seen.has(pool[round].id)) {
+        result.push(pool[round]);
+        seen.add(pool[round].id);
+        if (result.length >= count) break;
+      }
+    }
+    round++;
+  }
+  return result;
+}
+
 function getInitials(name: string): string {
   return name
     .split(' ')
@@ -70,7 +96,7 @@ function GuestSearchPopover({
           f.nationality.toLowerCase().includes(q)
         );
       })
-    : allFigures.filter((f) => !selectedIds.has(f.id)).slice(0, 8);
+    : spreadByCategory(allFigures.filter((f) => !selectedIds.has(f.id)), 8);
 
   return (
     <div
