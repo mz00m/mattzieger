@@ -89,10 +89,10 @@ function ResearchCard({ status }: { status: ResearchStatus }) {
     <div
       className={`rounded-lg border p-4 transition-all duration-500 ${
         status.complete
-          ? 'border-dinner-gold/30 bg-dinner-gold/5'
+          ? 'border-dinner-sage/30 bg-dinner-sage/5'
           : status.error
-          ? 'border-red-900/50 bg-red-900/10'
-          : 'border-dinner-border bg-dinner-card'
+          ? 'border-red-200 bg-red-50'
+          : 'border-dinner-border bg-white shadow-sm'
       }`}
     >
       <div className="flex items-center justify-between mb-2">
@@ -100,8 +100,8 @@ function ResearchCard({ status }: { status: ResearchStatus }) {
           {/* Pulsing dot for active research */}
           {isActive && (
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-dinner-candle opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-dinner-candle" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-dinner-terracotta opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-dinner-terracotta" />
             </span>
           )}
           <span className="font-serif text-dinner-cream text-sm">
@@ -109,7 +109,7 @@ function ResearchCard({ status }: { status: ResearchStatus }) {
           </span>
         </div>
         {status.complete && !status.error && (
-          <span className="text-dinner-gold text-xs font-serif">Arrived</span>
+          <span className="text-dinner-sage text-xs font-body font-medium">Arrived</span>
         )}
         {status.error && (
           <span className="text-red-600 text-xs">Error</span>
@@ -125,10 +125,10 @@ function ResearchCard({ status }: { status: ResearchStatus }) {
           style={{
             width: `${smoothProgress}%`,
             background: status.complete
-              ? 'linear-gradient(90deg, #9A7B56, #C4A87A)'
+              ? 'linear-gradient(90deg, #7D8B74, #9AAF8E)'
               : status.error
               ? '#ef4444'
-              : 'linear-gradient(90deg, #8B3A4A, #C4A87A, #8B3A4A)',
+              : 'linear-gradient(90deg, #C07A5A, #D4B88A, #C07A5A)',
             backgroundSize: isActive ? '200% 100%' : '100% 100%',
           }}
         />
@@ -170,7 +170,7 @@ export default function ResearchProgress({ statuses }: ResearchProgressProps) {
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="w-1.5 h-1.5 rounded-full bg-dinner-candle animate-candle-flicker"
+              className="w-1.5 h-1.5 rounded-full bg-dinner-terracotta animate-candle-flicker"
               style={{ animationDelay: `${i * 0.5}s` }}
             />
           ))}

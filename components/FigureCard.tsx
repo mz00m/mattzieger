@@ -57,8 +57,8 @@ export default function FigureCard({
       className={`relative rounded-lg border transition-all duration-300 cursor-pointer group
         ${
           selected
-            ? 'border-dinner-gold bg-dinner-gold/5 shadow-md shadow-dinner-gold/10'
-            : 'border-dinner-border bg-dinner-card hover:border-dinner-gold/50 hover:shadow-md'
+            ? 'border-dinner-terracotta/60 bg-white shadow-md shadow-dinner-terracotta/10'
+            : 'border-dinner-border bg-dinner-card hover:bg-white hover:shadow-md hover:border-dinner-border/80'
         }
         ${disabled && !selected ? 'opacity-50 cursor-not-allowed' : ''}
       `}
@@ -68,7 +68,7 @@ export default function FigureCard({
     >
       {/* Selection indicator */}
       {selected && (
-        <div className="absolute -top-2 -right-2 w-6 h-6 bg-dinner-gold rounded-full flex items-center justify-center text-white text-xs font-bold z-10">
+        <div className="absolute -top-2 -right-2 w-6 h-6 bg-dinner-terracotta rounded-full flex items-center justify-center text-white text-xs font-bold z-10">
           ✓
         </div>
       )}
@@ -80,8 +80,8 @@ export default function FigureCard({
             className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-serif shrink-0
               ${
                 selected
-                  ? 'bg-dinner-gold/20 text-dinner-gold border border-dinner-gold/40'
-                  : 'bg-dinner-border/50 text-dinner-text-secondary border border-dinner-border'
+                  ? 'bg-dinner-terracotta/10 text-dinner-terracotta border border-dinner-terracotta/30'
+                  : 'bg-dinner-bg text-dinner-text-secondary border border-dinner-border'
               }
             `}
           >

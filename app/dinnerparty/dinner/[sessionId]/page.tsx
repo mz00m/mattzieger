@@ -233,10 +233,10 @@ export default function DinnerPage() {
   return (
     <div className="min-h-screen bg-dinner-bg text-dinner-cream flex flex-col">
       {/* Header */}
-      <header className="border-b border-dinner-border/50 bg-dinner-bg/95 backdrop-blur sticky top-0 z-20">
+      <header className="border-b border-dinner-border/50 bg-white/80 backdrop-blur-md sticky top-0 z-20">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <h1 className="font-serif text-dinner-gold-light text-lg">
+            <h1 className="font-serif text-dinner-cream text-lg">
               The Eternal Dinner Party
             </h1>
             <p className="text-dinner-text-dim text-xs font-body truncate max-w-[200px] sm:max-w-none">
@@ -272,7 +272,7 @@ export default function DinnerPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                 </svg>
               </button>
-              <div className="absolute right-0 top-full mt-1 bg-dinner-card border border-dinner-border rounded-lg shadow-xl
+              <div className="absolute right-0 top-full mt-1 bg-white border border-dinner-border rounded-lg shadow-lg
                 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all min-w-[180px] z-30">
                 <button
                   onClick={() => setShowTopicChanger(!showTopicChanger)}
@@ -363,8 +363,8 @@ export default function DinnerPage() {
             <div className="px-4 mt-4 mb-24 text-center">
               <button
                 onClick={() => generateRound('continue')}
-                className="px-6 py-2.5 bg-dinner-gold/15 border border-dinner-gold/40 text-dinner-gold-light
-                  rounded-lg font-serif text-sm hover:bg-dinner-gold/25 transition-all"
+                className="px-6 py-2.5 bg-dinner-terracotta text-white
+                  rounded-lg font-serif text-sm hover:bg-dinner-terracotta/90 transition-all shadow-sm"
               >
                 Continue the conversation
               </button>

@@ -10,25 +10,28 @@ const config: Config = {
     extend: {
       colors: {
         dinner: {
-          bg: '#F8F5F0',           // warm cream background
-          card: '#FFFFFF',          // clean white cards
-          border: '#E6DDD1',        // warm light border
-          gold: '#9A7B56',          // cognac/amber accent (readable on light)
-          'gold-light': '#C4A87A',  // softer gold for highlights
-          'gold-dim': '#7A6240',    // deep amber
-          cream: '#2A2118',         // espresso (main text on light bg)
-          wine: '#8B3A4A',          // rich wine accent
-          'wine-light': '#A85465',  // lighter wine for hover
-          candle: '#D4A030',        // warm amber glow
-          'text-primary': '#2A2118',  // espresso
-          'text-secondary': '#6B5E52', // warm brown
-          'text-dim': '#A89888',      // warm tan
+          bg: '#FAF7F2',             // warm linen background
+          card: '#F2EDE4',           // warm cream cards
+          border: '#E2DCD2',          // soft sand border
+          gold: '#B8935A',            // warm gold accent
+          'gold-light': '#D4B88A',    // lighter gold
+          'gold-dim': '#A07D48',      // deep gold
+          cream: '#2C2520',           // espresso (main text)
+          terracotta: '#C07A5A',      // warm terracotta accent
+          mocha: '#A47864',           // mocha mid-tone
+          wine: '#8B3A4A',            // rich wine accent
+          'wine-light': '#A8506A',    // lighter wine for hover
+          sage: '#7D8B74',            // sage green accent
+          candle: '#F5DEB3',          // soft amber glow
+          'text-primary': '#2C2520',  // espresso
+          'text-secondary': '#78716C', // warm gray
+          'text-dim': '#A8A29E',       // stone
         },
       },
       fontFamily: {
         serif: ['Playfair Display', 'Georgia', 'serif'],
-        body: ['Lora', 'Georgia', 'serif'],
-        mono: ['Courier New', 'monospace'],
+        body: ['DM Sans', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Courier New', 'monospace'],
       },
       animation: {
         'candle-flicker': 'flicker 3s ease-in-out infinite',
