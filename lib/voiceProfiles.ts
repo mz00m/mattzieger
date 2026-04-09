@@ -205,7 +205,8 @@ const VOICES_WARM_MALE     = [V_JOSH, V_SAM, V_ANTONI];
 const VOICES_ENERGETIC_MALE = [V_JOSH, V_ARNOLD];
 const VOICES_FEMALE_WARM   = [V_RACHEL, V_BELLA, V_ELLI];
 const VOICES_FEMALE_STRONG = [V_DOMI, V_RACHEL];
-const VOICES_NARRATOR      = [V_ADAM, V_RACHEL];
+const V_CAROL   = '7dEuJHhweR5AFXA4INkB';  // Carol — narrator voice
+const VOICES_NARRATOR      = [V_CAROL, V_ADAM, V_RACHEL];
 
 // ---------------------------------------------------------------------------
 // Stable voice assignment - hash figureId to get consistent voice
