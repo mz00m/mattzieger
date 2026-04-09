@@ -87,8 +87,20 @@ export async function generateCustomFigure(
     throw new Error('Empty response from AI');
   }
 
-  // Parse the JSON response
-  const figure: HistoricalFigure = JSON.parse(content);
+  // Parse the JSON response — Claude may wrap it in markdown fences
+  let jsonStr = content.trim();
+  // Strip markdown code fences if present
+  const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    jsonStr = fenceMatch[1].trim();
+  }
+  // If it doesn't start with '{', try to find the first '{' (skip preamble text)
+  const braceIdx = jsonStr.indexOf('{');
+  if (braceIdx > 0) {
+    jsonStr = jsonStr.slice(braceIdx);
+  }
+
+  const figure: HistoricalFigure = JSON.parse(jsonStr);
 
   // Ensure the ID is valid
   figure.id =
