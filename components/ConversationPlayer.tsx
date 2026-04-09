@@ -14,6 +14,8 @@ interface ConversationPlayerProps {
   onTogglePlay: () => void;
   playbackSpeed: number;
   onSpeedChange: (speed: number) => void;
+  volume: number;
+  onVolumeChange: (volume: number) => void;
   currentExchangeIndex: number;
   onExchangeChange: (index: number) => void;
   listeningMode: boolean;
@@ -42,6 +44,8 @@ export default function ConversationPlayer({
   onTogglePlay,
   playbackSpeed,
   onSpeedChange,
+  volume,
+  onVolumeChange,
   currentExchangeIndex,
   onExchangeChange,
   listeningMode,
@@ -63,6 +67,7 @@ export default function ConversationPlayer({
       }
     },
     playbackRate: playbackSpeed,
+    volume,
   });
 
   // Auto-scroll to latest exchange
@@ -198,37 +203,66 @@ export default function ConversationPlayer({
         </div>
 
         <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-dinner-border shadow-[0_-4px_20px_rgba(0,0,0,0.05)] p-4">
-          <div className="max-w-lg mx-auto flex items-center justify-between">
-            <button
-              onClick={() => onExchangeChange(Math.max(0, currentExchangeIndex - 1))}
-              className="text-dinner-text-secondary hover:text-dinner-cream p-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <button
-              onClick={onTogglePlay}
-              className="w-12 h-12 rounded-full bg-dinner-gold/20 border border-dinner-gold/40 flex items-center justify-center text-dinner-gold hover:bg-dinner-gold/30 transition-colors"
-            >
-              {isPlaying ? (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+          <div className="max-w-lg mx-auto space-y-2">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => onExchangeChange(Math.max(0, currentExchangeIndex - 1))}
+                className="text-dinner-text-secondary hover:text-dinner-cream p-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-              ) : (
-                <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              )}
-            </button>
-            <button
-              onClick={() => onExchangeChange(Math.min(exchanges.length - 1, currentExchangeIndex + 1))}
-              className="text-dinner-text-secondary hover:text-dinner-cream p-2"
-            >
+              </button>
+              <button
+                onClick={onTogglePlay}
+                className="w-12 h-12 rounded-full bg-dinner-gold/20 border border-dinner-gold/40 flex items-center justify-center text-dinner-gold hover:bg-dinner-gold/30 transition-colors"
+              >
+                {isPlaying ? (
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                )}
+              </button>
+              <button
+                onClick={() => onExchangeChange(Math.min(exchanges.length - 1, currentExchangeIndex + 1))}
+                className="text-dinner-text-secondary hover:text-dinner-cream p-2"
+              >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
+            </div>
+            {/* Volume & speed row */}
+            <div className="flex items-center justify-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-dinner-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={volume}
+                  onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+                  className="w-20 h-1 accent-dinner-gold appearance-none bg-dinner-border/50 rounded-full cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-dinner-gold"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  const currentIdx = speeds.indexOf(playbackSpeed);
+                  const nextIdx = (currentIdx + 1) % speeds.length;
+                  onSpeedChange(speeds[nextIdx]);
+                }}
+                className="text-dinner-text-secondary hover:text-dinner-gold text-xs font-mono px-2 py-1 rounded border border-dinner-border hover:border-dinner-gold/30 transition-colors"
+              >
+                {playbackSpeed}x
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -340,6 +374,22 @@ export default function ConversationPlayer({
               />
             </div>
           </div>
+          {/* Volume */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <svg className="w-3.5 h-3.5 text-dinner-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            </svg>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={volume}
+              onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+              className="w-16 h-1 accent-dinner-gold appearance-none bg-dinner-border/50 rounded-full cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-dinner-gold"
+            />
+          </div>
+          {/* Speed */}
           <button
             onClick={() => {
               const currentIdx = speeds.indexOf(playbackSpeed);

@@ -5,6 +5,7 @@ import { useRef, useCallback, useState } from 'react';
 interface UseAudioOptions {
   onEnd?: () => void;
   playbackRate?: number;
+  volume?: number;
 }
 
 interface VoiceSettings {
@@ -14,7 +15,7 @@ interface VoiceSettings {
   use_speaker_boost?: boolean;
 }
 
-export function useAudio({ onEnd, playbackRate = 1 }: UseAudioOptions = {}) {
+export function useAudio({ onEnd, playbackRate = 1, volume = 1 }: UseAudioOptions = {}) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -59,6 +60,7 @@ export function useAudio({ onEnd, playbackRate = 1 }: UseAudioOptions = {}) {
         return new Promise((resolve) => {
           const audio = new Audio(url);
           audio.playbackRate = playbackRate;
+          audio.volume = Math.max(0, Math.min(1, volume));
           audioRef.current = audio;
 
           audio.onended = () => {
@@ -86,7 +88,7 @@ export function useAudio({ onEnd, playbackRate = 1 }: UseAudioOptions = {}) {
         return false;
       }
     },
-    [playbackRate]
+    [playbackRate, volume]
   );
 
   const speakWithWebSpeech = useCallback(
@@ -102,6 +104,7 @@ export function useAudio({ onEnd, playbackRate = 1 }: UseAudioOptions = {}) {
       utterance.lang = options?.lang || 'en-US';
       utterance.pitch = options?.pitch || 1;
       utterance.rate = (options?.rate || 1) * playbackRate;
+      utterance.volume = Math.max(0, Math.min(1, volume));
 
       // Pick a voice: prefer different voices for different characters
       const voices = window.speechSynthesis.getVoices();
@@ -132,7 +135,7 @@ export function useAudio({ onEnd, playbackRate = 1 }: UseAudioOptions = {}) {
       window.speechSynthesis.speak(utterance);
       return true;
     },
-    [playbackRate]
+    [playbackRate, volume]
   );
 
   const speak = useCallback(
