@@ -112,7 +112,7 @@ function ResearchCard({ status }: { status: ResearchStatus }) {
           <span className="text-dinner-gold text-xs font-serif">Arrived</span>
         )}
         {status.error && (
-          <span className="text-red-400 text-xs">Error</span>
+          <span className="text-red-600 text-xs">Error</span>
         )}
       </div>
 
@@ -125,10 +125,10 @@ function ResearchCard({ status }: { status: ResearchStatus }) {
           style={{
             width: `${smoothProgress}%`,
             background: status.complete
-              ? 'linear-gradient(90deg, #c9a96e, #e8d5a8)'
+              ? 'linear-gradient(90deg, #9A7B56, #C4A87A)'
               : status.error
               ? '#ef4444'
-              : 'linear-gradient(90deg, #6b2d3e, #c9a96e, #6b2d3e)',
+              : 'linear-gradient(90deg, #8B3A4A, #C4A87A, #8B3A4A)',
             backgroundSize: isActive ? '200% 100%' : '100% 100%',
           }}
         />

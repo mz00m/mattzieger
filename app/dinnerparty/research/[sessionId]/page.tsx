@@ -192,7 +192,7 @@ export default function ResearchPage() {
       <div className="relative z-10 w-full max-w-xl">
         {error ? (
           <div className="text-center space-y-4">
-            <p className="text-red-400 font-body">{error}</p>
+            <p className="text-red-600 font-body">{error}</p>
             <button
               onClick={() => router.push('/dinnerparty')}
               className="px-4 py-2 bg-dinner-card border border-dinner-border rounded-lg text-dinner-cream text-sm font-serif

@@ -22,22 +22,22 @@ function getInitials(name: string): string {
 
 function getCategoryColor(category: string): string {
   const colors: Record<string, string> = {
-    Philosophy: 'bg-purple-900/50 text-purple-300 border-purple-700',
-    Science: 'bg-blue-900/50 text-blue-300 border-blue-700',
-    Literature: 'bg-emerald-900/50 text-emerald-300 border-emerald-700',
-    Politics: 'bg-red-900/50 text-red-300 border-red-700',
-    'Civil Rights': 'bg-amber-900/50 text-amber-300 border-amber-700',
-    Comedy: 'bg-yellow-900/50 text-yellow-300 border-yellow-700',
-    Music: 'bg-pink-900/50 text-pink-300 border-pink-700',
-    Art: 'bg-orange-900/50 text-orange-300 border-orange-700',
-    Technology: 'bg-cyan-900/50 text-cyan-300 border-cyan-700',
-    Economics: 'bg-lime-900/50 text-lime-300 border-lime-700',
-    'Religion & Mysticism': 'bg-indigo-900/50 text-indigo-300 border-indigo-700',
-    Exploration: 'bg-teal-900/50 text-teal-300 border-teal-700',
-    'Film & Theater': 'bg-rose-900/50 text-rose-300 border-rose-700',
-    'Modern Thinkers': 'bg-violet-900/50 text-violet-300 border-violet-700',
+    Philosophy: 'bg-purple-50 text-purple-700 border-purple-200',
+    Science: 'bg-blue-50 text-blue-700 border-blue-200',
+    Literature: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    Politics: 'bg-red-50 text-red-700 border-red-200',
+    'Civil Rights': 'bg-amber-50 text-amber-700 border-amber-200',
+    Comedy: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+    Music: 'bg-pink-50 text-pink-700 border-pink-200',
+    Art: 'bg-orange-50 text-orange-700 border-orange-200',
+    Technology: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+    Economics: 'bg-lime-50 text-lime-700 border-lime-200',
+    'Religion & Mysticism': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    Exploration: 'bg-teal-50 text-teal-700 border-teal-200',
+    'Film & Theater': 'bg-rose-50 text-rose-700 border-rose-200',
+    'Modern Thinkers': 'bg-violet-50 text-violet-700 border-violet-200',
   };
-  return colors[category] || 'bg-gray-900/50 text-gray-300 border-gray-700';
+  return colors[category] || 'bg-gray-50 text-gray-700 border-gray-200';
 }
 
 export default function FigureCard({
@@ -57,8 +57,8 @@ export default function FigureCard({
       className={`relative rounded-lg border transition-all duration-300 cursor-pointer group
         ${
           selected
-            ? 'border-dinner-gold bg-dinner-gold/10 shadow-lg shadow-dinner-gold/10'
-            : 'border-dinner-border bg-dinner-card hover:border-dinner-gold/50 hover:bg-dinner-card/80'
+            ? 'border-dinner-gold bg-dinner-gold/5 shadow-md shadow-dinner-gold/10'
+            : 'border-dinner-border bg-dinner-card hover:border-dinner-gold/50 hover:shadow-md'
         }
         ${disabled && !selected ? 'opacity-50 cursor-not-allowed' : ''}
       `}
@@ -68,7 +68,7 @@ export default function FigureCard({
     >
       {/* Selection indicator */}
       {selected && (
-        <div className="absolute -top-2 -right-2 w-6 h-6 bg-dinner-gold rounded-full flex items-center justify-center text-dinner-bg text-xs font-bold z-10">
+        <div className="absolute -top-2 -right-2 w-6 h-6 bg-dinner-gold rounded-full flex items-center justify-center text-white text-xs font-bold z-10">
           ✓
         </div>
       )}

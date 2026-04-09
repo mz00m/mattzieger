@@ -21,16 +21,16 @@ interface ConversationPlayerProps {
 
 function getGuestColor(index: number): string {
   const colors = [
-    'text-blue-300', 'text-emerald-300', 'text-amber-300',
-    'text-pink-300', 'text-purple-300', 'text-cyan-300',
+    'text-blue-700', 'text-emerald-700', 'text-amber-700',
+    'text-pink-700', 'text-purple-700', 'text-cyan-700',
   ];
   return colors[index % colors.length];
 }
 
 function getGuestBorderColor(index: number): string {
   const colors = [
-    'border-blue-700/40', 'border-emerald-700/40', 'border-amber-700/40',
-    'border-pink-700/40', 'border-purple-700/40', 'border-cyan-700/40',
+    'border-blue-300', 'border-emerald-300', 'border-amber-300',
+    'border-pink-300', 'border-purple-300', 'border-cyan-300',
   ];
   return colors[index % colors.length];
 }
