@@ -1165,6 +1165,15 @@ export const FIGURES: HistoricalFigure[] = [
     voicePersonality: 'Thoughtful and intense, speaks with a gravity beyond her years, explores dark questions with composure, Romantic idealism shaped by personal tragedy',
     wikiSlug: 'Mary_Shelley', primarySources: ['Frankenstein', 'The Last Man', 'Journal entries'],
   },
+  {
+    id: 'barack-obama', name: 'Barack Obama', born: '1961',
+    category: ['Politics', 'Modern Thinkers'], nationality: 'American',
+    tagline: 'The audacity of hope itself.',
+    knownFor: ['44th President of the United States', 'First African American president', 'Affordable Care Act', 'Nobel Peace Prize laureate', 'Constitutional law professor'],
+    writingStyle: 'Builds from personal narrative to universal principle, uses cadenced repetition and tricolon, pivots between intimate storytelling and soaring rhetoric, balances intellectual precision with emotional accessibility',
+    voicePersonality: 'Measured baritone with deliberate pauses for emphasis, shifts between professorial calm and preacher-like crescendo, warm humor that disarms before making a serious point',
+    wikiSlug: 'Barack_Obama', primarySources: ['Dreams from My Father', 'The Audacity of Hope', 'A Promised Land', '2004 DNC Keynote Address', '2008 "A More Perfect Union" speech'],
+  },
 ];
 
 // ============ HELPERS ============

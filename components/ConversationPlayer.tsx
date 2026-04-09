@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ConversationExchange } from '@/lib/conversationOrchestrator';
 import type { CharacterKnowledgeBase } from '@/lib/researchAgent';
+import { useAudio } from '@/lib/useAudio';
+import { getVoiceProfile, getNarratorVoiceId, getWebSpeechVoice } from '@/lib/voiceProfiles';
+import { FIGURES } from '@/lib/figures';
 
 interface ConversationPlayerProps {
   exchanges: ConversationExchange[];
@@ -18,24 +21,16 @@ interface ConversationPlayerProps {
 
 function getGuestColor(index: number): string {
   const colors = [
-    'text-blue-300',
-    'text-emerald-300',
-    'text-amber-300',
-    'text-pink-300',
-    'text-purple-300',
-    'text-cyan-300',
+    'text-blue-300', 'text-emerald-300', 'text-amber-300',
+    'text-pink-300', 'text-purple-300', 'text-cyan-300',
   ];
   return colors[index % colors.length];
 }
 
 function getGuestBorderColor(index: number): string {
   const colors = [
-    'border-blue-700/40',
-    'border-emerald-700/40',
-    'border-amber-700/40',
-    'border-pink-700/40',
-    'border-purple-700/40',
-    'border-cyan-700/40',
+    'border-blue-700/40', 'border-emerald-700/40', 'border-amber-700/40',
+    'border-pink-700/40', 'border-purple-700/40', 'border-cyan-700/40',
   ];
   return colors[index % colors.length];
 }
@@ -52,9 +47,23 @@ export default function ConversationPlayer({
   listeningMode,
 }: ConversationPlayerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [speakingFigure, setSpeakingFigure] = useState<string | null>(null);
+  const lastSpokenIndex = useRef(-1);
 
   const guestMap = new Map(guests.map((g, i) => [g.figureId, { ...g, colorIndex: i }]));
+
+  // Audio system
+  const { speak, stop, isSpeaking } = useAudio({
+    onEnd: () => {
+      // Auto-advance to next exchange when audio finishes
+      if (isPlaying && currentExchangeIndex < exchanges.length - 1) {
+        // Small pause between speakers
+        setTimeout(() => {
+          onExchangeChange(currentExchangeIndex + 1);
+        }, 400);
+      }
+    },
+    playbackRate: playbackSpeed,
+  });
 
   // Auto-scroll to latest exchange
   useEffect(() => {
@@ -63,32 +72,66 @@ export default function ConversationPlayer({
     }
   }, [exchanges.length, currentExchangeIndex]);
 
-  // Auto-advance in play mode
+  // Play audio when exchange changes and isPlaying
   useEffect(() => {
-    if (!isPlaying || currentExchangeIndex >= exchanges.length - 1) return;
-
-    const exchange = exchanges[currentExchangeIndex];
-    const wordsPerMinute = 150 * playbackSpeed;
-    const wordCount = exchange.text.split(/\s+/).length;
-    const readTime = (wordCount / wordsPerMinute) * 60 * 1000;
-    const delay = Math.max(readTime, 1500 / playbackSpeed);
-
-    if (exchange.speaker) {
-      setSpeakingFigure(exchange.speaker);
+    if (!isPlaying) {
+      stop();
+      return;
     }
 
-    const timer = setTimeout(() => {
-      onExchangeChange(currentExchangeIndex + 1);
-    }, delay);
+    if (currentExchangeIndex >= exchanges.length) return;
+    if (currentExchangeIndex === lastSpokenIndex.current) return;
 
-    return () => clearTimeout(timer);
-  }, [isPlaying, currentExchangeIndex, exchanges, playbackSpeed, onExchangeChange]);
+    lastSpokenIndex.current = currentExchangeIndex;
+    const exchange = exchanges[currentExchangeIndex];
+
+    if (exchange.type === 'narration') {
+      const narratorId = getNarratorVoiceId();
+      speak(
+        exchange.text,
+        narratorId,
+        { stability: 0.8, similarity_boost: 0.75, style: 0.3 },
+        { lang: 'en-US', pitch: 1, rate: 0.9 }
+      );
+    } else if (exchange.speaker && exchange.speaker !== 'user') {
+      // Find the figure's voice profile
+      const figure = FIGURES.find((f) => f.id === exchange.speaker);
+      if (figure) {
+        const profile = getVoiceProfile(figure.id, figure.voicePersonality, figure.category);
+        const webVoice = getWebSpeechVoice(figure.nationality, figure.voicePersonality);
+        speak(
+          exchange.text,
+          profile.elevenLabsVoiceId,
+          profile.voiceSettings,
+          webVoice
+        );
+      } else {
+        // Unknown speaker — use default
+        speak(exchange.text, getNarratorVoiceId(), undefined, { lang: 'en-US', pitch: 1, rate: 1 });
+      }
+    } else {
+      // User speech or unknown — skip audio, just advance after a pause
+      const wordCount = exchange.text.split(/\s+/).length;
+      const delay = Math.max((wordCount / (150 * playbackSpeed)) * 60000, 1500);
+      setTimeout(() => {
+        if (isPlaying && currentExchangeIndex < exchanges.length - 1) {
+          onExchangeChange(currentExchangeIndex + 1);
+        }
+      }, delay);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, currentExchangeIndex, exchanges.length]);
+
+  // Reset spoken index when stopping
+  useEffect(() => {
+    if (!isPlaying) {
+      lastSpokenIndex.current = -1;
+    }
+  }, [isPlaying]);
 
   const getGuestName = useCallback(
     (figureId: string): string => {
-      return figureId
-        .replace(/-/g, ' ')
-        .replace(/\b\w/g, (l) => l.toUpperCase());
+      return figureId.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
     },
     []
   );
@@ -98,18 +141,14 @@ export default function ConversationPlayer({
   if (listeningMode) {
     const currentExchange = exchanges[currentExchangeIndex];
     const speakerName = currentExchange?.speaker ?? '';
-    const guest = speakerName
-      ? guestMap.get(speakerName)
-      : null;
+    const guest = speakerName ? guestMap.get(speakerName) : null;
 
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] relative">
-        {/* Ambient background */}
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-64 h-64 rounded-full bg-dinner-candle/5 animate-pulse-gentle" />
         </div>
 
-        {/* Current speaker */}
         <div className="relative z-10 text-center space-y-6">
           {currentExchange?.type === 'narration' ? (
             <p className="text-dinner-text-secondary italic font-body text-lg max-w-md">
@@ -120,22 +159,14 @@ export default function ConversationPlayer({
               <div
                 className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-2xl font-serif
                   bg-dinner-card border-2 ${guest ? getGuestBorderColor(guest.colorIndex) : 'border-dinner-border'}
-                  ${isPlaying ? 'animate-pulse-gentle' : ''}`}
+                  ${isSpeaking ? 'animate-pulse-gentle' : ''}`}
               >
                 {speakerName
-                  ? getGuestName(speakerName)
-                      .split(' ')
-                      .map((w) => w[0])
-                      .join('')
-                      .slice(0, 2)
+                  ? getGuestName(speakerName).split(' ').map((w) => w[0]).join('').slice(0, 2)
                   : '?'}
               </div>
-              <h3
-                className={`font-serif text-2xl ${guest ? getGuestColor(guest.colorIndex) : 'text-dinner-cream'}`}
-              >
-                {speakerName
-                  ? getGuestName(speakerName)
-                  : ''}
+              <h3 className={`font-serif text-2xl ${guest ? getGuestColor(guest.colorIndex) : 'text-dinner-cream'}`}>
+                {speakerName ? getGuestName(speakerName) : ''}
               </h3>
               <p className="text-dinner-cream font-body text-lg max-w-lg leading-relaxed">
                 {currentExchange?.text}
@@ -144,13 +175,10 @@ export default function ConversationPlayer({
           )}
         </div>
 
-        {/* Bottom controls */}
         <div className="fixed bottom-0 left-0 right-0 bg-dinner-bg/95 backdrop-blur border-t border-dinner-border p-4">
           <div className="max-w-lg mx-auto flex items-center justify-between">
             <button
-              onClick={() =>
-                onExchangeChange(Math.max(0, currentExchangeIndex - 1))
-              }
+              onClick={() => onExchangeChange(Math.max(0, currentExchangeIndex - 1))}
               className="text-dinner-text-secondary hover:text-dinner-cream p-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -172,11 +200,7 @@ export default function ConversationPlayer({
               )}
             </button>
             <button
-              onClick={() =>
-                onExchangeChange(
-                  Math.min(exchanges.length - 1, currentExchangeIndex + 1)
-                )
-              }
+              onClick={() => onExchangeChange(Math.min(exchanges.length - 1, currentExchangeIndex + 1))}
               className="text-dinner-text-secondary hover:text-dinner-cream p-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -192,15 +216,12 @@ export default function ConversationPlayer({
   // Reading mode
   return (
     <div className="flex flex-col h-full">
-      {/* Conversation scroll */}
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto dinner-scroll space-y-4 pb-24 px-4"
       >
         {exchanges.map((exchange, i) => {
-          const guest = exchange.speaker
-            ? guestMap.get(exchange.speaker)
-            : null;
+          const guest = exchange.speaker ? guestMap.get(exchange.speaker) : null;
           const isActive = i === currentExchangeIndex;
           const isPast = i < currentExchangeIndex;
           const isUserQuestion = exchange.type === 'user-question';
@@ -209,9 +230,7 @@ export default function ConversationPlayer({
             return (
               <div
                 key={exchange.id}
-                className={`text-center py-3 transition-opacity duration-300 ${
-                  isPast ? 'opacity-50' : 'opacity-100'
-                }`}
+                className={`text-center py-3 transition-opacity duration-300 ${isPast ? 'opacity-50' : 'opacity-100'}`}
               >
                 <p className="text-dinner-text-dim italic font-body text-sm max-w-md mx-auto">
                   {exchange.text}
@@ -225,49 +244,33 @@ export default function ConversationPlayer({
               key={exchange.id}
               className={`flex gap-3 max-w-2xl transition-all duration-300 ${
                 isPast ? 'opacity-60' : 'opacity-100'
-              } ${isActive ? 'scale-[1.01]' : ''} ${
-                isUserQuestion ? 'animate-pulse-gentle' : ''
-              }`}
+              } ${isActive ? 'scale-[1.01]' : ''} ${isUserQuestion ? 'animate-pulse-gentle' : ''}`}
               onClick={() => onExchangeChange(i)}
             >
-              {/* Avatar */}
               <div
                 className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-serif shrink-0 border
-                  ${
-                    exchange.speaker === 'user'
-                      ? 'bg-dinner-wine/20 border-dinner-wine text-dinner-gold-light'
-                      : `bg-dinner-card ${guest ? getGuestBorderColor(guest.colorIndex) : 'border-dinner-border'}`
-                  }
-                  ${isActive && isPlaying ? 'ring-2 ring-dinner-gold/30' : ''}
-                `}
+                  ${exchange.speaker === 'user'
+                    ? 'bg-dinner-wine/20 border-dinner-wine text-dinner-gold-light'
+                    : `bg-dinner-card ${guest ? getGuestBorderColor(guest.colorIndex) : 'border-dinner-border'}`}
+                  ${isActive && isSpeaking ? 'ring-2 ring-dinner-gold/30' : ''}`}
               >
                 {exchange.speaker === 'user'
                   ? 'You'
                   : exchange.speaker
-                  ? getGuestName(exchange.speaker)
-                      .split(' ')
-                      .map((w) => w[0])
-                      .join('')
-                      .slice(0, 2)
+                  ? getGuestName(exchange.speaker).split(' ').map((w) => w[0]).join('').slice(0, 2)
                   : '?'}
               </div>
-
-              {/* Speech bubble */}
               <div className="flex-1 min-w-0">
                 <span
                   className={`text-xs font-serif ${
                     exchange.speaker === 'user'
                       ? 'text-dinner-gold-light'
-                      : guest
-                      ? getGuestColor(guest.colorIndex)
-                      : 'text-dinner-text-secondary'
+                      : guest ? getGuestColor(guest.colorIndex) : 'text-dinner-text-secondary'
                   }`}
                 >
                   {exchange.speaker === 'user'
                     ? 'You'
-                    : exchange.speaker
-                    ? getGuestName(exchange.speaker)
-                    : 'Unknown'}
+                    : exchange.speaker ? getGuestName(exchange.speaker) : 'Unknown'}
                 </span>
                 <p className="text-dinner-cream font-body text-sm leading-relaxed mt-0.5">
                   {exchange.text}
@@ -278,10 +281,8 @@ export default function ConversationPlayer({
         })}
       </div>
 
-      {/* Audio player bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-dinner-bg/95 backdrop-blur border-t border-dinner-border">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-4">
-          {/* Play/Pause */}
           <button
             onClick={onTogglePlay}
             className="w-10 h-10 rounded-full bg-dinner-gold/20 border border-dinner-gold/40 flex items-center justify-center text-dinner-gold hover:bg-dinner-gold/30 transition-colors shrink-0"
@@ -296,14 +297,13 @@ export default function ConversationPlayer({
               </svg>
             )}
           </button>
-
-          {/* Progress */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between text-xs mb-1">
               <span className="text-dinner-text-secondary font-mono">
                 {currentExchangeIndex + 1} / {exchanges.length}
               </span>
               <span className="text-dinner-text-dim font-mono truncate ml-2">
+                {isSpeaking ? '🔊 ' : ''}
                 {exchanges[currentExchangeIndex]?.speaker === 'user'
                   ? 'You'
                   : exchanges[currentExchangeIndex]?.speaker
@@ -314,14 +314,10 @@ export default function ConversationPlayer({
             <div className="h-1 bg-dinner-border/50 rounded-full overflow-hidden">
               <div
                 className="h-full bg-dinner-gold/60 rounded-full transition-all duration-300"
-                style={{
-                  width: `${((currentExchangeIndex + 1) / exchanges.length) * 100}%`,
-                }}
+                style={{ width: `${((currentExchangeIndex + 1) / exchanges.length) * 100}%` }}
               />
             </div>
           </div>
-
-          {/* Speed */}
           <button
             onClick={() => {
               const currentIdx = speeds.indexOf(playbackSpeed);

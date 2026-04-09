@@ -40,56 +40,80 @@ const ARCHETYPE_SETTINGS: Record<
 };
 
 // ---------------------------------------------------------------------------
-// Placeholder ElevenLabs voice IDs (user should replace with real ones)
-// Rotated to give each figure a distinct voice
+// Real ElevenLabs voice IDs from their default voice library
+// These are pre-made voices available on all ElevenLabs accounts
 // ---------------------------------------------------------------------------
 
-const VOICE_IDS_MALE = [
-  'voice_male_deep_1',
-  'voice_male_warm_1',
-  'voice_male_sharp_1',
-  'voice_male_gravelly_1',
-  'voice_male_resonant_1',
-  'voice_male_crisp_1',
+const VOICES_DEEP_MALE = [
+  'ErXwobaYiN019PkySvjV',  // Antoni - well-rounded, calm
+  'VR6AewLTigWG4xSOukaG',  // Arnold - deep, authoritative
+  'pNInz6obpgDQGcFmaJgB',  // Adam - deep, narration
 ];
 
-const VOICE_IDS_FEMALE = [
-  'voice_female_warm_1',
-  'voice_female_clear_1',
-  'voice_female_rich_1',
-  'voice_female_bright_1',
-  'voice_female_smooth_1',
+const VOICES_WARM_MALE = [
+  'TxGEqnHWrfWFTfGW9XjX',  // Josh - warm, conversational
+  'yoZ06aMxZJJ28mfd3POQ',  // Sam - warm, narrative
+  'ZQe5CZNOzWyzPSCn5a3c',  // James - calm, authoritative
 ];
 
-// Simple round-robin counters
-let maleIndex = 0;
-let femaleIndex = 0;
+const VOICES_ENERGETIC_MALE = [
+  'jBpfuIE2acCO8z3wKNLl',  // Gigi - energetic (can sound male)
+  'onwK4e9ZLuTAKqWW03F9',  // Daniel - British, measured
+  'N2lVS1w4EtoT3dr4eOWO',  // Callum - lively, British
+];
 
-function getNextVoiceId(personality: string): string {
-  // Very rough heuristic — look for gendered keywords in the voice personality
-  const lowerPersonality = personality.toLowerCase();
-  const femaleSignals = [
-    'feminine',
-    'soprano',
-    'contralto',
-    'warm female',
-    'maternal',
-    'her ',
-    'she ',
-  ];
+const VOICES_FEMALE_WARM = [
+  '21m00Tcm4TlvDq8ikWAM',  // Rachel - calm, warm
+  'EXAVITQu4vr4xnSDxMaL',  // Bella - soft, gentle
+  'MF3mGyEYCl7XYWbV9V6O',  // Emily - calm, gentle
+];
 
-  const isFemale = femaleSignals.some((s) => lowerPersonality.includes(s));
+const VOICES_FEMALE_STRONG = [
+  'ThT5KcBeYPX3keUQqHPh',  // Dorothy - pleasant, warm
+  'AZnzlk1XvdvUeBnXmlld',  // Domi - strong, confident
+  'jsCqWAovK2LkecY7zXl4',  // Freya - Nordic, strong
+];
 
-  if (isFemale) {
-    const id = VOICE_IDS_FEMALE[femaleIndex % VOICE_IDS_FEMALE.length];
-    femaleIndex++;
-    return id;
+const VOICES_NARRATOR = [
+  'pNInz6obpgDQGcFmaJgB',  // Adam - narration
+  '21m00Tcm4TlvDq8ikWAM',  // Rachel - narration
+];
+
+// ---------------------------------------------------------------------------
+// Stable voice assignment - hash figureId to get consistent voice
+// ---------------------------------------------------------------------------
+
+function hashCode(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
   }
-
-  const id = VOICE_IDS_MALE[maleIndex % VOICE_IDS_MALE.length];
-  maleIndex++;
-  return id;
+  return Math.abs(hash);
 }
+
+function pickFromArray(arr: string[], figureId: string): string {
+  return arr[hashCode(figureId) % arr.length];
+}
+
+// ---------------------------------------------------------------------------
+// Known female figures (for voice assignment)
+// ---------------------------------------------------------------------------
+
+const KNOWN_FEMALE_IDS = new Set([
+  'simone-de-beauvoir', 'hannah-arendt', 'simone-weil', 'marie-curie',
+  'ada-lovelace', 'rosalind-franklin', 'rachel-carson', 'jane-austen',
+  'virginia-woolf', 'toni-morrison', 'zora-neale-hurston', 'octavia-butler',
+  'harriet-tubman', 'eleanor-roosevelt', 'ida-b-wells', 'sojourner-truth',
+  'angela-davis', 'joan-rivers', 'moms-mabley', 'nora-ephron',
+  'phyllis-diller', 'nina-simone', 'billie-holiday', 'aretha-franklin',
+  'patti-smith', 'grace-hopper', 'bell-hooks', 'roxane-gay', 'brene-brown',
+  'susan-sontag', 'frida-kahlo', 'georgia-okeeffe', 'maya-angelou',
+  'mary-wollstonecraft', 'cleopatra', 'marie-antoinette', 'hypatia',
+  'harriet-beecher-stowe', 'sylvia-plath', 'mary-shelley', 'emily-dickinson',
+  'ella-fitzgerald', 'wu-zetian', 'amelia-earhart',
+]);
 
 // ---------------------------------------------------------------------------
 // Archetype detection
@@ -102,62 +126,13 @@ function detectArchetype(
   const vp = voicePersonality.toLowerCase();
   const cats = categories.map((c) => c.toLowerCase());
 
-  if (
-    vp.includes('comic') ||
-    vp.includes('funny') ||
-    vp.includes('wit') ||
-    cats.includes('comedy')
-  ) {
-    return 'comedian';
-  }
-  if (
-    vp.includes('orator') ||
-    vp.includes('passionate') ||
-    vp.includes('rousing') ||
-    vp.includes('preacher') ||
-    cats.includes('civil rights')
-  ) {
-    return 'passionate-orator';
-  }
-  if (
-    vp.includes('poet') ||
-    vp.includes('lyric') ||
-    vp.includes('melodic') ||
-    cats.includes('literature')
-  ) {
-    return 'poet-writer';
-  }
-  if (
-    vp.includes('methodical') ||
-    vp.includes('precise') ||
-    vp.includes('analytical') ||
-    cats.includes('science')
-  ) {
-    return 'scientist';
-  }
-  if (
-    vp.includes('deliberate') ||
-    vp.includes('slow') ||
-    vp.includes('measured') ||
-    cats.includes('philosophy')
-  ) {
-    return 'deliberate-thinker';
-  }
-  if (
-    vp.includes('mystic') ||
-    vp.includes('spiritual') ||
-    vp.includes('contemplative') ||
-    cats.includes('religion & mysticism')
-  ) {
-    return 'mystic';
-  }
-  if (
-    vp.includes('storytell') ||
-    vp.includes('narrative') ||
-    vp.includes('anecdot')
-  ) {
-    return 'storyteller';
-  }
+  if (vp.includes('comic') || vp.includes('funny') || cats.includes('comedy')) return 'comedian';
+  if (vp.includes('orator') || vp.includes('passionate') || vp.includes('rousing') || vp.includes('preacher') || cats.includes('civil rights')) return 'passionate-orator';
+  if (vp.includes('poet') || vp.includes('lyric') || vp.includes('melodic') || cats.includes('literature')) return 'poet-writer';
+  if (vp.includes('methodical') || vp.includes('precise') || vp.includes('analytical') || cats.includes('science')) return 'scientist';
+  if (vp.includes('deliberate') || vp.includes('slow') || vp.includes('measured') || cats.includes('philosophy')) return 'deliberate-thinker';
+  if (vp.includes('mystic') || vp.includes('spiritual') || cats.includes('religion & mysticism')) return 'mystic';
+  if (vp.includes('storytell') || vp.includes('narrative') || vp.includes('anecdot')) return 'storyteller';
 
   return 'default';
 }
@@ -173,10 +148,28 @@ export function getVoiceProfile(
 ): VoiceProfile {
   const archetype = detectArchetype(voicePersonality, categories);
   const settings = ARCHETYPE_SETTINGS[archetype];
+  const isFemale = KNOWN_FEMALE_IDS.has(figureId);
+
+  let voiceId: string;
+  if (isFemale) {
+    if (archetype === 'passionate-orator' || archetype === 'comedian') {
+      voiceId = pickFromArray(VOICES_FEMALE_STRONG, figureId);
+    } else {
+      voiceId = pickFromArray(VOICES_FEMALE_WARM, figureId);
+    }
+  } else {
+    if (archetype === 'comedian' || archetype === 'passionate-orator') {
+      voiceId = pickFromArray(VOICES_ENERGETIC_MALE, figureId);
+    } else if (archetype === 'deliberate-thinker' || archetype === 'mystic') {
+      voiceId = pickFromArray(VOICES_DEEP_MALE, figureId);
+    } else {
+      voiceId = pickFromArray(VOICES_WARM_MALE, figureId);
+    }
+  }
 
   return {
     figureId,
-    elevenLabsVoiceId: getNextVoiceId(voicePersonality),
+    elevenLabsVoiceId: voiceId,
     voiceSettings: {
       stability: settings.stability,
       similarity_boost: settings.similarity_boost,
@@ -185,6 +178,10 @@ export function getVoiceProfile(
     },
     pitchAdjustment: voicePersonality,
   };
+}
+
+export function getNarratorVoiceId(): string {
+  return VOICES_NARRATOR[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -198,22 +195,16 @@ export function getWebSpeechVoice(
   const nat = nationality.toLowerCase();
   const vp = voicePersonality.toLowerCase();
 
-  // Language mapping
   let lang = 'en-US';
   if (nat.includes('british') || nat.includes('english')) lang = 'en-GB';
   else if (nat.includes('french')) lang = 'fr-FR';
-  else if (nat.includes('german') || nat.includes('austrian') || nat.includes('prussian'))
-    lang = 'de-DE';
+  else if (nat.includes('german') || nat.includes('austrian') || nat.includes('prussian')) lang = 'de-DE';
   else if (nat.includes('italian')) lang = 'it-IT';
   else if (nat.includes('spanish')) lang = 'es-ES';
   else if (nat.includes('chinese')) lang = 'zh-CN';
-  else if (nat.includes('japanese')) lang = 'ja-JP';
   else if (nat.includes('russian')) lang = 'ru-RU';
   else if (nat.includes('indian')) lang = 'en-IN';
-  else if (nat.includes('south african')) lang = 'en-ZA';
-  else if (nat.includes('australian')) lang = 'en-AU';
 
-  // Pitch and rate from personality
   let pitch = 1.0;
   let rate = 1.0;
 
@@ -221,7 +212,6 @@ export function getWebSpeechVoice(
   if (vp.includes('high') || vp.includes('bright') || vp.includes('energetic')) pitch = 1.2;
   if (vp.includes('slow') || vp.includes('deliberate') || vp.includes('measured')) rate = 0.85;
   if (vp.includes('rapid') || vp.includes('energetic') || vp.includes('fast')) rate = 1.15;
-  if (vp.includes('passionate') || vp.includes('intense')) rate = 1.05;
 
   return { lang, pitch, rate };
 }
