@@ -178,6 +178,9 @@ export default function DinnerPartyPage() {
           maxGuests={MAX_GUESTS + (userParticipating ? 1 : 0)}
         />
 
+        {/* Add a new character */}
+        <CustomFigureCreator onFigureCreated={handleCustomFigureCreated} />
+
         {/* Topic — always visible, inline */}
         <div className="bg-white border border-dinner-border rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
@@ -306,9 +309,6 @@ export default function DinnerPartyPage() {
             />
           ))}
         </div>
-
-        {/* Custom figure creator */}
-        <CustomFigureCreator onFigureCreated={handleCustomFigureCreated} />
 
         {filteredFigures.length === 0 && (
           <div className="text-center py-12">
