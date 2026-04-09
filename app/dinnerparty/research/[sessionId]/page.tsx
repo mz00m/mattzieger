@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ResearchProgress from '@/components/ResearchProgress';
+import { getFromClientCache, setInClientCache } from '@/lib/researchCache';
 
 interface SessionData {
   id: string;
@@ -39,6 +40,19 @@ export default function ResearchPage() {
     figureId: string,
     depth: 'quick' | 'deep'
   ): Promise<{ figureId: string; result: unknown; error?: string }> => {
+    // Check client-side cache first
+    const cached = getFromClientCache(figureId, depth);
+    if (cached) {
+      setStatuses((prev) =>
+        prev.map((s) =>
+          s.figureId === figureId
+            ? { ...s, complete: true, progress: 100, stage: 'complete', result: cached }
+            : s
+        )
+      );
+      return { figureId, result: cached };
+    }
+
     // Update status to in-progress
     setStatuses((prev) =>
       prev.map((s) =>
@@ -70,6 +84,11 @@ export default function ResearchPage() {
       }
 
       const data = await response.json();
+
+      // Save to client cache
+      if (data.result) {
+        setInClientCache(figureId, depth, data.result);
+      }
 
       // Mark complete
       setStatuses((prev) =>
