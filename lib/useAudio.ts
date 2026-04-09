@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 
 interface UseAudioOptions {
   onEnd?: () => void;
@@ -21,6 +21,26 @@ export function useAudio({ onEnd, playbackRate = 1, volume = 1 }: UseAudioOption
   const [isSpeaking, setIsSpeaking] = useState(false);
   const onEndRef = useRef(onEnd);
   onEndRef.current = onEnd;
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
+  const playbackRateRef = useRef(playbackRate);
+  playbackRateRef.current = playbackRate;
+
+  // Live-update volume/rate on the currently playing audio element
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = Math.max(0, Math.min(1, volume));
+    }
+    if (utteranceRef.current) {
+      // Web Speech doesn't support live volume changes, but we store for next utterance
+    }
+  }, [volume]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   const stop = useCallback(() => {
     // Stop ElevenLabs audio
@@ -59,8 +79,8 @@ export function useAudio({ onEnd, playbackRate = 1, volume = 1 }: UseAudioOption
 
         return new Promise((resolve) => {
           const audio = new Audio(url);
-          audio.playbackRate = playbackRate;
-          audio.volume = Math.max(0, Math.min(1, volume));
+          audio.playbackRate = playbackRateRef.current;
+          audio.volume = Math.max(0, Math.min(1, volumeRef.current));
           audioRef.current = audio;
 
           audio.onended = () => {
@@ -88,7 +108,7 @@ export function useAudio({ onEnd, playbackRate = 1, volume = 1 }: UseAudioOption
         return false;
       }
     },
-    [playbackRate, volume]
+    [] // uses refs for playbackRate/volume
   );
 
   const speakWithWebSpeech = useCallback(
@@ -103,8 +123,8 @@ export function useAudio({ onEnd, playbackRate = 1, volume = 1 }: UseAudioOption
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = options?.lang || 'en-US';
       utterance.pitch = options?.pitch || 1;
-      utterance.rate = (options?.rate || 1) * playbackRate;
-      utterance.volume = Math.max(0, Math.min(1, volume));
+      utterance.rate = (options?.rate || 1) * playbackRateRef.current;
+      utterance.volume = Math.max(0, Math.min(1, volumeRef.current));
 
       // Pick a voice: prefer different voices for different characters
       const voices = window.speechSynthesis.getVoices();
@@ -135,7 +155,7 @@ export function useAudio({ onEnd, playbackRate = 1, volume = 1 }: UseAudioOption
       window.speechSynthesis.speak(utterance);
       return true;
     },
-    [playbackRate, volume]
+    [] // uses refs for playbackRate/volume
   );
 
   const speak = useCallback(
@@ -164,13 +184,13 @@ export function useAudio({ onEnd, playbackRate = 1, volume = 1 }: UseAudioOption
       if (!webSuccess) {
         setIsSpeaking(false);
         const wordCount = text.split(/\s+/).length;
-        const delay = Math.max((wordCount / (150 * playbackRate)) * 60000, 1500);
+        const delay = Math.max((wordCount / (150 * playbackRateRef.current)) * 60000, 1500);
         setTimeout(() => {
           onEndRef.current?.();
         }, delay);
       }
     },
-    [stop, speakWithElevenLabs, speakWithWebSpeech, playbackRate]
+    [stop, speakWithElevenLabs, speakWithWebSpeech]
   );
 
   return { speak, stop, isSpeaking };

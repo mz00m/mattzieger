@@ -356,22 +356,21 @@ export function getWebSpeechVoice(
   else if (nat.includes('russian')) lang = 'ru-RU';
   else if (nat.includes('indian')) lang = 'en-IN';
 
-  // Base pitch/rate from personality
+  // Base pitch/rate from personality — keep variations subtle
   let pitch = 1.0;
   let rate = 1.0;
 
-  if (vp.includes('deep') || vp.includes('gravelly') || vp.includes('bass')) pitch = 0.7;
-  if (vp.includes('high') || vp.includes('bright') || vp.includes('energetic')) pitch = 1.3;
-  if (vp.includes('slow') || vp.includes('deliberate') || vp.includes('measured')) rate = 0.8;
-  if (vp.includes('rapid') || vp.includes('energetic') || vp.includes('fast')) rate = 1.2;
+  if (vp.includes('deep') || vp.includes('gravelly') || vp.includes('bass')) pitch = 0.9;
+  if (vp.includes('high') || vp.includes('bright')) pitch = 1.1;
+  if (vp.includes('slow') || vp.includes('deliberate') || vp.includes('measured')) rate = 0.95;
+  if (vp.includes('rapid') || vp.includes('fast')) rate = 1.1;
 
-  // Per-figure hash-based variation so different figures get different pitch/rate
-  // even when they share the same nationality/personality keywords
+  // Per-figure hash-based variation — subtle so voices differ without sounding broken
   const hash = figureId ? hashCode(figureId) : 0;
-  const pitchOffset = ((hash % 7) - 3) * 0.08;   // -0.24 to +0.24
-  const rateOffset = (((hash >> 4) % 5) - 2) * 0.06; // -0.12 to +0.12
-  pitch = Math.max(0.5, Math.min(1.8, pitch + pitchOffset));
-  rate = Math.max(0.7, Math.min(1.4, rate + rateOffset));
+  const pitchOffset = ((hash % 5) - 2) * 0.04;   // -0.08 to +0.08
+  const rateOffset = (((hash >> 4) % 5) - 2) * 0.03; // -0.06 to +0.06
+  pitch = Math.max(0.85, Math.min(1.15, pitch + pitchOffset));
+  rate = Math.max(0.9, Math.min(1.15, rate + rateOffset));
 
   // voiceIndex: used to pick different browser voices from the available list
   const voiceIndex = hash % 20;
