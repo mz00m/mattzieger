@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ConversationExchange } from '@/lib/conversationOrchestrator';
 import type { CharacterKnowledgeBase } from '@/lib/researchAgent';
 import { useAudio } from '@/lib/useAudio';
-import { getVoiceProfile, getNarratorVoiceId, getWebSpeechVoice, getVoiceSettingsForPersonality } from '@/lib/voiceProfiles';
+import { getUniqueVoiceProfile, getNarratorVoiceId, getWebSpeechVoice, getVoiceSettingsForPersonality } from '@/lib/voiceProfiles';
 import { FIGURES } from '@/lib/figures';
 
 interface ConversationPlayerProps {
@@ -57,6 +57,10 @@ export default function ConversationPlayer({
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastSpokenIndex = useRef(-1);
 
+  // Track which voice each figure is using — ensures no two figures share a voice
+  const figureVoiceMap = useRef(new Map<string, { voiceId: string; settings: { stability: number; similarity_boost: number; style: number; use_speaker_boost: boolean } }>());
+  const usedVoiceIds = useRef(new Set<string>());
+
   const guestMap = new Map(guests.map((g, i) => [g.figureId, { ...g, colorIndex: i }]));
 
   // Audio system
@@ -106,51 +110,60 @@ export default function ConversationPlayer({
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
 
-      // Check for dynamically discovered voice first (from ElevenLabs library)
-      const discovered = voiceAssignments[exchange.speaker] || voiceAssignments[speakerId];
+      const figureKey = speakerId;
 
-      const figure = FIGURES.find((f) => f.id === exchange.speaker)
-        || FIGURES.find((f) => f.id === speakerId)
-        || FIGURES.find((f) => f.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === speakerId);
-
-      if (discovered) {
-        // Use the discovered voice from the user's ElevenLabs library
-        // with personality-tuned settings
-        const voiceSettings = figure
-          ? getVoiceSettingsForPersonality(figure.voicePersonality, figure.category)
-          : { stability: 0.4, similarity_boost: 0.65, style: 0.5, use_speaker_boost: true };
+      // Check if we already assigned a voice to this figure in this session
+      const cached = figureVoiceMap.current.get(figureKey);
+      if (cached) {
+        const figure = FIGURES.find((f) => f.id === exchange.speaker)
+          || FIGURES.find((f) => f.id === speakerId);
         const webVoice = figure
           ? getWebSpeechVoice(figure.nationality, figure.voicePersonality, figure.id)
           : { lang: 'en-US', pitch: 1, rate: 1, voiceIndex: 0 };
-        speak(
-          exchange.text,
-          discovered.voiceId,
-          voiceSettings,
-          webVoice
-        );
-      } else if (figure) {
-        // Fall back to hardcoded voice profile
-        const profile = getVoiceProfile(figure.id, figure.voicePersonality, figure.category, figure.nationality);
-        const webVoice = getWebSpeechVoice(figure.nationality, figure.voicePersonality, figure.id);
-        speak(
-          exchange.text,
-          profile.elevenLabsVoiceId,
-          profile.voiceSettings,
-          webVoice
-        );
+        speak(exchange.text, cached.voiceId, cached.settings, webVoice);
       } else {
-        const guest = guestMap.get(exchange.speaker) || guestMap.get(speakerId);
-        if (guest) {
-          const profile = getVoiceProfile(
-            guest.figureId,
-            guest.speechPatterns || '',
-            [],
+        // First time this figure speaks — assign them a unique voice
+        const discovered = voiceAssignments[exchange.speaker] || voiceAssignments[speakerId];
+        const figure = FIGURES.find((f) => f.id === exchange.speaker)
+          || FIGURES.find((f) => f.id === speakerId)
+          || FIGURES.find((f) => f.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === speakerId);
+
+        let voiceId: string;
+        let voiceSettings: { stability: number; similarity_boost: number; style: number; use_speaker_boost: boolean };
+
+        if (discovered) {
+          // Use the discovered voice from the user's ElevenLabs library
+          voiceId = discovered.voiceId;
+          voiceSettings = figure
+            ? getVoiceSettingsForPersonality(figure.voicePersonality, figure.category)
+            : { stability: 0.4, similarity_boost: 0.65, style: 0.5, use_speaker_boost: true };
+        } else if (figure) {
+          // Fall back to hardcoded — but ensure uniqueness across guests
+          const profile = getUniqueVoiceProfile(
+            figure.id, figure.voicePersonality, figure.category,
+            figure.nationality, usedVoiceIds.current
           );
-          speak(exchange.text, profile.elevenLabsVoiceId, profile.voiceSettings);
+          voiceId = profile.elevenLabsVoiceId;
+          voiceSettings = profile.voiceSettings;
         } else {
-          const profile = getVoiceProfile(speakerId, '', []);
-          speak(exchange.text, profile.elevenLabsVoiceId, profile.voiceSettings);
+          const guest = guestMap.get(exchange.speaker) || guestMap.get(speakerId);
+          const profile = getUniqueVoiceProfile(
+            guest?.figureId || speakerId,
+            guest?.speechPatterns || '', [],
+            undefined, usedVoiceIds.current
+          );
+          voiceId = profile.elevenLabsVoiceId;
+          voiceSettings = profile.voiceSettings;
         }
+
+        // Cache the assignment so this figure always uses the same voice
+        figureVoiceMap.current.set(figureKey, { voiceId, settings: voiceSettings });
+        usedVoiceIds.current.add(voiceId);
+
+        const webVoice = figure
+          ? getWebSpeechVoice(figure.nationality, figure.voicePersonality, figure.id)
+          : { lang: 'en-US', pitch: 1, rate: 1, voiceIndex: 0 };
+        speak(exchange.text, voiceId, voiceSettings, webVoice);
       }
     } else {
       // User speech — skip audio, just advance after a pause
