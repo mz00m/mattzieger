@@ -12,13 +12,14 @@ interface ConversationPlayerProps {
   guests: CharacterKnowledgeBase[];
   isPlaying: boolean;
   onTogglePlay: () => void;
+  audioEnabled: boolean;
+  onToggleAudio: () => void;
   playbackSpeed: number;
   onSpeedChange: (speed: number) => void;
   volume: number;
   onVolumeChange: (volume: number) => void;
   currentExchangeIndex: number;
   onExchangeChange: (index: number) => void;
-  listeningMode: boolean;
 }
 
 function getGuestColor(index: number): string {
@@ -42,13 +43,14 @@ export default function ConversationPlayer({
   guests,
   isPlaying,
   onTogglePlay,
+  audioEnabled,
+  onToggleAudio,
   playbackSpeed,
   onSpeedChange,
   volume,
   onVolumeChange,
   currentExchangeIndex,
   onExchangeChange,
-  listeningMode,
 }: ConversationPlayerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastSpokenIndex = useRef(-1);
@@ -58,9 +60,7 @@ export default function ConversationPlayer({
   // Audio system
   const { speak, stop, isSpeaking } = useAudio({
     onEnd: () => {
-      // Auto-advance to next exchange when audio finishes
-      if (isPlaying && currentExchangeIndex < exchanges.length - 1) {
-        // Small pause between speakers
+      if (isPlaying && audioEnabled && currentExchangeIndex < exchanges.length - 1) {
         setTimeout(() => {
           onExchangeChange(currentExchangeIndex + 1);
         }, 400);
@@ -77,9 +77,9 @@ export default function ConversationPlayer({
     }
   }, [exchanges.length, currentExchangeIndex]);
 
-  // Play audio when exchange changes and isPlaying
+  // Play audio when exchange changes and audio is enabled
   useEffect(() => {
-    if (!isPlaying) {
+    if (!isPlaying || !audioEnabled) {
       stop();
       return;
     }
@@ -99,13 +99,11 @@ export default function ConversationPlayer({
         { lang: 'en-US', pitch: 1, rate: 0.9 }
       );
     } else if (exchange.speaker && exchange.speaker !== 'user') {
-      // Normalize speaker ID to kebab-case (Claude sometimes returns different formats)
       const speakerId = exchange.speaker
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
 
-      // Find the figure — try exact match first, then normalized
       const figure = FIGURES.find((f) => f.id === exchange.speaker)
         || FIGURES.find((f) => f.id === speakerId)
         || FIGURES.find((f) => f.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === speakerId);
@@ -120,8 +118,6 @@ export default function ConversationPlayer({
           webVoice
         );
       } else {
-        // Use the voice profile directly even without a FIGURES match —
-        // this handles custom figures by using archetype detection
         const guest = guestMap.get(exchange.speaker) || guestMap.get(speakerId);
         if (guest) {
           const profile = getVoiceProfile(
@@ -131,13 +127,12 @@ export default function ConversationPlayer({
           );
           speak(exchange.text, profile.elevenLabsVoiceId, profile.voiceSettings);
         } else {
-          // True fallback — use default voice with archetype settings
           const profile = getVoiceProfile(speakerId, '', []);
           speak(exchange.text, profile.elevenLabsVoiceId, profile.voiceSettings);
         }
       }
     } else {
-      // User speech or unknown — skip audio, just advance after a pause
+      // User speech — skip audio, just advance after a pause
       const wordCount = exchange.text.split(/\s+/).length;
       const delay = Math.max((wordCount / (150 * playbackSpeed)) * 60000, 1500);
       setTimeout(() => {
@@ -147,14 +142,14 @@ export default function ConversationPlayer({
       }, delay);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, currentExchangeIndex, exchanges.length]);
+  }, [isPlaying, audioEnabled, currentExchangeIndex, exchanges.length]);
 
   // Reset spoken index when stopping
   useEffect(() => {
-    if (!isPlaying) {
+    if (!isPlaying || !audioEnabled) {
       lastSpokenIndex.current = -1;
     }
-  }, [isPlaying]);
+  }, [isPlaying, audioEnabled]);
 
   const getGuestName = useCallback(
     (figureId: string): string => {
@@ -165,111 +160,6 @@ export default function ConversationPlayer({
 
   const speeds = [0.75, 1, 1.25, 1.5];
 
-  if (listeningMode) {
-    const currentExchange = exchanges[currentExchangeIndex];
-    const speakerName = currentExchange?.speaker ?? '';
-    const guest = speakerName ? guestMap.get(speakerName) : null;
-
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] relative">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-64 h-64 rounded-full bg-dinner-candle/5 animate-pulse-gentle" />
-        </div>
-
-        <div className="relative z-10 text-center space-y-6">
-          {currentExchange?.type === 'narration' ? (
-            <p className="text-dinner-text-secondary italic font-body text-lg max-w-md">
-              {currentExchange.text}
-            </p>
-          ) : (
-            <>
-              <div
-                className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-2xl font-serif
-                  bg-dinner-card border-2 ${guest ? getGuestBorderColor(guest.colorIndex) : 'border-dinner-border'}
-                  ${isSpeaking ? 'animate-pulse-gentle' : ''}`}
-              >
-                {speakerName
-                  ? getGuestName(speakerName).split(' ').map((w) => w[0]).join('').slice(0, 2)
-                  : '?'}
-              </div>
-              <h3 className={`font-serif text-2xl ${guest ? getGuestColor(guest.colorIndex) : 'text-dinner-cream'}`}>
-                {speakerName ? getGuestName(speakerName) : ''}
-              </h3>
-              <p className="text-dinner-cream font-body text-lg max-w-lg leading-relaxed">
-                {currentExchange?.text}
-              </p>
-            </>
-          )}
-        </div>
-
-        <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-dinner-border shadow-[0_-4px_20px_rgba(0,0,0,0.05)] p-4">
-          <div className="max-w-lg mx-auto space-y-2">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => onExchangeChange(Math.max(0, currentExchangeIndex - 1))}
-                className="text-dinner-text-secondary hover:text-dinner-cream p-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <button
-                onClick={onTogglePlay}
-                className="w-12 h-12 rounded-full bg-dinner-gold/20 border border-dinner-gold/40 flex items-center justify-center text-dinner-gold hover:bg-dinner-gold/30 transition-colors"
-              >
-                {isPlaying ? (
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                )}
-              </button>
-              <button
-                onClick={() => onExchangeChange(Math.min(exchanges.length - 1, currentExchangeIndex + 1))}
-                className="text-dinner-text-secondary hover:text-dinner-cream p-2"
-              >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-            </div>
-            {/* Volume & speed row */}
-            <div className="flex items-center justify-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5 text-dinner-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                </svg>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={volume}
-                  onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-                  className="w-20 h-1 accent-dinner-gold appearance-none bg-dinner-border/50 rounded-full cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-dinner-gold"
-                />
-              </div>
-              <button
-                onClick={() => {
-                  const currentIdx = speeds.indexOf(playbackSpeed);
-                  const nextIdx = (currentIdx + 1) % speeds.length;
-                  onSpeedChange(speeds[nextIdx]);
-                }}
-                className="text-dinner-text-secondary hover:text-dinner-gold text-xs font-mono px-2 py-1 rounded border border-dinner-border hover:border-dinner-gold/30 transition-colors"
-              >
-                {playbackSpeed}x
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Reading mode
   return (
     <div className="flex flex-col h-full">
       <div
@@ -337,29 +227,35 @@ export default function ConversationPlayer({
         })}
       </div>
 
+      {/* Bottom bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-dinner-border shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-4">
-          <button
-            onClick={onTogglePlay}
-            className="w-10 h-10 rounded-full bg-dinner-gold/20 border border-dinner-gold/40 flex items-center justify-center text-dinner-gold hover:bg-dinner-gold/30 transition-colors shrink-0"
-          >
-            {isPlaying ? (
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            )}
-          </button>
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
+          {/* Play/pause (only when audio enabled) */}
+          {audioEnabled && (
+            <button
+              onClick={onTogglePlay}
+              className="w-10 h-10 rounded-full bg-dinner-gold/20 border border-dinner-gold/40 flex items-center justify-center text-dinner-gold hover:bg-dinner-gold/30 transition-colors shrink-0"
+            >
+              {isPlaying ? (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+          )}
+
+          {/* Progress */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between text-xs mb-1">
               <span className="text-dinner-text-secondary font-mono">
                 {currentExchangeIndex + 1} / {exchanges.length}
               </span>
               <span className="text-dinner-text-dim font-mono truncate ml-2">
-                {isSpeaking ? '🔊 ' : ''}
+                {isSpeaking && audioEnabled ? '🔊 ' : ''}
                 {exchanges[currentExchangeIndex]?.speaker === 'user'
                   ? 'You'
                   : exchanges[currentExchangeIndex]?.speaker
@@ -374,11 +270,31 @@ export default function ConversationPlayer({
               />
             </div>
           </div>
-          {/* Volume */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <svg className="w-3.5 h-3.5 text-dinner-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-            </svg>
+
+          {/* Audio toggle */}
+          <button
+            onClick={onToggleAudio}
+            className={`p-2 rounded-lg border transition-all shrink-0 ${
+              audioEnabled
+                ? 'border-dinner-gold/40 text-dinner-gold bg-dinner-gold/10'
+                : 'border-dinner-border text-dinner-text-dim'
+            }`}
+            title={audioEnabled ? 'Mute audio' : 'Enable audio'}
+          >
+            {audioEnabled ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+            )}
+          </button>
+
+          {/* Volume (only when audio enabled) */}
+          {audioEnabled && (
             <input
               type="range"
               min={0}
@@ -386,9 +302,10 @@ export default function ConversationPlayer({
               step={0.05}
               value={volume}
               onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-              className="w-16 h-1 accent-dinner-gold appearance-none bg-dinner-border/50 rounded-full cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-dinner-gold"
+              className="w-14 h-1 accent-dinner-gold appearance-none bg-dinner-border/50 rounded-full cursor-pointer shrink-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-dinner-gold"
             />
-          </div>
+          )}
+
           {/* Speed */}
           <button
             onClick={() => {

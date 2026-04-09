@@ -22,15 +22,13 @@ export default function DinnerPage() {
 
   // Player state
   const [isPlaying, setIsPlaying] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [volume, setVolume] = useState(0.8);
   const [currentExchangeIndex, setCurrentExchangeIndex] = useState(0);
-  const [listeningMode, setListeningMode] = useState(false);
 
-  // User interaction
-  const [awaitingUserInput, setAwaitingUserInput] = useState(false);
-  const [userQuestionPrompt, setUserQuestionPrompt] = useState('');
-  const [userQuestionSpeaker, setUserQuestionSpeaker] = useState('');
+  // User interaction — always available
+  const [showUserInput, setShowUserInput] = useState(false);
 
   // Topic change
   const [showTopicChanger, setShowTopicChanger] = useState(false);
@@ -56,7 +54,7 @@ export default function DinnerPage() {
       topic: data.topic,
       topicCategory: data.topicCategory || 'open',
       guests: researchResults,
-      userParticipating: data.userParticipating || false,
+      userParticipating: true,
       userName: data.userName,
       userBackground: data.userBackground,
       exchanges: [],
@@ -77,7 +75,6 @@ export default function DinnerPage() {
       if (!session || isGenerating) return;
 
       setIsGenerating(true);
-      setAwaitingUserInput(false);
 
       try {
         const currentSession: DinnerSession = {
@@ -107,24 +104,8 @@ export default function DinnerPage() {
           prev ? { ...prev, roundNumber: prev.roundNumber + 1 } : null
         );
 
-        // Check if any exchange is a user-question
-        const userQuestion = newExchanges.find(
-          (e) => e.type === 'user-question'
-        );
-        if (userQuestion && session.userParticipating) {
-          setAwaitingUserInput(true);
-          setUserQuestionPrompt(userQuestion.text);
-          setUserQuestionSpeaker(
-            userQuestion.speaker
-              ? userQuestion.speaker
-                  .replace(/-/g, ' ')
-                  .replace(/\b\w/g, (l) => l.toUpperCase())
-              : 'A guest'
-          );
-        }
-
-        // Auto-play new exchanges
-        if (!isPlaying) {
+        // Auto-play new exchanges if audio is on
+        if (!isPlaying && audioEnabled) {
           setCurrentExchangeIndex(exchanges.length);
           setIsPlaying(true);
         }
@@ -136,7 +117,7 @@ export default function DinnerPage() {
         setIsGenerating(false);
       }
     },
-    [session, exchanges, isGenerating, isPlaying]
+    [session, exchanges, isGenerating, isPlaying, audioEnabled]
   );
 
   // Start conversation on first load
@@ -147,9 +128,8 @@ export default function DinnerPage() {
     }
   }, [session, exchanges.length, generateRound]);
 
-  // Handle user speech input
+  // Handle user speech/text input
   const handleUserSpoke = (transcript: string) => {
-    // Add user's exchange to the conversation
     const userExchange: ConversationExchange = {
       id: crypto.randomUUID(),
       type: 'user-turn',
@@ -157,6 +137,7 @@ export default function DinnerPage() {
       text: transcript,
     };
     setExchanges((prev) => [...prev, userExchange]);
+    setShowUserInput(false);
     generateRound('user-spoke', transcript);
   };
 
@@ -246,27 +227,6 @@ export default function DinnerPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {/* Listening mode toggle */}
-            <button
-              onClick={() => setListeningMode(!listeningMode)}
-              className={`p-2 rounded-lg border text-xs transition-all ${
-                listeningMode
-                  ? 'bg-dinner-wine/20 border-dinner-wine text-dinner-gold-light'
-                  : 'border-dinner-border text-dinner-text-secondary hover:border-dinner-wine/40'
-              }`}
-              title={listeningMode ? 'Reading mode' : 'Listening mode'}
-            >
-              {listeningMode ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                </svg>
-              )}
-            </button>
-
             {/* More options */}
             <div className="relative group">
               <button className="p-2 rounded-lg border border-dinner-border text-dinner-text-secondary hover:border-dinner-gold/30 transition-colors">
@@ -338,42 +298,55 @@ export default function DinnerPage() {
             guests={session?.guests || []}
             isPlaying={isPlaying}
             onTogglePlay={() => setIsPlaying(!isPlaying)}
+            audioEnabled={audioEnabled}
+            onToggleAudio={() => {
+              if (audioEnabled) {
+                setIsPlaying(false);
+              }
+              setAudioEnabled(!audioEnabled);
+            }}
             playbackSpeed={playbackSpeed}
             onSpeedChange={setPlaybackSpeed}
             volume={volume}
             onVolumeChange={setVolume}
             currentExchangeIndex={currentExchangeIndex}
             onExchangeChange={setCurrentExchangeIndex}
-            listeningMode={listeningMode}
           />
         )}
 
-        {/* User input area */}
-        {awaitingUserInput && session?.userParticipating && (
+        {/* User input — always available via "Join conversation" button */}
+        {showUserInput && (
           <div className="px-4 mt-4 mb-24">
             <UserMicInput
               onSubmit={handleUserSpoke}
-              prompt={userQuestionPrompt}
-              speakerName={userQuestionSpeaker}
             />
           </div>
         )}
 
-        {/* Continue button */}
-        {!isGenerating &&
-          !awaitingUserInput &&
-          exchanges.length > 0 &&
-          currentExchangeIndex >= exchanges.length - 1 && (
-            <div className="px-4 mt-4 mb-24 text-center">
+        {/* Action buttons */}
+        {!isGenerating && exchanges.length > 0 && !showUserInput && (
+          <div className="px-4 mt-4 mb-24 flex items-center justify-center gap-3">
+            <button
+              onClick={() => setShowUserInput(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-dinner-wine/15 border border-dinner-wine/40 text-dinner-wine
+                rounded-lg font-serif text-sm hover:bg-dinner-wine/25 transition-all"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+              Join the conversation
+            </button>
+            {currentExchangeIndex >= exchanges.length - 1 && (
               <button
                 onClick={() => generateRound('continue')}
-                className="px-6 py-2.5 bg-dinner-terracotta text-white
+                className="px-5 py-2.5 bg-dinner-terracotta text-white
                   rounded-lg font-serif text-sm hover:bg-dinner-terracotta/90 transition-all shadow-sm"
               >
-                Continue the conversation
+                Continue
               </button>
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
         {/* Generating indicator */}
         {isGenerating && exchanges.length > 0 && (
