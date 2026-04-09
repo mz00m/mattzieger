@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FIGURES } from '@/lib/figures';
 import type { HistoricalFigure, FigureCategory } from '@/lib/figures';
@@ -16,6 +16,7 @@ const MAX_GUESTS = 5;
 
 export default function DinnerPartyPage() {
   const router = useRouter();
+  const guestSectionRef = useRef<HTMLDivElement>(null);
 
   // Guest selection
   const [selectedGuests, setSelectedGuests] = useState<HistoricalFigure[]>([]);
@@ -40,10 +41,12 @@ export default function DinnerPartyPage() {
   // UI state
   const [showTopicPanel, setShowTopicPanel] = useState(false);
 
+  // All available figures (for DinnerTable search)
+  const allFigures = useMemo(() => [...FIGURES, ...customFigures], [customFigures]);
+
   // Handle custom figure creation
   const handleCustomFigureCreated = useCallback((figure: HistoricalFigure) => {
     setCustomFigures((prev) => [...prev, figure]);
-    // Auto-select the custom figure
     setSelectedGuests((prev) => {
       if (prev.length >= MAX_GUESTS) return prev;
       return [...prev, figure];
@@ -52,7 +55,7 @@ export default function DinnerPartyPage() {
 
   // Filter figures
   const filteredFigures = useMemo(() => {
-    let figures = [...FIGURES, ...customFigures];
+    let figures = allFigures;
 
     if (categoryFilter !== 'All') {
       figures = figures.filter((f) => f.category.includes(categoryFilter));
@@ -71,7 +74,7 @@ export default function DinnerPartyPage() {
     }
 
     return figures;
-  }, [categoryFilter, searchQuery]);
+  }, [allFigures, categoryFilter, searchQuery]);
 
   const toggleGuest = useCallback(
     (figure: HistoricalFigure) => {
@@ -87,14 +90,24 @@ export default function DinnerPartyPage() {
     []
   );
 
+  const addGuest = useCallback((figure: HistoricalFigure) => {
+    setSelectedGuests((prev) => {
+      if (prev.length >= MAX_GUESTS) return prev;
+      if (prev.some((g) => g.id === figure.id)) return prev;
+      return [...prev, figure];
+    });
+  }, []);
+
   const removeGuest = useCallback((figureId: string) => {
     setSelectedGuests((prev) => prev.filter((g) => g.id !== figureId));
   }, []);
 
   const canBegin = selectedGuests.length >= 2 && selectedTopic.trim().length > 0;
 
+  // Step progress
+  const currentStep = selectedGuests.length >= 2 ? (selectedTopic ? 3 : 2) : 1;
+
   const handleBeginEvening = () => {
-    // Create session and navigate to research phase
     const sessionData = {
       id: crypto.randomUUID(),
       figureIds: selectedGuests.map((g) => g.id),
@@ -106,7 +119,6 @@ export default function DinnerPartyPage() {
       userBackground: userParticipating ? userBackground : undefined,
     };
 
-    // Store session in sessionStorage for the research page to pick up
     sessionStorage.setItem(
       `dinner-session-${sessionData.id}`,
       JSON.stringify(sessionData)
@@ -140,34 +152,76 @@ export default function DinnerPartyPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {/* Step guide */}
+        <div className="flex items-center gap-3 sm:gap-4">
+          <StepIndicator step={1} label="Choose guests" active={currentStep === 1} done={currentStep > 1} />
+          <div className={`flex-1 h-px max-w-12 ${currentStep > 1 ? 'bg-dinner-terracotta/40' : 'bg-dinner-border'}`} />
+          <StepIndicator step={2} label="Pick a topic" active={currentStep === 2} done={currentStep > 2} />
+          <div className={`flex-1 h-px max-w-12 ${currentStep > 2 ? 'bg-dinner-terracotta/40' : 'bg-dinner-border'}`} />
+          <StepIndicator step={3} label="Begin" active={currentStep === 3} done={false} />
+        </div>
+
         {/* Selected guests tray */}
         <DinnerTable
           guests={selectedGuests}
           onRemove={removeGuest}
+          onAddGuest={addGuest}
+          allFigures={allFigures}
           userParticipating={userParticipating}
           userName={userName}
           maxGuests={MAX_GUESTS + (userParticipating ? 1 : 0)}
         />
 
-        {/* Controls row */}
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+        {/* Topic — always visible, inline */}
+        <div className="bg-white border border-dinner-border rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-serif text-dinner-cream text-sm">
+              Tonight&apos;s Topic
+            </h3>
+            <button
+              onClick={() => setShowTopicPanel(!showTopicPanel)}
+              className="text-dinner-terracotta text-xs font-body hover:underline"
+            >
+              {showTopicPanel ? 'Close' : 'Change topic'}
+            </button>
+          </div>
+          <p className="text-dinner-text-secondary text-sm font-body">
+            {selectedTopic}
+          </p>
+          {showTopicPanel && (
+            <div className="mt-4 pt-4 border-t border-dinner-border/50 animate-fade-in">
+              <TopicSelector
+                selectedTopic={selectedTopic}
+                selectedCategory={topicCategory}
+                onSelect={(topic, cat) => {
+                  setSelectedTopic(topic);
+                  setTopicCategory(cat);
+                  setShowTopicPanel(false);
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Options row */}
+        <div className="flex flex-wrap gap-3 items-center">
           {/* Research depth toggle */}
-          <div className="flex items-center gap-2 bg-dinner-card border border-dinner-border rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-white border border-dinner-border rounded-lg p-1">
             <button
               onClick={() => setResearchDepth('quick')}
               className={`px-3 py-1.5 rounded-md text-xs font-mono transition-all ${
                 researchDepth === 'quick'
-                  ? 'bg-dinner-gold/20 text-dinner-gold border border-dinner-gold/30'
+                  ? 'bg-dinner-gold/15 text-dinner-gold border border-dinner-gold/30'
                   : 'text-dinner-text-secondary hover:text-dinner-cream'
               }`}
             >
-              Quick Brief
+              Quick
             </button>
             <button
               onClick={() => setResearchDepth('deep')}
               className={`px-3 py-1.5 rounded-md text-xs font-mono transition-all ${
                 researchDepth === 'deep'
-                  ? 'bg-dinner-gold/20 text-dinner-gold border border-dinner-gold/30'
+                  ? 'bg-dinner-gold/15 text-dinner-gold border border-dinner-gold/30'
                   : 'text-dinner-text-secondary hover:text-dinner-cream'
               }`}
             >
@@ -178,10 +232,10 @@ export default function DinnerPartyPage() {
           {/* User participation toggle */}
           <button
             onClick={() => setUserParticipating(!userParticipating)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono border transition-all ${
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-body border transition-all ${
               userParticipating
-                ? 'bg-dinner-wine/20 border-dinner-wine text-dinner-gold-light'
-                : 'bg-dinner-card border-dinner-border text-dinner-text-secondary hover:border-dinner-wine/40'
+                ? 'bg-dinner-wine/15 border-dinner-wine/40 text-dinner-wine'
+                : 'bg-white border-dinner-border text-dinner-text-secondary hover:border-dinner-wine/40'
             }`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -192,71 +246,42 @@ export default function DinnerPartyPage() {
                 d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
               />
             </svg>
-            {userParticipating ? 'Joining as guest' : 'Join as guest'}
-          </button>
-
-          {/* Topic selector toggle */}
-          <button
-            onClick={() => setShowTopicPanel(!showTopicPanel)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono border transition-all ${
-              showTopicPanel
-                ? 'bg-dinner-wine/20 border-dinner-wine text-dinner-gold-light'
-                : 'bg-dinner-card border-dinner-border text-dinner-text-secondary hover:border-dinner-wine/40'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
-            Topic: {selectedTopic.slice(0, 30)}{selectedTopic.length > 30 ? '...' : ''}
+            {userParticipating ? 'Joining as guest' : 'Join the conversation'}
           </button>
         </div>
 
         {/* User participation form */}
         {userParticipating && (
-          <div className="bg-dinner-wine/5 border border-dinner-wine/20 rounded-lg p-4 space-y-3 animate-fade-in">
-            <h3 className="font-serif text-dinner-gold-light text-sm">
-              Introduce yourself to the table
+          <div className="bg-dinner-wine/5 border border-dinner-wine/20 rounded-xl p-4 space-y-3 animate-fade-in">
+            <h3 className="font-serif text-dinner-cream text-sm">
+              Introduce yourself
             </h3>
             <input
               type="text"
               value={userName}
               onChange={(e) => setUserName(e.target.value)}
               placeholder="Your name"
-              className="w-full bg-dinner-card border border-dinner-border rounded-lg px-3 py-2
+              className="w-full bg-white border border-dinner-border rounded-lg px-3 py-2
                 text-dinner-cream placeholder-dinner-text-dim text-sm font-body
                 focus:outline-none focus:border-dinner-wine/50"
             />
             <textarea
               value={userBackground}
               onChange={(e) => setUserBackground(e.target.value)}
-              placeholder="Tell the table a little about yourself (e.g., 'I'm a teacher in 2025 interested in philosophy')"
+              placeholder="A little about yourself (e.g., 'Teacher interested in philosophy')"
               rows={2}
-              className="w-full bg-dinner-card border border-dinner-border rounded-lg px-3 py-2
+              className="w-full bg-white border border-dinner-border rounded-lg px-3 py-2
                 text-dinner-cream placeholder-dinner-text-dim text-sm font-body resize-none
                 focus:outline-none focus:border-dinner-wine/50"
             />
           </div>
         )}
 
-        {/* Topic selector panel */}
-        {showTopicPanel && (
-          <div className="bg-dinner-card/50 border border-dinner-border rounded-lg p-4 animate-fade-in">
-            <h3 className="font-serif text-dinner-gold-light text-sm mb-3">
-              Set the evening&apos;s topic
-            </h3>
-            <TopicSelector
-              selectedTopic={selectedTopic}
-              selectedCategory={topicCategory}
-              onSelect={(topic, cat) => {
-                setSelectedTopic(topic);
-                setTopicCategory(cat);
-              }}
-            />
-          </div>
-        )}
-
-        {/* Search and filters */}
-        <div className="space-y-3">
+        {/* Guest browsing section */}
+        <div ref={guestSectionRef} className="space-y-3">
+          <h3 className="font-serif text-dinner-cream text-sm">
+            Browse guests
+          </h3>
           <FigureSearch value={searchQuery} onChange={setSearchQuery} />
           <CategoryFilter selected={categoryFilter} onChange={setCategoryFilter} />
         </div>
@@ -292,10 +317,10 @@ export default function DinnerPartyPage() {
       {/* Begin evening CTA */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-dinner-border shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-20">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="text-dinner-text-dim text-xs font-mono">
+          <div className="text-dinner-text-secondary text-xs font-body">
             {selectedGuests.length < 2
               ? `Select ${2 - selectedGuests.length} more guest${2 - selectedGuests.length > 1 ? 's' : ''} to begin`
-              : `${selectedGuests.length} guests selected`}
+              : `${selectedGuests.length} guest${selectedGuests.length > 1 ? 's' : ''} ready`}
           </div>
           <button
             onClick={handleBeginEvening}
@@ -310,6 +335,35 @@ export default function DinnerPartyPage() {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function StepIndicator({ step, label, active, done }: { step: number; label: string; active: boolean; done: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono shrink-0 transition-all ${
+          done
+            ? 'bg-dinner-terracotta/15 text-dinner-terracotta border border-dinner-terracotta/30'
+            : active
+            ? 'bg-dinner-terracotta text-white'
+            : 'bg-dinner-card text-dinner-text-dim border border-dinner-border'
+        }`}
+      >
+        {done ? (
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          step
+        )}
+      </div>
+      <span className={`text-xs font-body hidden sm:inline ${
+        active ? 'text-dinner-cream' : done ? 'text-dinner-terracotta' : 'text-dinner-text-dim'
+      }`}>
+        {label}
+      </span>
     </div>
   );
 }
