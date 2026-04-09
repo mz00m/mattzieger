@@ -38,7 +38,8 @@ export default function ResearchPage() {
 
   const researchOneFigure = async (
     figureId: string,
-    depth: 'quick' | 'deep'
+    depth: 'quick' | 'deep',
+    staggerDelay: number
   ): Promise<{ figureId: string; result: unknown; error?: string }> => {
     // Check client-side cache first
     const cached = getFromClientCache(figureId, depth);
@@ -53,11 +54,16 @@ export default function ResearchPage() {
       return { figureId, result: cached };
     }
 
-    // Update status to in-progress
+    // Small stagger so cards don't all move at once — feels more natural
+    if (staggerDelay > 0) {
+      await new Promise((r) => setTimeout(r, staggerDelay));
+    }
+
+    // Start: 10%
     setStatuses((prev) =>
       prev.map((s) =>
         s.figureId === figureId
-          ? { ...s, stage: 'quick-research', progress: 30 }
+          ? { ...s, stage: 'researching', progress: 15 }
           : s
       )
     );
@@ -69,11 +75,11 @@ export default function ResearchPage() {
         body: JSON.stringify({ figureId, depth }),
       });
 
-      // Update to 70% while parsing
+      // Bump to 80% once server responds (main wait is the Claude API call)
       setStatuses((prev) =>
         prev.map((s) =>
           s.figureId === figureId
-            ? { ...s, stage: 'synthesizing', progress: 70 }
+            ? { ...s, stage: 'synthesizing', progress: 80 }
             : s
         )
       );
@@ -133,15 +139,15 @@ export default function ResearchPage() {
       figureName: id
         .replace(/-/g, ' ')
         .replace(/\b\w/g, (l) => l.toUpperCase()),
-      stage: 'starting',
-      progress: 5,
+      stage: 'waiting',
+      progress: 2,
       complete: false,
     }));
     setStatuses(initialStatuses);
 
-    // Research all figures in parallel — each one is a separate API call
-    const promises = sessionData.figureIds.map((id) =>
-      researchOneFigure(id, sessionData.depth)
+    // Research all figures in parallel with slight stagger (200ms apart)
+    const promises = sessionData.figureIds.map((id, i) =>
+      researchOneFigure(id, sessionData.depth, i * 200)
     );
 
     const outcomes = await Promise.all(promises);
@@ -167,7 +173,7 @@ export default function ResearchPage() {
     setAllComplete(true);
     setTimeout(() => {
       router.push(`/dinnerparty/dinner/${sessionId}`);
-    }, 2000);
+    }, 1500);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, router]);
 

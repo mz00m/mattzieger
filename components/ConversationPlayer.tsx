@@ -97,7 +97,7 @@ export default function ConversationPlayer({
       // Find the figure's voice profile
       const figure = FIGURES.find((f) => f.id === exchange.speaker);
       if (figure) {
-        const profile = getVoiceProfile(figure.id, figure.voicePersonality, figure.category);
+        const profile = getVoiceProfile(figure.id, figure.voicePersonality, figure.category, figure.nationality);
         const webVoice = getWebSpeechVoice(figure.nationality, figure.voicePersonality);
         speak(
           exchange.text,
