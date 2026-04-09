@@ -118,11 +118,11 @@ export default function DinnerPartyPage() {
   return (
     <div className="min-h-screen bg-dinner-bg text-dinner-cream">
       {/* Header */}
-      <header className="border-b border-dinner-border/50 bg-dinner-bg/95 backdrop-blur sticky top-0 z-20">
+      <header className="border-b border-dinner-border/50 bg-white/80 backdrop-blur-md sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 py-4 sm:py-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="font-serif text-2xl sm:text-3xl text-dinner-gold-light tracking-tight">
+              <h1 className="font-serif text-2xl sm:text-3xl text-dinner-cream tracking-tight">
                 The Eternal Dinner Party
               </h1>
               <p className="text-dinner-text-dim text-xs sm:text-sm mt-1 font-body">
@@ -290,7 +290,7 @@ export default function DinnerPartyPage() {
       </main>
 
       {/* Begin evening CTA */}
-      <div className="fixed bottom-0 left-0 right-0 bg-dinner-bg/95 backdrop-blur border-t border-dinner-border z-20">
+      <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-dinner-border shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-20">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="text-dinner-text-dim text-xs font-mono">
             {selectedGuests.length < 2
@@ -302,7 +302,7 @@ export default function DinnerPartyPage() {
             disabled={!canBegin}
             className={`px-6 py-2.5 rounded-lg font-serif text-sm transition-all ${
               canBegin
-                ? 'bg-dinner-gold/20 border border-dinner-gold text-dinner-gold-light hover:bg-dinner-gold/30 shadow-lg shadow-dinner-gold/10'
+                ? 'bg-dinner-terracotta text-white hover:bg-dinner-terracotta/90 shadow-md shadow-dinner-terracotta/20'
                 : 'bg-dinner-card border border-dinner-border text-dinner-text-dim cursor-not-allowed'
             }`}
           >

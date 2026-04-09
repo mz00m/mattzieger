@@ -2,17 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  --dinner-bg: #F8F5F0;
-  --dinner-card: #FFFFFF;
-  --dinner-border: #E6DDD1;
-  --dinner-gold: #9A7B56;
-  --dinner-gold-light: #C4A87A;
-  --dinner-cream: #2A2118;
+  --dinner-bg: #FAF7F2;
+  --dinner-card: #F2EDE4;
+  --dinner-border: #E2DCD2;
+  --dinner-gold: #B8935A;
+  --dinner-gold-light: #D4B88A;
+  --dinner-cream: #2C2520;
+  --dinner-terracotta: #C07A5A;
   --dinner-wine: #8B3A4A;
-  --dinner-candle: #D4A030;
+  --dinner-candle: #F5DEB3;
 }
 
 /* Scrollbar styling for dinner party pages */

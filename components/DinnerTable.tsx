@@ -30,9 +30,9 @@ export default function DinnerTable({
   const emptySeats = maxGuests - guests.length - (userParticipating ? 1 : 0);
 
   return (
-    <div className="bg-dinner-card/50 border border-dinner-border rounded-xl p-4">
+    <div className="bg-white border border-dinner-border rounded-xl p-4 shadow-sm">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-serif text-dinner-gold text-sm">
+        <h3 className="font-serif text-dinner-cream text-sm">
           Tonight&apos;s Guests
         </h3>
         <span className="text-dinner-text-dim text-xs font-mono">

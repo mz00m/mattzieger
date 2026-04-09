@@ -197,7 +197,7 @@ export default function ConversationPlayer({
           )}
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 bg-dinner-bg/95 backdrop-blur border-t border-dinner-border p-4">
+        <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-dinner-border shadow-[0_-4px_20px_rgba(0,0,0,0.05)] p-4">
           <div className="max-w-lg mx-auto flex items-center justify-between">
             <button
               onClick={() => onExchangeChange(Math.max(0, currentExchangeIndex - 1))}
@@ -303,7 +303,7 @@ export default function ConversationPlayer({
         })}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-dinner-bg/95 backdrop-blur border-t border-dinner-border">
+      <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-dinner-border shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-4">
           <button
             onClick={onTogglePlay}

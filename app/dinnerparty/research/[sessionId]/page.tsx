@@ -208,8 +208,8 @@ export default function ResearchPage() {
               <div className="text-center mt-8 animate-fade-in">
                 <button
                   onClick={() => router.push(`/dinnerparty/dinner/${sessionId}`)}
-                  className="px-6 py-3 bg-dinner-gold/20 border border-dinner-gold text-dinner-gold-light rounded-lg
-                    font-serif hover:bg-dinner-gold/30 transition-all shadow-lg shadow-dinner-gold/10"
+                  className="px-6 py-3 bg-dinner-terracotta text-white rounded-lg
+                    font-serif hover:bg-dinner-terracotta/90 transition-all shadow-md shadow-dinner-terracotta/20"
                 >
                   Enter the dining room
                 </button>
