@@ -47,7 +47,7 @@ export async function generateCustomFigure(
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5-20241022',
+      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-latest',
       max_tokens: 2048,
       system: `You are creating a character profile for a dinner party simulation app. Given a person's name, create a detailed profile. Return ONLY valid JSON matching this exact structure (no markdown, no preamble):
 

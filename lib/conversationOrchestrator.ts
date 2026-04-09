@@ -37,7 +37,7 @@ export interface ConversationExchange {
 // ---------------------------------------------------------------------------
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-4-5-20241022';
+const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-latest';
 
 interface ClaudeMessage {
   role: 'user' | 'assistant';
@@ -283,7 +283,8 @@ export async function generateConversationRound(
 
     return exchanges;
   } catch (error) {
-    console.error('generateConversationRound failed:', error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error('generateConversationRound failed:', errMsg, error);
 
     // Return a graceful fallback so the UI can still show something
     const guestNames = session.guests.map((g) => g.figureId);
@@ -293,7 +294,7 @@ export async function generateConversationRound(
       {
         id: generateExchangeId(),
         type: 'narration',
-        text: 'A momentary silence falls over the table as the guests collect their thoughts.',
+        text: `A momentary silence falls over the table. [Debug: ${errMsg}]`,
       },
       {
         id: generateExchangeId(),
