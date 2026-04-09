@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFigureById } from '@/lib/figures';
 import { quickResearch, deepResearch } from '@/lib/researchAgent';
+import { getFromServerCache, setInServerCache } from '@/lib/researchCache';
 
 // Research a SINGLE figure — called once per guest by the client
 export async function POST(request: NextRequest) {
@@ -18,6 +19,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check server-side cache first
+    const cached = getFromServerCache(figureId, depth);
+    if (cached) {
+      return NextResponse.json({ result: cached, cached: true });
+    }
+
     const figure = getFigureById(figureId);
     if (!figure) {
       return NextResponse.json(
@@ -30,6 +37,9 @@ export async function POST(request: NextRequest) {
       depth === 'deep'
         ? await deepResearch(figure)
         : await quickResearch(figure);
+
+    // Store in server cache
+    setInServerCache(figureId, depth, result);
 
     return NextResponse.json({ result });
   } catch (error) {
