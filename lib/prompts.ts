@@ -149,24 +149,25 @@ At natural intervals (every 2-3 exchanges), have ONE figure address ${session.us
 `;
   }
 
-  return `You are orchestrating a live dinner party conversation. Your job is to give each figure their completely authentic voice, grounded in documented evidence from their actual writings and speeches.
+  return `You are orchestrating a casual dinner party conversation between real people. This is NOT a debate or lecture — it's friends and interesting strangers sharing a meal, drinking wine, getting curious about each other.
 
 GUESTS TONIGHT:
 ${guestProfiles}
 
 TONIGHT'S TOPIC: "${session.topic}"
-TOPIC CATEGORY: ${session.topicCategory}
 
-CRITICAL VOICE RULES:
-- Every speaker must sound unmistakably like themselves, not a generic "historical figure"
-- Reference their actual documented positions using tags from the research
-- Let genuine intellectual conflict emerge — don't smooth over disagreements
-- Allow real philosophical friction between guests with opposing worldviews
-- Match each figure's documented speech patterns: their vocabulary, sentence structure, rhetorical habits
-- Allow figures to reference each other's actual works when relevant
-- Include occasional humor, surprise, genuine emotion — these were full humans
-- Don't have everyone agree or be polite — authentic disagreement is more interesting
-- Use the speaker's figureId (kebab-case) as the speaker field, not their display name
+THE VIBE:
+This is a relaxed dinner party, not a TED talk. Think late evening, good wine, real talk.
+- People interrupt each other, laugh, go on tangents, tell quick stories
+- Someone might crack a joke, tease another guest, or change the subject
+- Short, punchy exchanges — like real conversation, not monologues
+- 1-2 sentences per turn is ideal. Occasionally 3 if someone's on a roll. NEVER more than 3.
+- Let people react to each other — "Wait, you actually believe that?" "Ha!" "That reminds me..."
+- Curiosity over performance. These people are genuinely interested in each other.
+- Disagreements should feel like friendly sparring, not formal debate
+- Use contractions, incomplete thoughts, casual language — the way people actually talk at dinner
+- Each person should sound like THEMSELVES — their real speech patterns, vocabulary, quirks
+- Use the speaker's figureId (kebab-case) as the speaker field
 
 ${userSection}
 
@@ -176,5 +177,5 @@ Each element must be an object with:
 - "speaker": the figure's id in kebab-case (omit for narration)
 - "text": what is said or described
 
-Generate 3-6 exchanges per round. Include at most one narration per round (at the start or during a natural transition). Make the speeches substantial — at least 2-3 sentences each.`;
+Generate 3-5 exchanges per round. Keep narration minimal — at most a brief scene-setting sentence. Keep speeches SHORT and conversational. This should feel like eavesdropping on a fascinating dinner, not reading a transcript of a panel discussion.`;
 }

@@ -162,19 +162,15 @@ function buildConversationHistory(
     messages.push({
       role: 'user',
       content: [
-        `The topic for tonight's dinner party is: "${session.topic}"`,
-        `Category: ${session.topicCategory}`,
+        `Tonight's topic: "${session.topic}"`,
         '',
-        'Please begin the dinner party conversation. Generate 3-6 exchanges',
-        'that open the evening — include an initial narration setting the scene,',
-        'then have the guests begin discussing the topic.',
+        'Start the dinner party. One short narration to set the scene (one sentence),',
+        'then have the guests ease into conversation naturally — like people actually',
+        'arriving at a dinner, getting comfortable, riffing off each other.',
+        'Keep it casual and short. 1-2 sentences per person. No speeches.',
         '',
-        'Return a JSON array of exchange objects. Each object must have:',
-        '- type: "narration" | "speech"',
-        '- speaker: (string, the figure\'s name — omit for narration)',
-        '- text: (string, what is said or described)',
-        '',
-        'Return ONLY valid JSON, no markdown fences or commentary.',
+        'Return a JSON array. Each object: { "type": "narration"|"speech", "speaker": "figure-id", "text": "..." }',
+        'Omit speaker for narration. Return ONLY valid JSON.',
       ].join('\n'),
     });
 
@@ -210,37 +206,25 @@ function buildConversationHistory(
     messages.push({
       role: 'user',
       content: [
-        `${session.userName ?? 'The Host'} speaks up and says:`,
-        `"${userInput}"`,
+        `${session.userName ?? 'The Host'} says: "${userInput}"`,
         '',
-        'Generate 3-6 exchanges where the dinner guests react to and engage with',
-        'what the host just said. Include a mix of direct responses, side comments,',
-        'and natural conversational flow.',
+        'Have 2-3 guests react naturally — quick responses, maybe a laugh,',
+        'a follow-up question, someone riffing on what was said. Keep it short and real.',
         '',
-        'Return a JSON array of exchange objects. Each object must have:',
-        '- type: "narration" | "speech"',
-        '- speaker: (string, the figure\'s name — omit for narration)',
-        '- text: (string, what is said or described)',
-        '',
-        'Return ONLY valid JSON, no markdown fences or commentary.',
+        'JSON array: { "type": "speech", "speaker": "figure-id", "text": "..." }',
+        'Return ONLY valid JSON.',
       ].join('\n'),
     });
   } else {
-    // Continue the conversation
     messages.push({
       role: 'user',
       content: [
-        'Continue the dinner party conversation. Generate 3-6 new exchanges',
-        'that advance the discussion naturally. Build on what has been said,',
-        'introduce new angles, allow disagreements, and keep the conversation',
-        'lively and in-character.',
+        'Keep the conversation going. 3-4 short exchanges.',
+        'Let it drift naturally — someone changes the angle, someone teases,',
+        'someone gets curious. Like real dinner conversation. 1-2 sentences each.',
         '',
-        'Return a JSON array of exchange objects. Each object must have:',
-        '- type: "narration" | "speech"',
-        '- speaker: (string, the figure\'s name — omit for narration)',
-        '- text: (string, what is said or described)',
-        '',
-        'Return ONLY valid JSON, no markdown fences or commentary.',
+        'JSON array: { "type": "speech", "speaker": "figure-id", "text": "..." }',
+        'Return ONLY valid JSON.',
       ].join('\n'),
     });
   }

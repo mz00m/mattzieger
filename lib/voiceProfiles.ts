@@ -25,18 +25,20 @@ export type VoiceArchetype =
 // Archetype → voice settings
 // ---------------------------------------------------------------------------
 
+// Tuned for conversational, natural-sounding speech (not robotic narration)
+// Lower stability = more expressive/human. Higher style = more personality.
 const ARCHETYPE_SETTINGS: Record<
   VoiceArchetype,
   { stability: number; similarity_boost: number; style: number }
 > = {
-  'deliberate-thinker': { stability: 0.8, similarity_boost: 0.75, style: 0.3 },
-  'passionate-orator': { stability: 0.5, similarity_boost: 0.8, style: 0.8 },
-  comedian: { stability: 0.3, similarity_boost: 0.7, style: 0.9 },
-  scientist: { stability: 0.7, similarity_boost: 0.75, style: 0.4 },
-  'poet-writer': { stability: 0.6, similarity_boost: 0.8, style: 0.7 },
-  storyteller: { stability: 0.55, similarity_boost: 0.75, style: 0.65 },
-  mystic: { stability: 0.7, similarity_boost: 0.7, style: 0.5 },
-  default: { stability: 0.5, similarity_boost: 0.75, style: 0.5 },
+  'deliberate-thinker': { stability: 0.45, similarity_boost: 0.6, style: 0.4 },
+  'passionate-orator': { stability: 0.3, similarity_boost: 0.65, style: 0.85 },
+  comedian: { stability: 0.2, similarity_boost: 0.55, style: 0.95 },
+  scientist: { stability: 0.4, similarity_boost: 0.6, style: 0.5 },
+  'poet-writer': { stability: 0.35, similarity_boost: 0.65, style: 0.7 },
+  storyteller: { stability: 0.3, similarity_boost: 0.6, style: 0.75 },
+  mystic: { stability: 0.4, similarity_boost: 0.55, style: 0.6 },
+  default: { stability: 0.35, similarity_boost: 0.6, style: 0.6 },
 };
 
 // ---------------------------------------------------------------------------
