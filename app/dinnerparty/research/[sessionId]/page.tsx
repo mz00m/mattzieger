@@ -35,6 +35,67 @@ export default function ResearchPage() {
   const [error, setError] = useState<string | null>(null);
   const hasStarted = useRef(false);
 
+  const researchOneFigure = async (
+    figureId: string,
+    depth: 'quick' | 'deep'
+  ): Promise<{ figureId: string; result: unknown; error?: string }> => {
+    // Update status to in-progress
+    setStatuses((prev) =>
+      prev.map((s) =>
+        s.figureId === figureId
+          ? { ...s, stage: 'quick-research', progress: 30 }
+          : s
+      )
+    );
+
+    try {
+      const response = await fetch('/api/dinnerparty/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ figureId, depth }),
+      });
+
+      // Update to 70% while parsing
+      setStatuses((prev) =>
+        prev.map((s) =>
+          s.figureId === figureId
+            ? { ...s, stage: 'synthesizing', progress: 70 }
+            : s
+        )
+      );
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Mark complete
+      setStatuses((prev) =>
+        prev.map((s) =>
+          s.figureId === figureId
+            ? { ...s, complete: true, progress: 100, stage: 'complete', result: data.result }
+            : s
+        )
+      );
+
+      return { figureId, result: data.result };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Research failed';
+
+      setStatuses((prev) =>
+        prev.map((s) =>
+          s.figureId === figureId
+            ? { ...s, error: errMsg, progress: 100, complete: true }
+            : s
+        )
+      );
+
+      return { figureId, result: null, error: errMsg };
+    }
+  };
+
   const startResearch = useCallback(async () => {
     if (hasStarted.current) return;
     hasStarted.current = true;
@@ -54,156 +115,42 @@ export default function ResearchPage() {
         .replace(/-/g, ' ')
         .replace(/\b\w/g, (l) => l.toUpperCase()),
       stage: 'starting',
-      progress: 0,
+      progress: 5,
       complete: false,
     }));
     setStatuses(initialStatuses);
 
-    try {
-      // Use SSE endpoint for streaming progress
-      const url = `/api/dinnerparty/research?figureIds=${sessionData.figureIds.join(',')}&depth=${sessionData.depth}`;
-      const eventSource = new EventSource(url);
+    // Research all figures in parallel — each one is a separate API call
+    const promises = sessionData.figureIds.map((id) =>
+      researchOneFigure(id, sessionData.depth)
+    );
 
-      const results: Record<string, unknown> = {};
+    const outcomes = await Promise.all(promises);
 
-      eventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-
-        switch (data.type) {
-          case 'research-start':
-            setStatuses((prev) =>
-              prev.map((s) =>
-                s.figureId === data.figureId
-                  ? { ...s, figureName: data.figureName, stage: 'starting', progress: 10 }
-                  : s
-              )
-            );
-            break;
-
-          case 'research-progress':
-            setStatuses((prev) =>
-              prev.map((s) =>
-                s.figureId === data.figureId
-                  ? { ...s, stage: data.stage, progress: Math.min(data.progress, 90) }
-                  : s
-              )
-            );
-            break;
-
-          case 'research-complete':
-            results[data.figureId] = data.result;
-            setStatuses((prev) =>
-              prev.map((s) =>
-                s.figureId === data.figureId
-                  ? { ...s, complete: true, progress: 100, stage: 'complete', result: data.result }
-                  : s
-              )
-            );
-            break;
-
-          case 'research-error':
-            setStatuses((prev) =>
-              prev.map((s) =>
-                s.figureId === data.figureId
-                  ? { ...s, error: data.error, progress: 100 }
-                  : s
-              )
-            );
-            break;
-
-          case 'all-complete':
-            eventSource.close();
-
-            // Store results and navigate to dinner
-            const fullSession = {
-              ...sessionData,
-              researchResults: results,
-            };
-            sessionStorage.setItem(
-              `dinner-session-${sessionId}`,
-              JSON.stringify(fullSession)
-            );
-            setAllComplete(true);
-
-            // Auto-navigate after a moment
-            setTimeout(() => {
-              router.push(`/dinnerparty/dinner/${sessionId}`);
-            }, 2000);
-            break;
-        }
-      };
-
-      eventSource.onerror = () => {
-        eventSource.close();
-
-        // Fallback: try non-streaming POST
-        fallbackResearch(sessionData);
-      };
-    } catch {
-      // Fallback to non-streaming
-      const stored2 = sessionStorage.getItem(`dinner-session-${sessionId}`);
-      if (stored2) {
-        fallbackResearch(JSON.parse(stored2));
+    // Collect results
+    const results: Record<string, unknown> = {};
+    for (const outcome of outcomes) {
+      if (outcome.result) {
+        results[outcome.figureId] = outcome.result;
       }
     }
+
+    // Store results and navigate
+    const fullSession = {
+      ...sessionData,
+      researchResults: results,
+    };
+    sessionStorage.setItem(
+      `dinner-session-${sessionId}`,
+      JSON.stringify(fullSession)
+    );
+
+    setAllComplete(true);
+    setTimeout(() => {
+      router.push(`/dinnerparty/dinner/${sessionId}`);
+    }, 2000);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, router]);
-
-  const fallbackResearch = async (sessionData: SessionData) => {
-    try {
-      // Update all to "in progress"
-      setStatuses((prev) =>
-        prev.map((s) => ({ ...s, stage: 'quick-research', progress: 50 }))
-      );
-
-      const response = await fetch('/api/dinnerparty/research', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          figureIds: sessionData.figureIds,
-          depth: sessionData.depth,
-        }),
-      });
-
-      if (!response.ok) throw new Error('Research failed');
-
-      const data = await response.json();
-
-      // Store results
-      const results: Record<string, unknown> = {};
-      data.results.forEach((r: { figureId: string }) => {
-        results[r.figureId] = r;
-      });
-
-      const fullSession = {
-        ...sessionData,
-        researchResults: results,
-      };
-      sessionStorage.setItem(
-        `dinner-session-${sessionId}`,
-        JSON.stringify(fullSession)
-      );
-
-      // Mark all complete
-      setStatuses((prev) =>
-        prev.map((s) => ({
-          ...s,
-          complete: true,
-          progress: 100,
-          stage: 'complete',
-          result: results[s.figureId],
-        }))
-      );
-      setAllComplete(true);
-
-      setTimeout(() => {
-        router.push(`/dinnerparty/dinner/${sessionId}`);
-      }, 2000);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Research failed. Please try again.'
-      );
-    }
-  };
 
   useEffect(() => {
     startResearch();
