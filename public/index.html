@@ -503,6 +503,9 @@
   const seedlingHitboxes = []; // invisible meshes for raycasting
   const labelEl = document.getElementById('label');
 
+  // Cache for fully-grown seedling groups to avoid per-frame rebuilds
+  const seedlingCache = new Map(); // index -> { group, hitboxes }
+
   function initSeedlings() {
     seedlingData.length = 0;
     seedlingHitboxes.length = 0;
@@ -579,9 +582,6 @@
   }
 
   initSeedlings();
-
-  // Cache for fully-grown seedling groups to avoid per-frame rebuilds
-  const seedlingCache = new Map(); // index -> { group, hitboxes }
 
   function clearSeedlingCache() {
     seedlingCache.forEach(cached => {
