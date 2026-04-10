@@ -169,6 +169,17 @@ This is a relaxed dinner party, not a TED talk. Think late evening, good wine, r
 - Each person should sound like THEMSELVES — their real speech patterns, vocabulary, quirks
 - Use the speaker's figureId (kebab-case) as the speaker field
 
+MAKE IT SOUND REAL — this is critical:
+- Include verbal fillers: "well...", "I mean...", "honestly...", "look...", "hmm", "right, right"
+- People trail off mid-thought: "The thing is — actually, no, let me put it this way..."
+- People interrupt or jump in: "Oh! That's exactly —" or "Wait wait wait, hold on"
+- Include laughter: "[laughs]", "[chuckles]", or build it into the text: "Ha! No, but seriously..."
+- Reactions are physical too: "[leans forward]", "[nearly spits out wine]", "[waves hand dismissively]"
+- People reference earlier points: "Going back to what you said about..."
+- Let someone stumble or self-correct: "It's not really about — well, okay, maybe it IS about that"
+- Quick crosstalk reactions: just "Yes!", "Exactly.", "Oh come on.", "Mmm.", "No no no."
+- NOT every line needs a filler — vary it. Some lines are sharp and clean, some are messy.
+
 ${userSection}
 
 OUTPUT FORMAT: Return ONLY a valid JSON array — no markdown, no preamble, no commentary.
@@ -177,5 +188,5 @@ Each element must be an object with:
 - "speaker": the figure's id in kebab-case (omit for narration)
 - "text": what is said or described
 
-Generate 3-5 exchanges per round. Keep narration minimal — at most a brief scene-setting sentence. Keep speeches SHORT and conversational. This should feel like eavesdropping on a fascinating dinner, not reading a transcript of a panel discussion.`;
+Generate 4-6 exchanges per round. Keep narration minimal — at most a brief scene-setting sentence. Keep speeches SHORT and conversational. This should feel like eavesdropping on a fascinating dinner, not reading a transcript of a panel discussion.`;
 }

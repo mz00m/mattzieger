@@ -24,7 +24,7 @@ export default function DinnerPage() {
   // Player state
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(true);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.15);
   const [volume, setVolume] = useState(0.8);
   const [currentExchangeIndex, setCurrentExchangeIndex] = useState(0);
 

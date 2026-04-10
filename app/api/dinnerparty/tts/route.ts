@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
           text,
           model_id: 'eleven_turbo_v2_5',
           voice_settings: {
-            stability: voiceSettings?.stability ?? 0.5,
-            similarity_boost: voiceSettings?.similarity_boost ?? 0.75,
-            style: voiceSettings?.style ?? 0.5,
+            stability: voiceSettings?.stability ?? 0.35,
+            similarity_boost: voiceSettings?.similarity_boost ?? 0.70,
+            style: voiceSettings?.style ?? 0.6,
             use_speaker_boost: voiceSettings?.use_speaker_boost ?? true,
           },
         }),
