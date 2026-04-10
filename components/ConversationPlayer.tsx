@@ -80,7 +80,7 @@ export default function ConversationPlayer({
       if (isPlaying && audioEnabled && currentExchangeIndex < exchanges.length - 1) {
         setTimeout(() => {
           onExchangeChange(currentExchangeIndex + 1);
-        }, 400);
+        }, 200);
       }
     },
     playbackRate: playbackSpeed,
@@ -200,7 +200,7 @@ export default function ConversationPlayer({
     []
   );
 
-  const speeds = [0.75, 1, 1.25, 1.5];
+  const speeds = [0.85, 1, 1.15, 1.35, 1.5];
 
   return (
     <div className="flex flex-col h-full">
