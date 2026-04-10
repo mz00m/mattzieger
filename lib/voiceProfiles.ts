@@ -175,6 +175,18 @@ const FIGURE_VOICE_OVERRIDES: Record<string, VoiceOverride> = {
   'rumi':                { voiceId: V_ADAM,    stability: 0.45, similarity_boost: 0.55, style: 0.55 },
   'amelia-earhart':      { voiceId: V_DOMI,    stability: 0.35, similarity_boost: 0.60, style: 0.65 },
   'cleopatra':           { voiceId: V_DOMI,    stability: 0.25, similarity_boost: 0.70, style: 0.80 },
+
+  // === MODERN PERSONALITIES ===
+  'jerry-seinfeld':      { voiceId: V_JOSH,    stability: 0.15, similarity_boost: 0.60, style: 0.90 },
+  'steve-martin':        { voiceId: V_ANTONI,  stability: 0.25, similarity_boost: 0.60, style: 0.80 },
+  'martin-short':        { voiceId: V_SAM,     stability: 0.10, similarity_boost: 0.55, style: 0.95 },
+  'michelle-obama':      { voiceId: V_DOMI,    stability: 0.35, similarity_boost: 0.65, style: 0.65 },
+  'jack-black':          { voiceId: V_ARNOLD,  stability: 0.10, similarity_boost: 0.60, style: 0.95 },
+  'dolly-parton':        { voiceId: V_BELLA,   stability: 0.20, similarity_boost: 0.65, style: 0.85 },
+  'anthony-bourdain':    { voiceId: V_ADAM,    stability: 0.30, similarity_boost: 0.65, style: 0.70 },
+  'oprah-winfrey':       { voiceId: V_RACHEL,  stability: 0.20, similarity_boost: 0.70, style: 0.85 },
+  'conan-obrien':        { voiceId: V_JOSH,    stability: 0.10, similarity_boost: 0.55, style: 0.95 },
+  'keanu-reeves':        { voiceId: V_SAM,     stability: 0.45, similarity_boost: 0.55, style: 0.40 },
 };
 
 // ---------------------------------------------------------------------------
@@ -242,6 +254,7 @@ const KNOWN_FEMALE_IDS = new Set([
   'mary-wollstonecraft', 'cleopatra', 'marie-antoinette', 'hypatia',
   'harriet-beecher-stowe', 'sylvia-plath', 'mary-shelley', 'emily-dickinson',
   'ella-fitzgerald', 'wu-zetian', 'amelia-earhart',
+  'michelle-obama', 'dolly-parton', 'oprah-winfrey',
 ]);
 
 // ---------------------------------------------------------------------------

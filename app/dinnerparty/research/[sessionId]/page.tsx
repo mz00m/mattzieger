@@ -18,6 +18,7 @@ const KNOWN_FEMALE_IDS = new Set([
   'mary-wollstonecraft', 'cleopatra', 'marie-antoinette', 'hypatia',
   'harriet-beecher-stowe', 'sylvia-plath', 'mary-shelley', 'emily-dickinson',
   'ella-fitzgerald', 'wu-zetian', 'amelia-earhart',
+  'michelle-obama', 'dolly-parton', 'oprah-winfrey',
 ]);
 
 interface SessionData {

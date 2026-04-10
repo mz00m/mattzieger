@@ -178,9 +178,6 @@ export default function DinnerPartyPage() {
           maxGuests={MAX_GUESTS + (userParticipating ? 1 : 0)}
         />
 
-        {/* Add a new character */}
-        <CustomFigureCreator onFigureCreated={handleCustomFigureCreated} />
-
         {/* Topic — always visible, inline */}
         <div className="bg-white border border-dinner-border rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
@@ -291,6 +288,7 @@ export default function DinnerPartyPage() {
             Browse guests
           </h3>
           <FigureSearch value={searchQuery} onChange={setSearchQuery} />
+          <CustomFigureCreator onFigureCreated={handleCustomFigureCreated} />
           <CategoryFilter selected={categoryFilter} onChange={setCategoryFilter} />
         </div>
 
