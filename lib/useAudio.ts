@@ -167,10 +167,17 @@ export function useAudio({ onEnd, playbackRate = 1, volume = 1 }: UseAudioOption
     ) => {
       stop();
 
+      // Strip stage directions like [laughs], [shakes head], [leans forward]
+      const spokenText = text.replace(/\[.*?\]/g, '').replace(/\s{2,}/g, ' ').trim();
+      if (!spokenText) {
+        onEndRef.current?.();
+        return;
+      }
+
       // Try ElevenLabs first
       if (elevenLabsVoiceId) {
         const success = await speakWithElevenLabs(
-          text,
+          spokenText,
           elevenLabsVoiceId,
           voiceSettings
         );
@@ -178,12 +185,12 @@ export function useAudio({ onEnd, playbackRate = 1, volume = 1 }: UseAudioOption
       }
 
       // Fall back to Web Speech
-      const webSuccess = speakWithWebSpeech(text, webSpeechOptions);
+      const webSuccess = speakWithWebSpeech(spokenText, webSpeechOptions);
 
       // If no audio at all, just trigger onEnd after a delay
       if (!webSuccess) {
         setIsSpeaking(false);
-        const wordCount = text.split(/\s+/).length;
+        const wordCount = spokenText.split(/\s+/).length;
         const delay = Math.max((wordCount / (150 * playbackRateRef.current)) * 60000, 1500);
         setTimeout(() => {
           onEndRef.current?.();
