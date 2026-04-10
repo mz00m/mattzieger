@@ -22,6 +22,7 @@ interface ConversationPlayerProps {
   onVolumeChange: (volume: number) => void;
   currentExchangeIndex: number;
   onExchangeChange: (index: number) => void;
+  onRoundComplete?: () => void;
 }
 
 function getGuestColor(index: number): string {
@@ -55,6 +56,7 @@ export default function ConversationPlayer({
   onVolumeChange,
   currentExchangeIndex,
   onExchangeChange,
+  onRoundComplete,
 }: ConversationPlayerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastSpokenIndex = useRef(-1);
@@ -75,12 +77,20 @@ export default function ConversationPlayer({
   }, []);
 
   // Audio system
+  const onRoundCompleteRef = useRef(onRoundComplete);
+  onRoundCompleteRef.current = onRoundComplete;
+
   const { speak, stop, isSpeaking } = useAudio({
     onEnd: () => {
-      if (isPlaying && audioEnabled && currentExchangeIndex < exchanges.length - 1) {
-        setTimeout(() => {
-          onExchangeChange(currentExchangeIndex + 1);
-        }, 200);
+      if (isPlaying && audioEnabled) {
+        if (currentExchangeIndex < exchanges.length - 1) {
+          setTimeout(() => {
+            onExchangeChange(currentExchangeIndex + 1);
+          }, 200);
+        } else {
+          // Last exchange finished — auto-continue
+          onRoundCompleteRef.current?.();
+        }
       }
     },
     playbackRate: playbackSpeed,
