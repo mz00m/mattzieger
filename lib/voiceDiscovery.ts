@@ -141,10 +141,18 @@ function categorizeVoice(v: ElevenLabsVoice): CategorizedVoice {
 
 export interface FigureVoiceRequest {
   figureId: string;
+  name: string;
   gender: 'male' | 'female';
   nationality: string;
   voicePersonality: string;
   age?: 'young' | 'middle_aged' | 'old';
+  // Rich character data for better matching
+  writingStyle?: string;
+  knownFor?: string[];
+  categories?: string[];
+  tagline?: string;
+  born?: string;
+  died?: string;
 }
 
 export interface VoiceAssignment {
@@ -161,7 +169,7 @@ async function matchWithClaude(
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return [];
 
-  // Build voice catalog summary for Claude
+  // Build voice catalog summary for Claude — include all available metadata
   const voiceCatalog = voices.map((v) => ({
     id: v.voiceId,
     name: v.name,
@@ -172,37 +180,79 @@ async function matchWithClaude(
     useCase: v.useCase,
   }));
 
-  // Build figure summaries
-  const figureSummaries = figures.map((f) => ({
-    id: f.figureId,
-    gender: f.gender,
-    nationality: f.nationality,
-    voicePersonality: f.voicePersonality,
-    age: f.age,
-  }));
+  // Build rich figure profiles for Claude
+  const figureProfiles = figures.map((f) => {
+    const profile: Record<string, unknown> = {
+      id: f.figureId,
+      name: f.name,
+      gender: f.gender,
+      nationality: f.nationality,
+      voiceDescription: f.voicePersonality,
+      age: f.age,
+    };
+    if (f.writingStyle) profile.speakingStyle = f.writingStyle;
+    if (f.knownFor?.length) profile.knownFor = f.knownFor;
+    if (f.categories?.length) profile.domains = f.categories;
+    if (f.tagline) profile.signature = f.tagline;
+    if (f.born) profile.era = `${f.born}${f.died ? ' – ' + f.died : ' (living)'}`;
+    return profile;
+  });
 
-  const prompt = `You are matching text-to-speech voices to historical/famous figures for a dinner party conversation simulator.
+  const prompt = `You are a voice casting director matching text-to-speech voices to famous historical/modern figures for a dinner party simulator. Your job is to find the BEST possible voice for each character — the voice that would make a listener think "yes, that sounds like them."
 
-AVAILABLE VOICES:
+AVAILABLE VOICES IN THE LIBRARY:
 ${JSON.stringify(voiceCatalog, null, 1)}
 
-DINNER GUESTS TO MATCH:
-${JSON.stringify(figureSummaries, null, 1)}
+CHARACTERS TO CAST:
+${JSON.stringify(figureProfiles, null, 1)}
 
-RULES:
-1. Each figure MUST get a DIFFERENT voice — no two figures share the same voice ID.
-2. Gender must match (male figure → male voice, female figure → female voice). If no exact gender match exists, prefer "neutral" voices.
-3. Consider accent/nationality fit (British figure → British-accented voice if available).
-4. Consider personality fit — match the voice description to the figure's personality. A booming comedian needs a different voice than a quiet philosopher.
-5. Consider age — young figures get younger voices, older figures get older/mature voices.
-6. If a voice name sounds like it was designed for a specific character type, leverage that.
+VOICE CASTING METHODOLOGY — think through each character carefully:
 
-Return ONLY a valid JSON array with one object per figure:
-[{"figureId": "figure-id", "voiceId": "voice-id", "voiceName": "Voice Name"}]
+For each figure, consider these vocal dimensions and match them against the voice descriptions:
 
-No explanation, no markdown, just the JSON array.`;
+1. VOCAL DEPTH & BRIGHTNESS
+   - Deep, resonant voices → gravelly baritone characters (e.g. Bourdain, Hemingway)
+   - Bright, energetic voices → animated, expressive characters (e.g. Seinfeld, Jack Black)
+   - Warm, mellow voices → thoughtful, gentle characters (e.g. Keanu, Mr. Rogers)
+   - Sharp, crisp voices → intellectually precise characters (e.g. Hitchens, Arendt)
+
+2. PACE & ENERGY
+   - Fast, energetic delivery → comedians, entertainers, passionate speakers
+   - Slow, deliberate delivery → philosophers, spiritual leaders, careful thinkers
+   - Rhythmic, musical delivery → poets, musicians, preachers
+   - Staccato, punchy delivery → journalists, debaters, provocateurs
+
+3. TEXTURE & CHARACTER
+   - Smooth, polished → diplomats, politicians, refined speakers (Obama, JFK)
+   - Raspy, rough → rebels, artists, lived-in voices (Bourdain, Tom Waits)
+   - Nasal, distinctive → intellectual comedians (Seinfeld, Woody Allen)
+   - Rich, velvety → storytellers, orators, entertainers (Dolly, Oprah)
+
+4. ACCENT & CULTURAL FIT
+   - Match nationality to accent when possible
+   - British figure → British voice, not generic American
+   - Southern US figure → voice with warmth/drawl if available
+   - New York figure → voice with urban edge if available
+
+5. PERSONA MATCH
+   - A comedian's voice should sound like someone who tells jokes
+   - A philosopher's voice should sound contemplative
+   - A firebrand's voice should have edge and intensity
+   - A storyteller's voice should be engaging and dynamic
+
+HARD RULES:
+- Each figure MUST get a DIFFERENT voice — no duplicates.
+- Gender must match strictly.
+- If multiple voices could work, pick the one that most captures the CHARACTER's essence, not just their demographic.
+- Voice name may hint at character type — use that signal.
+
+Think carefully about each character before assigning. For each, ask: "If I closed my eyes and heard this voice, would it feel like this person?"
+
+Return ONLY a valid JSON array — no reasoning, no markdown, no explanation:
+[{"figureId": "figure-id", "voiceId": "voice-id", "voiceName": "Voice Name"}]`;
 
   try {
+    const model = process.env.VOICE_MATCH_MODEL || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -211,8 +261,8 @@ No explanation, no markdown, just the JSON array.`;
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
+        model,
+        max_tokens: 2048,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -347,31 +397,36 @@ function fallbackMatch(figures: FigureVoiceRequest[], voices: CategorizedVoice[]
 // ---------------------------------------------------------------------------
 
 export async function matchVoicesForFigures(
-  figures: FigureVoiceRequest[]
+  figures: FigureVoiceRequest[],
+  forceRematch = false
 ): Promise<VoiceAssignment[]> {
   const voices = await fetchAvailableVoices();
   if (voices.length === 0) return [];
 
-  console.log(`[VoiceDiscovery] Matching ${figures.length} figures against ${voices.length} available voices`);
+  console.log(`[VoiceDiscovery] Matching ${figures.length} figures against ${voices.length} available voices${forceRematch ? ' (forced re-match)' : ''}`);
 
-  // Check for cached assignments first
+  // Check for cached assignments first (skip if forced re-match)
   const uncached: FigureVoiceRequest[] = [];
   const cached: VoiceAssignment[] = [];
-  for (const fig of figures) {
-    const prev = figureAssignments.get(fig.figureId);
-    if (prev) {
-      const voice = voices.find((v) => v.voiceId === prev);
-      if (voice) {
-        cached.push({ figureId: fig.figureId, voiceId: prev, voiceName: voice.name, score: 100 });
-        continue;
+  if (!forceRematch) {
+    for (const fig of figures) {
+      const prev = figureAssignments.get(fig.figureId);
+      if (prev) {
+        const voice = voices.find((v) => v.voiceId === prev);
+        if (voice) {
+          cached.push({ figureId: fig.figureId, voiceId: prev, voiceName: voice.name, score: 100 });
+          continue;
+        }
       }
+      uncached.push(fig);
     }
-    uncached.push(fig);
+  } else {
+    uncached.push(...figures);
   }
 
   if (uncached.length === 0) return cached;
 
-  // Try AI-powered matching first
+  // Try AI-powered matching first — send ALL figures at once for holistic casting
   let aiAssignments = await matchWithClaude(uncached, voices);
 
   // Fall back to scoring if Claude didn't match all figures
@@ -405,7 +460,7 @@ export async function findVoiceForFigure(
   age?: 'young' | 'middle_aged' | 'old'
 ): Promise<{ voiceId: string; name: string } | null> {
   const results = await matchVoicesForFigures([{
-    figureId, gender, nationality, voicePersonality, age,
+    figureId, name: figureId, gender, nationality, voicePersonality, age,
   }]);
   if (results.length > 0) {
     return { voiceId: results[0].voiceId, name: results[0].voiceName };
