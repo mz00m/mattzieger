@@ -187,6 +187,10 @@ const FIGURE_VOICE_OVERRIDES: Record<string, VoiceOverride> = {
   'oprah-winfrey':       { voiceId: V_RACHEL,  stability: 0.20, similarity_boost: 0.70, style: 0.85 },
   'conan-obrien':        { voiceId: V_JOSH,    stability: 0.10, similarity_boost: 0.55, style: 0.95 },
   'keanu-reeves':        { voiceId: V_SAM,     stability: 0.45, similarity_boost: 0.55, style: 0.40 },
+  'roald-dahl':          { voiceId: V_ANTONI,  stability: 0.25, similarity_boost: 0.60, style: 0.80 },
+  'dr-seuss':            { voiceId: V_JOSH,    stability: 0.20, similarity_boost: 0.55, style: 0.85 },
+  'laura-ingalls-wilder': { voiceId: V_ELLI,   stability: 0.45, similarity_boost: 0.60, style: 0.45 },
+  'jon-stewart':         { voiceId: V_ARNOLD,  stability: 0.15, similarity_boost: 0.60, style: 0.90 },
 };
 
 // ---------------------------------------------------------------------------
@@ -255,6 +259,7 @@ const KNOWN_FEMALE_IDS = new Set([
   'harriet-beecher-stowe', 'sylvia-plath', 'mary-shelley', 'emily-dickinson',
   'ella-fitzgerald', 'wu-zetian', 'amelia-earhart',
   'michelle-obama', 'dolly-parton', 'oprah-winfrey',
+  'laura-ingalls-wilder',
 ]);
 
 // ---------------------------------------------------------------------------
