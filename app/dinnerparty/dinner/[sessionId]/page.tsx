@@ -328,6 +328,7 @@ export default function DinnerPage() {
             onVolumeChange={setVolume}
             currentExchangeIndex={currentExchangeIndex}
             onExchangeChange={setCurrentExchangeIndex}
+            onRoundComplete={() => generateRound('continue')}
           />
         )}
 

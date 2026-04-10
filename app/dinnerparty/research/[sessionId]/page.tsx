@@ -227,10 +227,18 @@ export default function ResearchPage() {
         }
         return {
           figureId: id,
+          name: figure?.name || id.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
           gender,
           nationality: figure?.nationality || 'American',
           voicePersonality: figure?.voicePersonality || '',
           age,
+          // Rich data for better voice matching
+          writingStyle: figure?.writingStyle || '',
+          knownFor: figure?.knownFor || [],
+          categories: figure?.category || [],
+          tagline: figure?.tagline || '',
+          born: figure?.born || '',
+          died: figure?.died || '',
         };
       });
 

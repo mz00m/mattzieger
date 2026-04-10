@@ -160,8 +160,12 @@ THE VIBE:
 This is a relaxed dinner party, not a TED talk. Think late evening, good wine, real talk.
 - People interrupt each other, laugh, go on tangents, tell quick stories
 - Someone might crack a joke, tease another guest, or change the subject
-- Short, punchy exchanges — like real conversation, not monologues
-- 1-2 sentences per turn is ideal. Occasionally 3 if someone's on a roll. NEVER more than 3.
+- MOST exchanges are short and punchy — 1-3 sentences, like real conversation
+- But occasionally someone tells a FULL STORY or JOKE — 4-8 sentences. This is key! At a real dinner party, someone holds the table with a great anecdote, a hilarious joke with a punchline, a wild personal story. Let this happen naturally every few rounds.
+- Comedians should actually tell JOKES — setups and punchlines, bits, callbacks. Not just be described as funny.
+- Writers and storytellers should tell actual ANECDOTES — "So there I was in..." or "Let me tell you about the time..."
+- Other guests react during stories: "[laughs]", "No way!", "And then what?", "Oh god."
+- After a longer story, the next few exchanges should be short reactions and riffs
 - Let people react to each other — "Wait, you actually believe that?" "Ha!" "That reminds me..."
 - Curiosity over performance. These people are genuinely interested in each other.
 - Disagreements should feel like friendly sparring, not formal debate

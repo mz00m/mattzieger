@@ -11,7 +11,7 @@ import { matchVoicesForFigures, type FigureVoiceRequest } from '@/lib/voiceDisco
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { figures } = body as { figures: FigureVoiceRequest[] };
+    const { figures, forceRematch } = body as { figures: FigureVoiceRequest[]; forceRematch?: boolean };
 
     if (!figures || !Array.isArray(figures) || figures.length === 0) {
       return NextResponse.json(
@@ -20,7 +20,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const assignments = await matchVoicesForFigures(figures);
+    // Always force re-match for fresh sessions to use improved matching
+    const assignments = await matchVoicesForFigures(figures, forceRematch ?? true);
 
     return NextResponse.json({
       assignments,
