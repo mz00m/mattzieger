@@ -6,6 +6,10 @@ const nextConfig = {
         source: '/nightsky',
         destination: '/nightsky/index.html',
       },
+      {
+        source: '/workforce',
+        destination: '/workforce/index.html',
+      },
     ];
   },
 };
