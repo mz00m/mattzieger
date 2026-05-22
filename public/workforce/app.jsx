@@ -64,6 +64,7 @@ function App() {
 
   /* ----- Tour state ----- */
   const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [fundingSheetOpen, setFundingSheetOpen] = React.useState(false);
   const [activeTour, setActiveTour] = React.useState(null);  // tour id
   const [tourStep, setTourStep] = React.useState(0);
   const [tourPlaying, setTourPlaying] = React.useState(true);
@@ -75,6 +76,9 @@ function App() {
   React.useEffect(() => { viewRef.current = view; }, [view]);
   const stageRef = React.useRef(null);
   const draggingRef = React.useRef(null);
+  const pointersRef = React.useRef(new Map());
+  const pinchRef = React.useRef(null);
+  const movedRef = React.useRef(false);
 
   // Animate transitions between district jumps
   const [vp, setVp] = React.useState({ w: window.innerWidth, h: window.innerHeight });
@@ -90,32 +94,72 @@ function App() {
   const vbx = view.cx - visW / 2;
   const vby = view.cy - visH / 2;
 
-  // Pan handlers
-  const onMouseDown = (e) => {
-    if (e.button !== 0) return;
-    if (e.target.closest('.detail-panel, .topbar, .zoom-controls, .district-jump, .tweaks-panel')) return;
-    draggingRef.current = { x: e.clientX, y: e.clientY, view };
-    stageRef.current.classList.add('dragging');
+  // Pan + pinch (pointer events: unified mouse / touch / pen)
+  const isChromeTarget = (target) => target.closest(
+    '.detail-panel, .topbar, .zoom-controls, .district-jump, .tweaks-panel, .mobile-bar, .mobile-sheet, .mobile-sheet-backdrop, .poster-titlestrip, .tour-controls, .tour-caption'
+  );
+  const onPointerDown = (e) => {
+    if (isChromeTarget(e.target)) return;
+    e.target.setPointerCapture?.(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    movedRef.current = false;
+    if (pointersRef.current.size === 1) {
+      draggingRef.current = { x: e.clientX, y: e.clientY, view: viewRef.current };
+      stageRef.current?.classList.add('dragging');
+      pinchRef.current = null;
+    } else if (pointersRef.current.size === 2) {
+      draggingRef.current = null;
+      movedRef.current = true; // any 2-finger gesture counts as movement
+      const pts = [...pointersRef.current.values()];
+      const midX = (pts[0].x + pts[1].x) / 2;
+      const midY = (pts[0].y + pts[1].y) / 2;
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const rect = stageRef.current.getBoundingClientRect();
+      const v = viewRef.current;
+      pinchRef.current = {
+        startDist: dist,
+        startScale: v.scale,
+        anchorX: v.cx + (midX - rect.left - rect.width / 2) / v.scale,
+        anchorY: v.cy + (midY - rect.top - rect.height / 2) / v.scale,
+      };
+    }
   };
-  const onMouseMove = (e) => {
-    const d = draggingRef.current;
-    if (!d) return;
-    const dx = (e.clientX - d.x) / d.view.scale;
-    const dy = (e.clientY - d.y) / d.view.scale;
-    setView(v => ({ ...d.view, cx: d.view.cx - dx, cy: d.view.cy - dy }));
+  const onPointerMove = (e) => {
+    if (!pointersRef.current.has(e.pointerId)) return;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size >= 2 && pinchRef.current) {
+      const pts = [...pointersRef.current.values()].slice(0, 2);
+      const midX = (pts[0].x + pts[1].x) / 2;
+      const midY = (pts[0].y + pts[1].y) / 2;
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const ratio = dist / pinchRef.current.startDist;
+      const newScale = Math.max(0.32, Math.min(2.4, pinchRef.current.startScale * ratio));
+      const rect = stageRef.current.getBoundingClientRect();
+      setView({
+        cx: pinchRef.current.anchorX - (midX - rect.left - rect.width / 2) / newScale,
+        cy: pinchRef.current.anchorY - (midY - rect.top - rect.height / 2) / newScale,
+        scale: newScale,
+      });
+    } else if (pointersRef.current.size === 1 && draggingRef.current) {
+      const d = draggingRef.current;
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) movedRef.current = true;
+      const dx = (e.clientX - d.x) / d.view.scale;
+      const dy = (e.clientY - d.y) / d.view.scale;
+      setView({ ...d.view, cx: d.view.cx - dx, cy: d.view.cy - dy });
+    }
   };
-  const onMouseUp = () => {
-    draggingRef.current = null;
-    if (stageRef.current) stageRef.current.classList.remove('dragging');
+  const onPointerUp = (e) => {
+    try { e.target.releasePointerCapture?.(e.pointerId); } catch (_) {}
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
+    if (pointersRef.current.size === 0) {
+      draggingRef.current = null;
+      stageRef.current?.classList.remove('dragging');
+    } else if (pointersRef.current.size === 1) {
+      const [remaining] = pointersRef.current.values();
+      draggingRef.current = { x: remaining.x, y: remaining.y, view: viewRef.current };
+    }
   };
-  React.useEffect(() => {
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-  }, []);
 
   // Wheel zoom
   const onWheel = (e) => {
@@ -288,9 +332,13 @@ function App() {
             <div
               className={'busytown-stage' + (activeTour ? ' tour-active' : '')}
               ref={stageRef}
-              onMouseDown={onMouseDown}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
               onWheel={onWheel}
-              onClick={() => { setSelected(null); }}
+              onClickCapture={(e) => { if (movedRef.current) { e.stopPropagation(); e.preventDefault(); } }}
+              onClick={() => { if (!movedRef.current) setSelected(null); }}
             >
               <svg
                 className="scene-svg"
@@ -405,6 +453,54 @@ function App() {
         <button onClick={() => zoom(0.8)}>−</button>
         <button className="jump" onClick={() => jumpTo('full')}>fit</button>
       </div>
+
+      {/* Mobile bottom action bar */}
+      {!selected && !activeTour && (
+        <div className="mobile-bar">
+          <div className="mobile-bar-row districts">
+            <button className="mb-pill" onClick={() => jumpTo('federal')}>Federal</button>
+            <button className="mb-pill" onClick={() => jumpTo('state')}>State</button>
+            <button className="mb-pill" onClick={() => jumpTo('local')}>Local</button>
+            <button className="mb-pill" onClick={() => jumpTo('full')}>All</button>
+          </div>
+          <div className="mobile-bar-row actions">
+            <button className="mb-action tour" onClick={() => setPickerOpen(true)}>
+              ▸ Guided tour
+            </button>
+            <button className="mb-action funding" onClick={() => setFundingSheetOpen(true)}>
+              ◆ Funding{selectedFlow ? ` · ${window.FLOWS[selectedFlow].label}` : ''}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile funding sheet */}
+      {fundingSheetOpen && (
+        <div className="mobile-sheet-backdrop" onClick={() => setFundingSheetOpen(false)}>
+          <div className="mobile-sheet" onClick={(ev) => ev.stopPropagation()}>
+            <div className="ms-handle" />
+            <div className="ms-title">Highlight a funding stream</div>
+            <div className="ms-flows">
+              <button
+                className={'flow-pill' + (!selectedFlow ? ' active' : '')}
+                onClick={() => { setSelectedFlow(null); setFundingSheetOpen(false); }}>
+                all streams
+              </button>
+              {FLOW_PILLS.map(p => {
+                const f = window.FLOWS[p.id];
+                return (
+                  <button key={p.id}
+                          className={'flow-pill' + (selectedFlow === p.id ? ' active' : '')}
+                          onClick={() => { setSelectedFlow(p.id); setFundingSheetOpen(false); }}>
+                    <span className="swatch" style={{ background: f.color }} />
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tweaks panel */}
       {window.TweaksPanel && (

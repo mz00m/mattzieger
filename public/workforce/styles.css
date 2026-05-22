@@ -1000,3 +1000,211 @@ body.tour-active .zoom-controls:hover { opacity: 1; }
   color: var(--ink);
   z-index: 200;
 }
+
+/* ============================================================
+   Mobile responsive layer
+   Pinch / pan / bottom-sheet behavior for phones & narrow tablets
+   ============================================================ */
+
+.mobile-bar { display: none; }
+.mobile-sheet-backdrop { display: none; }
+
+@media (max-width: 768px) {
+  /* Hand pan/zoom gestures to JS, not the browser */
+  .busytown-stage { touch-action: none; }
+
+  /* Tighten the poster frame so the map gets real estate */
+  .poster-shell { inset: 6px; padding: 3px; border-radius: 3px; }
+  .poster-mat   { padding: 2px; }
+  .poster-rule  { padding: 1px; }
+
+  /* Compress title cartouche, drop the subtitle */
+  .poster-titlestrip {
+    top: 8px;
+    padding: 5px 12px 6px;
+    gap: 6px;
+    max-width: calc(100vw - 24px);
+    box-shadow: 2px 2px 0 var(--ink);
+    border-width: 2px;
+  }
+  .poster-title { font-size: 14px; letter-spacing: 0.02em; }
+  .poster-sub   { display: none; }
+  .poster-title-ornament { font-size: 13px; }
+
+  /* Hide pure-decoration chrome on phones */
+  .poster-corner,
+  .poster-compass,
+  .poster-credit { display: none; }
+
+  /* Hide desktop-only chrome */
+  .topbar,
+  .district-jump,
+  .zoom-controls,
+  .tweaks-panel { display: none !important; }
+
+  /* Hover tooltip is desktop-only */
+  .hover-tooltip { display: none; }
+
+  /* ---- Mobile bottom action bar ---- */
+  .mobile-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    z-index: 50;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    box-shadow: 3px 3px 0 var(--ink);
+    padding: 6px 8px 8px;
+  }
+  .mobile-bar-row {
+    display: flex;
+    gap: 5px;
+    align-items: stretch;
+    width: 100%;
+  }
+  .mb-pill {
+    flex: 1;
+    font-family: 'Fraunces', serif;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 6px 4px 7px;
+    border: 1.5px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .mb-pill:active { background: var(--paper-shadow); }
+  .mb-action {
+    flex: 1;
+    font-family: 'Fraunces', serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 9px 8px 10px;
+    border: 2px solid var(--ink);
+    border-radius: 5px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mb-action.tour {
+    background: var(--ink);
+    color: var(--paper);
+    box-shadow: 2px 2px 0 var(--brown-deep);
+  }
+  .mb-action.funding {
+    background: var(--scarry-yellow);
+    color: var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  /* Hide the bar while a tour is running — tour-controls take over */
+  body.tour-active .mobile-bar { display: none; }
+
+  /* ---- Mobile funding sheet ---- */
+  .mobile-sheet-backdrop {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    background: rgba(31, 26, 20, 0.45);
+    z-index: 120;
+    align-items: flex-end;
+    animation: fadeIn 180ms ease;
+  }
+  .mobile-sheet {
+    width: 100%;
+    background: var(--paper);
+    border-top: 3px solid var(--ink);
+    border-radius: 16px 16px 0 0;
+    padding: 10px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    font-family: 'Fraunces', serif;
+    animation: msSlideUp 240ms ease;
+  }
+  @keyframes msSlideUp {
+    from { transform: translateY(40px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  .ms-handle {
+    width: 40px; height: 4px;
+    background: var(--ink-faint);
+    border-radius: 2px;
+    margin: 0 auto 10px;
+    opacity: 0.5;
+  }
+  .ms-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .ms-flows {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+  }
+  .ms-flows .flow-pill {
+    font-size: 13px;
+    padding: 6px 12px 7px;
+  }
+
+  /* ---- Detail panel becomes a bottom sheet ---- */
+  .detail-panel {
+    top: auto;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: 100vw;
+    height: auto;
+    max-height: 75vh;
+    border-left: none;
+    border-top: 3px solid var(--ink);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 20px rgba(31, 26, 20, 0.18);
+    animation: dpSlideUp 240ms ease;
+  }
+  @keyframes dpSlideUp {
+    from { transform: translateY(40px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  .detail-panel .panel-inner {
+    padding: 18px 18px calc(28px + env(safe-area-inset-bottom, 0px));
+  }
+  .detail-panel h2 { font-size: 22px; }
+
+  /* ---- Tour UI compressed for phone ---- */
+  .tour-picker {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 40px);
+    padding: 18px 16px;
+  }
+  .tour-picker h2 { font-size: 22px; }
+  .tour-grid { grid-template-columns: 1fr; }
+
+  .tour-caption {
+    bottom: 76px;
+    width: calc(100vw - 20px);
+    padding: 12px 14px 10px;
+  }
+  .tour-caption .cap-title { font-size: 14px; }
+  .tour-caption .cap-body  { font-size: 13.5px; min-height: 48px; }
+
+  .tour-controls {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    padding: 4px 6px;
+  }
+  .tour-controls button { font-size: 12px; padding: 5px 8px 6px; min-width: 32px; }
+  .tour-controls .play  { padding: 5px 12px 6px; }
+  .tour-controls .exit  { margin-left: 4px; }
+}
