@@ -4,7 +4,186 @@
    Employer district right, training row along the bottom.
    ============================================================ */
 
-function SceneLocal({ groundY, hoveredId, selectedId, dimmedSet, onPick, onHover, onLeave, showLabels, showExtras, jobSeekerStop }) {
+/* Grantee storefront. One small building per candidate org. Per-grantee
+   detail (a server rack, a compass, a chat bubble, etc.) tints the
+   identity while the body color + sign carry the brand. */
+function GranteeBuilding({ id, grantee, pos, selected, dimmed, onClick, onHover, onLeave }) {
+  const W = 140, H = 80;
+  const x = pos.x, y = pos.y;
+
+  // Each grantee gets a distinct facade detail.
+  const detail = (() => {
+    if (id === 'per-scholas') {
+      // Server-rack inset + a worker at a screen
+      return (
+        <g>
+          <CutawayWindow x={12} y={16} w={50} h={42}>
+            <g transform="translate(10 6)">
+              <rect x="0" y="0" width="14" height="30" fill="var(--paper-shadow)" stroke="var(--ink)" strokeWidth="1" />
+              <circle cx="3" cy="4" r="1" fill="#3acf3a" />
+              <circle cx="3" cy="9" r="1" fill="#3acf3a" />
+              <circle cx="3" cy="14" r="1" fill="#f5c93a" />
+              <circle cx="3" cy="19" r="1" fill="#3acf3a" />
+              <rect x="20" y="2" width="18" height="14" fill="#1f2933" stroke="var(--ink)" strokeWidth="1" />
+              <line x1="22" y1="6" x2="34" y2="6" stroke="#3acf3a" strokeWidth="0.8" />
+              <line x1="22" y1="9" x2="32" y2="9" stroke="#3acf3a" strokeWidth="0.8" />
+              <line x1="22" y1="12" x2="36" y2="12" stroke="#3acf3a" strokeWidth="0.8" />
+            </g>
+          </CutawayWindow>
+          <Win x={78} y={18} w={50} h={40} color="var(--sky)" />
+        </g>
+      );
+    }
+    if (id === 'soar') {
+      // Mountain silhouette window — Appalachian convener
+      return (
+        <g>
+          <CutawayWindow x={12} y={16} w={W - 24} h={42}>
+            {/* Sky behind mountains */}
+            <rect x="0" y="0" width={W - 24} height="42" fill="#e8d9c4" />
+            <polygon points="0,42 24,18 44,30 64,12 86,32 110,16 116,42"
+                     fill={grantee.accent} stroke="var(--ink)" strokeWidth="1.2" strokeLinejoin="round" />
+            <circle cx="78" cy="12" r="5" fill="var(--scarry-yellow)" stroke="var(--ink)" strokeWidth="1" />
+          </CutawayWindow>
+        </g>
+      );
+    }
+    if (id === 'skillup') {
+      // Compass / dashboard window — navigation layer
+      return (
+        <g>
+          <CutawayWindow x={12} y={16} w={50} h={42}>
+            <g transform="translate(25 21)">
+              <circle cx="0" cy="0" r="14" fill="var(--paper)" stroke="var(--ink)" strokeWidth="1.5" />
+              <polygon points="0,-10 3,0 0,10 -3,0" fill={grantee.color} stroke="var(--ink)" strokeWidth="1" />
+              <line x1="-12" y1="0" x2="-9" y2="0" stroke="var(--ink)" strokeWidth="1" />
+              <line x1="12"  y1="0" x2="9"  y2="0" stroke="var(--ink)" strokeWidth="1" />
+              <line x1="0"   y1="-12" x2="0"   y2="-9" stroke="var(--ink)" strokeWidth="1" />
+              <line x1="0"   y1="12"  x2="0"   y2="9" stroke="var(--ink)" strokeWidth="1" />
+            </g>
+          </CutawayWindow>
+          {/* Stack of mini cards = listings */}
+          <g transform="translate(78 22)">
+            <rect x="0" y="0" width="48" height="10" fill="var(--paper)" stroke="var(--ink)" strokeWidth="1" />
+            <rect x="0" y="14" width="48" height="10" fill="var(--paper)" stroke="var(--ink)" strokeWidth="1" />
+            <rect x="0" y="28" width="48" height="10" fill="var(--paper)" stroke="var(--ink)" strokeWidth="1" />
+            <line x1="3" y1="5" x2="30" y2="5" stroke="var(--ink)" strokeWidth="0.7" />
+            <line x1="3" y1="19" x2="38" y2="19" stroke="var(--ink)" strokeWidth="0.7" />
+            <line x1="3" y1="33" x2="26" y2="33" stroke="var(--ink)" strokeWidth="0.7" />
+          </g>
+        </g>
+      );
+    }
+    if (id === 'empower-work') {
+      // Big chat bubble + a peer counselor character
+      return (
+        <g>
+          <CutawayWindow x={12} y={16} w={W - 24} h={42}>
+            {/* Counselor character */}
+            <g transform="translate(22 32)">
+              <Character species="cat" costume={grantee.color} fur="var(--tan)" size={0.55} prop="phone" />
+            </g>
+            {/* Chat bubble */}
+            <g transform="translate(54 8)">
+              <rect x="0" y="0" width="56" height="22" rx="5" fill="var(--paper)" stroke="var(--ink)" strokeWidth="1.4" />
+              <polygon points="6,22 10,28 14,22" fill="var(--paper)" stroke="var(--ink)" strokeWidth="1.4" />
+              <line x1="6" y1="8" x2="48" y2="8" stroke={grantee.color} strokeWidth="1.5" />
+              <line x1="6" y1="14" x2="40" y2="14" stroke="var(--ink-soft, #5a5040)" strokeWidth="1" opacity="0.5" />
+            </g>
+          </CutawayWindow>
+        </g>
+      );
+    }
+    return null;
+  })();
+
+  return (
+    <g
+      className={'building-group clickable grantee-building' +
+        (selected ? ' is-selected' : '') +
+        (dimmed ? ' dim' : '')}
+      transform={`translate(${x} ${y})`}
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      onClick={onClick}
+    >
+      {/* hover ring */}
+      <rect x={-4} y={-34} width={W + 8} height={H + 38} rx="6" className="hover-ring" />
+
+      {/* Awning / canopy roof — slightly different per grantee */}
+      <polygon points={`-6,0 ${W / 2},-24 ${W + 6},0`}
+               fill={grantee.color} stroke="var(--ink)" strokeWidth="2.5" strokeLinejoin="round" />
+      {/* Tiny pennant flag on top */}
+      <line x1={W / 2} y1="-24" x2={W / 2} y2="-38" stroke="var(--ink)" strokeWidth="1.5" />
+      <polygon points={`${W / 2},-38 ${W / 2 + 14},-34 ${W / 2},-30`}
+               fill={grantee.accent} stroke="var(--ink)" strokeWidth="1.2" />
+
+      {/* Body */}
+      <rect x="-1.5" y="2" width={W} height={H} fill={grantee.color}
+            className="building-body grantee-body" opacity="0.95" />
+      <rect x="0" y="0" width={W} height={H} fill="none"
+            stroke="var(--ink)" strokeWidth="2.5" strokeLinejoin="round"
+            className="grantee-outline" />
+
+      {/* Foundation */}
+      <rect x="-4" y={H - 2} width={W + 8} height="8" fill="var(--brown)"
+            stroke="var(--ink)" strokeWidth="1.5" />
+
+      {/* Per-grantee facade detail */}
+      {detail}
+
+      {/* Door */}
+      <Door x={W / 2 - 9} y={H - 28} w={18} h={28} color={grantee.accent} />
+
+      {/* OFF badge (visible only when off, hidden via CSS when on) */}
+      <g className="grantee-off-badge" style={{ pointerEvents: 'none' }}>
+        <rect x={W - 44} y={-22} width="44" height="18" rx="3"
+              fill="var(--ink)" opacity="0.85" />
+        <text x={W - 22} y={-9} textAnchor="middle"
+              style={{
+                fontFamily: 'Fraunces, serif', fontSize: 10, fontWeight: 700,
+                fill: 'var(--paper)', letterSpacing: '0.08em', textTransform: 'uppercase',
+              }}>OFF</text>
+      </g>
+
+      {/* Sign — the grantee label */}
+      <g style={{ pointerEvents: 'none' }}>
+        {(() => {
+          const signW = Math.min(132, W + 16);
+          const halfW = signW / 2;
+          const cx = W / 2;
+          return (
+            <>
+              <line x1={cx - Math.min(36, halfW - 4)} y1="0" x2={cx - Math.min(36, halfW - 4)} y2="8"
+                    stroke="var(--ink)" strokeWidth="1.2" />
+              <line x1={cx + Math.min(36, halfW - 4)} y1="0" x2={cx + Math.min(36, halfW - 4)} y2="8"
+                    stroke="var(--ink)" strokeWidth="1.2" />
+              <rect x={cx - halfW} y="10" width={signW} height="22" rx="2"
+                    fill="var(--ink)" opacity="0.18" />
+              <rect x={cx - halfW} y="8" width={signW} height="22" rx="2"
+                    fill="var(--paper)" stroke="var(--ink)" strokeWidth="1.6" />
+              <text x={cx} y="24" textAnchor="middle"
+                    style={{
+                      fontFamily: 'Fraunces, serif',
+                      fontSize: 10.5, fontWeight: 700,
+                      fill: grantee.accent,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                    }}>
+                {grantee.label}
+              </text>
+            </>
+          );
+        })()}
+      </g>
+
+      {/* hit area */}
+      <rect className="hit-area" x={-8} y={-40} width={W + 16} height={H + 50} />
+    </g>
+  );
+}
+
+function SceneLocal({ groundY, hoveredId, selectedId, dimmedSet, onPick, onHover, onLeave, showLabels, showExtras, jobSeekerStop, grantees = {} }) {
   const isDim = (id) => dimmedSet && !dimmedSet.has(id);
   const isSel = (id) => selectedId === id;
   const ev   = (id) => ({
@@ -750,6 +929,29 @@ function SceneLocal({ groundY, hoveredId, selectedId, dimmedSet, onPick, onHover
           <Mailbox x={3170} y={groundY + 88} />
         </g>
       )}
+
+      {/* ============== GRANTEE ROW (candidate orgs, toggle on/off) ============== */}
+      {/* Each renders with .grantee-off if not in grantees-on map; styles desaturate
+         and dash the outline. .grantee-on adds a soft glow. */}
+      <g id="grantee-row">
+        {window.GRANTEES && Object.values(window.GRANTEES).map(g => {
+          const e = window.ENTITIES[g.id];
+          if (!e) return null;
+          const on = !!grantees[g.id];
+          return (
+            <g key={g.id}
+               className={'grantee-wrap ' + (on ? 'grantee-on' : 'grantee-off')}>
+              <GranteeBuilding
+                id={g.id}
+                grantee={g}
+                pos={e.pos}
+                selected={isSel(g.id)}
+                dimmed={isDim(g.id)}
+                {...ev(g.id)} />
+            </g>
+          );
+        })}
+      </g>
 
       {/* Narrative */}
       <g style={{ pointerEvents: 'none' }}>

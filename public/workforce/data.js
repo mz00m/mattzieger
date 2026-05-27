@@ -15,6 +15,7 @@ window.LEVELS = {
   employer:  { label: 'employer',  color: 'var(--scarry-yellow)', chip: 'level-employer' },
   funder:    { label: 'funder',    color: 'var(--scarry-purple)', chip: 'level-funder' },
   people:    { label: 'people',    color: 'var(--brown)',         chip: 'level-people' },
+  grantee:   { label: 'grantee',   color: 'var(--grantee-teal,#2a8a8a)', chip: 'level-grantee' },
 };
 
 /* ===================== Funding flows =====================
@@ -681,6 +682,149 @@ window.ENTITIES = {
     contested: 'WIOA performance metrics reward placing workers most likely to succeed quickly. Workers furthest from the labor market are the hardest — and most important — to serve. This tension is structural.',
     connects: ['ajc', 'community-college', 'employer-mfg'],
     pos: { x: 2820, y: 940 },
+  },
+
+  /* ---------- GRANTEE ROW (x 2300 – 3300, lower band, y ~1000)
+     Four GitLab Foundation–adjacent grantees. Toggled on/off from
+     the Tweaks panel; render greyed-out by default. When on, they
+     activate detours in persona tours and contribute outcome deltas.
+     ---------- */
+
+  'per-scholas': {
+    label: 'Per Scholas',
+    longName: 'Per Scholas',
+    acronym: '',
+    level: 'grantee',
+    grantee: true,
+    scarry: 'the tech-training campus next to the community college',
+    role: 'Sectoral tech-training nonprofit. WIOA-eligible (Individual Training Account-funded) in many states, also funded by employers and philanthropy. Trains adults for IT, cybersecurity, software, AWS, network engineering.',
+    narr: 'Per Scholas runs no-cost tech training cohorts. Two MDRC RCTs (n=1,143) found ~15% earnings gains over 2 and 10-year follow-ups.',
+    facts: [
+      ['Cities', '25+ U.S. metros'],
+      ['Evidence', 'MDRC RCT, 10-year follow-up'],
+      ['ROI', '$8 economic benefit per $1'],
+    ],
+    connects: ['ajc', 'community-college', 'employer-mfg', 'employer-hosp'],
+    pos: { x: 2440, y: 1010 },
+  },
+
+  'soar': {
+    label: 'SOAR',
+    longName: 'Shaping Our Appalachian Region',
+    acronym: 'SOAR',
+    level: 'grantee',
+    grantee: true,
+    scarry: 'the regional headquarters by the highway',
+    role: 'Regional economic-development convener for 54 Appalachian counties in Eastern Kentucky. EDA Recompete grantee. Fused with EKCEP (the local WIOA board).',
+    narr: 'SOAR doesn\'t deliver workforce services directly — it convenes the partners (EKCEP, KCTCS, eKAMI) that do.',
+    facts: [
+      ['Counties', '54 Appalachian KY'],
+      ['EDA Recompete', '$40M implementation grant'],
+      ['Anchor partner', 'EKCEP (WIOA board)'],
+    ],
+    connects: ['lwdb', 'state-agency', 'apprenticeship', 'community-college'],
+    pos: { x: 2640, y: 1010 },
+  },
+
+  'skillup': {
+    label: 'SkillUp',
+    longName: 'SkillUp Coalition',
+    acronym: '',
+    level: 'grantee',
+    grantee: true,
+    scarry: 'the navigation kiosk above the jobs office',
+    role: 'National consumer-facing digital platform. Sits above the system: helps job seekers discover training (ETPL providers, bootcamps, apprenticeships) and jobs. Not a WIOA grantee itself.',
+    narr: 'The navigation layer the American Job Center has never quite delivered on. 4.8M+ workers reached.',
+    facts: [
+      ['Workers reached', '4.8M+ (self-reported)'],
+      ['Job attainers', '277K+'],
+      ['Wages added', '$17.8B+'],
+    ],
+    connects: ['ajc', 'community-college', 'apprenticeship', 'employer-mfg', 'employer-hosp'],
+    pos: { x: 2840, y: 1010 },
+  },
+
+  'empower-work': {
+    label: 'Empower Work',
+    longName: 'Empower Work',
+    acronym: '',
+    level: 'grantee',
+    grantee: true,
+    scarry: 'the help line storefront on the corner',
+    role: 'Text-based peer counseling for workers in distress at work. Outside the formal workforce system. Provides emotional and navigational support BEFORE someone becomes a "dislocated worker."',
+    narr: '92% of workers supported report improved wellbeing. Partners with Per Scholas, SkillUp, NPower, Year Up for text-based wraparound coaching.',
+    facts: [
+      ['Modality', 'text-based peer counseling'],
+      ['Wellbeing improved', '92% self-reported'],
+      ['Collab', 'wraparound for workforce alumni'],
+    ],
+    connects: ['ajc', 'cbo', 'per-scholas', 'skillup'],
+    pos: { x: 3040, y: 1010 },
+  },
+};
+
+/* ===================== Grantees =====================
+   Four candidate GitLab Foundation grantees. Toggling one on
+   (a) lights up its building, (b) adds detour steps to the
+   persona tours listed under personas, (c) shows an outcome
+   delta card at the end of those tours.
+   ===================================================== */
+window.GRANTEES = {
+  'per-scholas': {
+    id: 'per-scholas',
+    label: 'Per Scholas',
+    color: '#2a8a8a',
+    accent: '#1e6363',
+    tweakKey: 'perScholas',
+    blurb: 'Sectoral tech training nonprofit. WIOA-eligible in many states.',
+    personas: ['machinist', 'returnee'],
+    outcome: {
+      baseline: { label: 'Without Per Scholas', value: '~$32K/yr', detail: 'Welding refresher → re-placement at same wage band.' },
+      enhanced: { label: 'With Per Scholas', value: '~$47K/yr', detail: 'Tech retraining → IT support / network role. +15% earnings, MDRC 10-yr RCT.' },
+      citation: 'MDRC WorkAdvance evaluation, n=1,143',
+    },
+  },
+  'soar': {
+    id: 'soar',
+    label: 'SOAR',
+    color: '#7a5cb3',
+    accent: '#574089',
+    tweakKey: 'soar',
+    blurb: 'Regional convener for Eastern Kentucky. Co-runs programs with EKCEP.',
+    personas: ['machinist', 'young-apprentice'],
+    outcome: {
+      baseline: { label: 'Without SOAR', value: 'Local labor market only', detail: 'Re-placement limited to in-county employers.' },
+      enhanced: { label: 'With SOAR', value: 'Regional + remote pipeline', detail: 'eKY Remote Worker Network: $11M community impact, eKAMI advanced-manufacturing placements.' },
+      citation: 'SOAR program reports + EDA Recompete grant',
+    },
+  },
+  'skillup': {
+    id: 'skillup',
+    label: 'SkillUp',
+    color: '#d9622c',
+    accent: '#b14a1c',
+    tweakKey: 'skillup',
+    blurb: 'National digital navigation layer. Surfaces training + jobs.',
+    personas: ['machinist', 'returning-mom', 'young-apprentice', 'veteran', 'vr-client', 'returnee'],
+    outcome: {
+      baseline: { label: 'Without SkillUp', value: 'AJC referral only', detail: 'Worker depends on what their AJC counselor knows about local options.' },
+      enhanced: { label: 'With SkillUp', value: 'Personalized match', detail: 'Algorithm surfaces ETPL programs, employer partners, and apprenticeships nationwide.' },
+      citation: 'SkillUp self-reported, 2020–2026',
+    },
+  },
+  'empower-work': {
+    id: 'empower-work',
+    label: 'Empower Work',
+    color: '#cc4677',
+    accent: '#962f55',
+    tweakKey: 'empowerWork',
+    blurb: 'Text-based peer counseling for workers in distress.',
+    personas: ['returning-mom', 'machinist'],
+    outcome: {
+      baseline: { label: 'Without Empower Work', value: 'Crisis → exit', detail: 'Worker stress at training or job often ends in dropout.' },
+      enhanced: { label: 'With Empower Work', value: 'Crisis → stay', detail: 'Text-based peer support at the hard moments. 92% report improved wellbeing.' },
+      citation: 'Empower Work program data',
+    },
   },
 };
 

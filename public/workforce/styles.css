@@ -315,6 +315,130 @@ html, body {
 .dim { opacity: 0.3; transition: opacity 200ms ease; }
 .flow-highlight { transition: opacity 200ms ease; }
 
+/* ===================== Grantee buildings =====================
+   Off  → desaturated + dashed outline + "OFF" badge visible.
+   On   → full color + soft glow + badge hidden.
+   Transition is animated so flipping the toggle has weight. */
+.grantee-wrap { transition: filter 350ms ease, opacity 350ms ease; }
+.grantee-off  { filter: saturate(0.08) brightness(1.05); opacity: 0.65; }
+.grantee-on   { filter: drop-shadow(0 0 6px rgba(255, 215, 120, 0.55)); }
+
+.grantee-off .grantee-outline {
+  stroke-dasharray: 6 4;
+  stroke-opacity: 0.65;
+}
+.grantee-on .grantee-outline {
+  stroke-dasharray: none;
+}
+
+.grantee-off .grantee-off-badge { opacity: 1; transition: opacity 250ms ease; }
+.grantee-on  .grantee-off-badge { opacity: 0; transition: opacity 250ms ease; }
+
+/* When a grantee is ON, gently pulse the awning to draw the eye */
+@keyframes granteePulse {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-1.5px); }
+}
+.grantee-on .building-group,
+.grantee-on > g { /* harmless if browser doesn't support, no layout break */ }
+
+/* ===== Public-facing grantee toggle panel (top-right) =====
+   Visible to all users — flips grantees on/off in the map and tours. */
+.grantee-toggle-panel {
+  position: fixed;
+  top: 96px;
+  right: 38px;
+  z-index: 50;
+  width: 280px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 3px 3px 0 var(--ink);
+  padding: 10px 12px 12px;
+  pointer-events: auto;
+  transition: transform 200ms ease, opacity 200ms ease;
+}
+body.tour-active .grantee-toggle-panel { opacity: 0.55; }
+body.tour-active .grantee-toggle-panel:hover { opacity: 1; }
+
+.grantee-toggle-panel .gp-title {
+  font-family: 'Fraunces', serif;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  margin: 0 0 2px 0;
+}
+.grantee-toggle-panel .gp-sub {
+  font-family: 'Fraunces', serif;
+  font-size: 11px;
+  color: var(--ink-soft, #5a5040);
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+.grantee-toggle-panel .gp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+}
+.grantee-toggle-panel .gp-row:first-of-type { border-top: none; }
+.grantee-toggle-panel .gp-row:hover { background: rgba(0, 0, 0, 0.03); }
+
+.grantee-toggle-panel .gp-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1.5px solid var(--ink);
+  flex-shrink: 0;
+  transition: filter 200ms ease;
+}
+.grantee-toggle-panel .gp-row.off .gp-swatch { filter: saturate(0.1) brightness(1.1); }
+
+.grantee-toggle-panel .gp-name {
+  font-family: 'Fraunces', serif;
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+  color: var(--ink);
+}
+.grantee-toggle-panel .gp-row.off .gp-name { color: var(--ink-soft, #7a6e58); }
+
+.grantee-toggle-panel .gp-blurb {
+  font-family: 'Fraunces', serif;
+  font-size: 10.5px;
+  color: var(--ink-soft, #5a5040);
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+/* Switch */
+.gp-switch {
+  position: relative;
+  width: 30px;
+  height: 16px;
+  background: #c8b9a3;
+  border: 1.5px solid var(--ink);
+  border-radius: 9px;
+  flex-shrink: 0;
+  transition: background 250ms ease;
+}
+.gp-switch::after {
+  content: "";
+  position: absolute;
+  top: 1px; left: 1px;
+  width: 11px; height: 11px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 50%;
+  transition: transform 250ms ease;
+}
+.gp-row.on .gp-switch { background: var(--scarry-green, #4b8e4b); }
+.gp-row.on .gp-switch::after { transform: translateX(13px); }
+
 /* ===================== Chrome ===================== */
 
 .topbar {
@@ -550,6 +674,7 @@ html, body {
 .level-education { background: var(--scarry-pink); color: var(--ink); }
 .level-funder { background: var(--scarry-purple); color: var(--paper); }
 .level-people { background: var(--brown); color: var(--paper); }
+.level-grantee { background: #2a8a8a; color: var(--paper); }
 
 .detail-panel .section-label {
   font-family: 'Fraunces', serif;
@@ -777,6 +902,95 @@ html, body {
   color: var(--ink-faint);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+/* ----- Outcome delta card (shown when a grantee ghost path is active) ----- */
+.outcome-card {
+  position: fixed;
+  bottom: 232px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, calc(100vw - 100px));
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  box-shadow: 3px 3px 0 var(--ink);
+  z-index: 89;
+  padding: 10px 14px 12px;
+  font-family: 'Fraunces', serif;
+  animation: tourCapIn 280ms ease;
+}
+.outcome-card .oc-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft, #5a5040);
+  margin-bottom: 6px;
+}
+.outcome-card .oc-row {
+  display: grid;
+  grid-template-columns: 14px auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 2px;
+  align-items: center;
+  padding: 4px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.outcome-card .oc-row:first-of-type { border-top: none; }
+.outcome-card .oc-pip {
+  width: 12px; height: 12px; border-radius: 3px;
+  border: 1.5px solid var(--ink);
+  grid-row: 1 / span 2;
+}
+.outcome-card .oc-grantee {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  grid-column: 2;
+  grid-row: 1;
+}
+.outcome-card .oc-deltas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+}
+.outcome-card .oc-base, .outcome-card .oc-enh {
+  font-size: 11px;
+  text-align: right;
+  line-height: 1.2;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.outcome-card .oc-base { color: var(--ink-soft, #5a5040); }
+.outcome-card .oc-enh {
+  border: 1.5px solid var(--ink);
+  background: rgba(255, 255, 220, 0.55);
+}
+.outcome-card .oc-label {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+.outcome-card .oc-value {
+  font-weight: 700;
+  font-size: 12px;
+}
+.outcome-card .oc-arrow {
+  color: var(--ink);
+  font-weight: 700;
+}
+.outcome-card .oc-citation {
+  grid-column: 2 / span 2;
+  grid-row: 2;
+  font-size: 10.5px;
+  color: var(--ink-soft, #5a5040);
+  font-style: italic;
 }
 
 /* ----- Tour caption box (bottom) ----- */

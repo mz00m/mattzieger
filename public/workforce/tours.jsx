@@ -68,6 +68,42 @@ window.TOURS = {
         duration: 8000,
       },
     ],
+    /* Ghost paths — alternate routes for Carl when a grantee is on. */
+    ghosts: {
+      'per-scholas': {
+        // AJC → Per Scholas tech retraining → placed at hospital IT.
+        stepOverrides: {
+          3: { from: { x: 2810, y: 700 }, to: { x: 2440, y: 1010 } },
+          4: { from: { x: 2440, y: 1010 }, to: { x: 2440, y: 1010 } },
+          5: { from: { x: 2440, y: 1010 }, to: { x: 3385, y: 700 } },
+        },
+      },
+      'soar': {
+        // SOAR convenes EKCEP + eKAMI; Carl trains in advanced manufacturing
+        // and lands a regional placement at the distribution center.
+        stepOverrides: {
+          3: { from: { x: 2810, y: 700 }, to: { x: 2640, y: 1010 } },
+          4: { from: { x: 2640, y: 1010 }, to: { x: 2780, y: 940 } },
+          5: { from: { x: 2780, y: 940 }, to: { x: 3580, y: 700 } },
+        },
+      },
+      'skillup': {
+        // After the layoff, Carl finds SkillUp first — algorithmic match
+        // surfaces the right training and employer, faster.
+        stepOverrides: {
+          1: { from: { x: 3220, y: 700 }, to: { x: 2840, y: 1010 } },
+          2: { from: { x: 2840, y: 1010 }, to: { x: 2810, y: 700 } },
+        },
+      },
+      'empower-work': {
+        // Crisis at layoff. Empower Work catches Carl emotionally and
+        // helps him walk into the AJC instead of disengaging.
+        stepOverrides: {
+          1: { from: { x: 3220, y: 700 }, to: { x: 3040, y: 1010 } },
+          2: { from: { x: 3040, y: 1010 }, to: { x: 2810, y: 700 } },
+        },
+      },
+    },
   },
 
   'returning-mom': {
@@ -118,6 +154,24 @@ window.TOURS = {
         duration: 8000,
       },
     ],
+    ghosts: {
+      'skillup': {
+        // Maya finds SkillUp first; it surfaces a faster path than the
+        // CBO-mediated TANF "work activities" pipeline.
+        stepOverrides: {
+          1: { from: { x: 2140, y: 800 }, to: { x: 2840, y: 1010 } },
+          2: { from: { x: 2840, y: 1010 }, to: { x: 2820, y: 700 } },
+        },
+      },
+      'empower-work': {
+        // Overwhelmed by the "work activities" requirement; Empower Work
+        // peer counselor keeps Maya engaged through the CBO/AJC handoff.
+        stepOverrides: {
+          1: { from: { x: 2140, y: 800 }, to: { x: 3040, y: 1010 } },
+          2: { from: { x: 3040, y: 1010 }, to: { x: 2820, y: 700 } },
+        },
+      },
+    },
   },
 
   'young-apprentice': {
@@ -168,6 +222,25 @@ window.TOURS = {
         duration: 7500,
       },
     ],
+    ghosts: {
+      'soar': {
+        // SOAR routes Pip through eKAMI (advanced manufacturing) — a
+        // Lockheed-Martin-aligned pipeline that exists only because the
+        // regional convener exists.
+        stepOverrides: {
+          1: { from: { x: 2445, y: 940 }, to: { x: 2640, y: 1010 } },
+          2: { from: { x: 2640, y: 1010 }, to: { x: 2780, y: 940 } },
+        },
+      },
+      'skillup': {
+        // SkillUp surfaces apprenticeship matches and bypasses the union-
+        // hall sign-in as the first step in the journey.
+        stepOverrides: {
+          1: { from: { x: 2445, y: 940 }, to: { x: 2840, y: 1010 } },
+          2: { from: { x: 2840, y: 1010 }, to: { x: 2780, y: 940 } },
+        },
+      },
+    },
   },
 
   'veteran': {
@@ -218,6 +291,16 @@ window.TOURS = {
         duration: 7500,
       },
     ],
+    ghosts: {
+      'skillup': {
+        // SkillUp's veteran-aware filters surface Helmets-to-Hardhats and
+        // GI Bill-stackable apprenticeships before the DVOP would.
+        stepOverrides: {
+          1: { from: { x: 2830, y: 700 }, to: { x: 2840, y: 1010 } },
+          2: { from: { x: 2840, y: 1010 }, to: { x: 3500, y: 720 } },
+        },
+      },
+    },
   },
 
   'vr-client': {
@@ -268,6 +351,17 @@ window.TOURS = {
         duration: 7500,
       },
     ],
+    ghosts: {
+      'skillup': {
+        // SkillUp's accessibility-aware filters surface coding programs
+        // with assistive-tech support before Iris and her counselor sketch
+        // the IPE in full.
+        stepOverrides: {
+          1: { from: { x: 2930, y: 900 }, to: { x: 2840, y: 1010 } },
+          2: { from: { x: 2840, y: 1010 }, to: { x: 2605, y: 900 } },
+        },
+      },
+    },
   },
 
   'returnee': {
@@ -318,6 +412,25 @@ window.TOURS = {
         duration: 7000,
       },
     ],
+    ghosts: {
+      'per-scholas': {
+        // Per Scholas's open enrollment + bonded-employer pipeline lets
+        // Rex route into IT support at the distribution center instead
+        // of CDL driving.
+        stepOverrides: {
+          2: { from: { x: 2830, y: 700 }, to: { x: 2440, y: 1010 } },
+          3: { from: { x: 2440, y: 1010 }, to: { x: 3580, y: 700 } },
+        },
+      },
+      'skillup': {
+        // SkillUp surfaces fair-chance employers and routes Rex to the
+        // AJC with a target employer already lined up.
+        stepOverrides: {
+          1: { from: { x: 3070, y: 900 }, to: { x: 2840, y: 1010 } },
+          2: { from: { x: 2840, y: 1010 }, to: { x: 2830, y: 700 } },
+        },
+      },
+    },
   },
 
   /* ------------------ FUNDING FLOWS ------------------ */
@@ -602,9 +715,32 @@ window.TOUR_ORDER = [
    TourLayer — renders the focal sprite for the active tour.
    Position is interpolated from step.from → step.to over the
    first ~70% of step.duration; then the sprite holds at .to.
+
+   When a grantee toggle is on AND this tour has a matching
+   ghost path in tour.ghosts[granteeId], a second sprite walks
+   the alternate route in parallel, tinted with the grantee
+   color. Multiple ghosts can run concurrently.
    ============================================================ */
 
-function TourLayer({ tour, step, progress, focusSet }) {
+// Helper: get the (from, to) for a tour step, optionally remapped by a
+// grantee's ghost stepOverrides. If no override exists for this step, the
+// ghost walks the baseline path.
+function resolveStepRoute(tour, stepIdx, granteeId) {
+  const base = tour.steps[stepIdx];
+  if (!base) return null;
+  if (!granteeId || !tour.ghosts || !tour.ghosts[granteeId]) {
+    return { from: base.from, to: base.to };
+  }
+  const override = tour.ghosts[granteeId].stepOverrides
+    && tour.ghosts[granteeId].stepOverrides[stepIdx];
+  if (!override) return { from: base.from, to: base.to };
+  return {
+    from: override.from || base.from,
+    to:   override.to   || base.to,
+  };
+}
+
+function TourLayer({ tour, step, progress, focusSet, grantees }) {
   if (!tour) return null;
   const s = tour.steps[step];
   if (!s) return null;
@@ -615,6 +751,12 @@ function TourLayer({ tour, step, progress, focusSet }) {
     ? 2 * mt * mt
     : 1 - Math.pow(-2 * mt + 2, 2) / 2;
 
+  // Active ghosts for this tour: any grantee that has a path defined here AND is toggled on.
+  const activeGhosts = (tour.ghosts && grantees)
+    ? Object.keys(tour.ghosts).filter(gid => grantees[gid])
+    : [];
+
+  // Baseline sprite position
   const x = s.from.x + (s.to.x - s.from.x) * eased;
   const y = s.from.y + (s.to.y - s.from.y) * eased;
   const dx = s.to.x - s.from.x;
@@ -639,7 +781,66 @@ function TourLayer({ tour, step, progress, focusSet }) {
         );
       })}
 
-      {/* Focal sprite */}
+      {/* Ghost sprites — one per active grantee, walking alternate paths */}
+      {activeGhosts.map((gid, i) => {
+        const route = resolveStepRoute(tour, step, gid);
+        if (!route) return null;
+        const grantee = window.GRANTEES && window.GRANTEES[gid];
+        const gx = route.from.x + (route.to.x - route.from.x) * eased;
+        const gy = route.from.y + (route.to.y - route.from.y) * eased;
+        const gdx = route.to.x - route.from.x;
+        const gmirror = gdx < 0;
+        const gmoving = Math.abs(gdx) > 4 || Math.abs(route.to.y - route.from.y) > 4;
+        // Stagger ghosts side-by-side to reduce overlap when paths are identical
+        const sideOffset = (i + 1) * 26;
+        return (
+          <g key={gid}
+             className="tour-ghost"
+             transform={`translate(${gx + sideOffset} ${gy})`}
+             style={{ opacity: 0.78 }}>
+            {/* Grantee-colored pulse ring */}
+            <circle cx="0" cy={tour.sprite.kind === 'vehicle' ? 0 : -12} r="40"
+                    fill={grantee ? grantee.color : tour.color} opacity="0.18">
+              <animate attributeName="r" values="32;44;32" dur="2.4s" repeatCount="indefinite" />
+            </circle>
+            <circle cx="0" cy={tour.sprite.kind === 'vehicle' ? 0 : -12} r="34"
+                    fill="none"
+                    stroke={grantee ? grantee.color : tour.color} strokeWidth="2.2"
+                    strokeDasharray="3 3" opacity="0.85" />
+            {/* Ghosted character — same species/costume, but tinted with the grantee accent */}
+            {tour.sprite.kind === 'character' && (
+              <g style={{ filter: 'opacity(0.85)' }}>
+                <Character
+                  species={tour.sprite.species}
+                  costume={grantee ? grantee.color : tour.sprite.costume}
+                  fur={tour.sprite.fur}
+                  hat={tour.sprite.hat || 'none'}
+                  prop={tour.sprite.prop || null}
+                  size={(tour.sprite.size || 1) * 0.95}
+                  walking={gmoving && mt < 1}
+                  mirror={gmirror}
+                />
+              </g>
+            )}
+            {/* Grantee label tag floating above ghost */}
+            {grantee && (
+              <g transform="translate(0 -56)" style={{ pointerEvents: 'none' }}>
+                <rect x="-44" y="-9" width="88" height="18" rx="3"
+                      fill={grantee.color} stroke="var(--ink)" strokeWidth="1.2" />
+                <text x="0" y="4" textAnchor="middle"
+                      style={{
+                        fontFamily: 'Fraunces, serif', fontSize: 10, fontWeight: 700,
+                        fill: 'var(--paper)', letterSpacing: '0.04em', textTransform: 'uppercase',
+                      }}>
+                  {grantee.label}
+                </text>
+              </g>
+            )}
+          </g>
+        );
+      })}
+
+      {/* Focal sprite (baseline) */}
       <g transform={`translate(${x} ${y})`}>
         {/* Pulse ring */}
         <circle cx="0" cy={tour.sprite.kind === 'vehicle' ? 0 : -12} r="42"

@@ -30,12 +30,25 @@ function App() {
   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
     "showLabels": true,
     "showExtras": true,
-    "animateVehicles": true
+    "animateVehicles": true,
+    "granteePerScholas": false,
+    "granteeSoar": false,
+    "granteeSkillup": false,
+    "granteeEmpowerWork": false
   }/*EDITMODE-END*/;
 
   const [tweaks, setTweak] = window.useTweaks
     ? window.useTweaks(TWEAK_DEFAULTS)
     : [TWEAK_DEFAULTS, () => {}];
+
+  // Grouped grantee toggle state. Keyed by entity id so scenes/tours can
+  // ask `grantees['per-scholas']` etc.
+  const grantees = React.useMemo(() => ({
+    'per-scholas':  !!tweaks.granteePerScholas,
+    'soar':         !!tweaks.granteeSoar,
+    'skillup':      !!tweaks.granteeSkillup,
+    'empower-work': !!tweaks.granteeEmpowerWork,
+  }), [tweaks.granteePerScholas, tweaks.granteeSoar, tweaks.granteeSkillup, tweaks.granteeEmpowerWork]);
 
   const [selected, setSelected] = React.useState(null);
   const [selectedFlow, setSelectedFlow] = React.useState(null);
@@ -371,7 +384,8 @@ function App() {
                               onHover={setHoveredId}
                               onLeave={() => setHoveredId(null)}
                               showLabels={tweaks.showLabels}
-                              showExtras={tweaks.showExtras} />
+                              showExtras={tweaks.showExtras}
+                              grantees={grantees} />
                 {/* Regular flow layer hides during a tour so the tour sprite owns the stage */}
                 {!activeTour && (
                   <FlowsLayer selectedFlow={selectedFlow}
@@ -384,7 +398,8 @@ function App() {
                     tour={currentTour}
                     step={tourStep}
                     progress={tourProgress}
-                    focusSet={tourFocusSet} />
+                    focusSet={tourFocusSet}
+                    grantees={grantees} />
                 )}
                 {/* Paper-grain wash on top — gives the watercolor-on-paper feel */}
                 <rect x={vbx} y={vby} width={visW} height={visH}
@@ -446,6 +461,32 @@ function App() {
         <button onClick={() => jumpTo('local')}>The Town</button>
         <button onClick={() => jumpTo('full')}>Whole map</button>
       </div>
+
+      {/* Public-facing grantee toggle panel */}
+      {window.GRANTEES && (
+        <div className="grantee-toggle-panel">
+          <div className="gp-title">Imagine in the system</div>
+          <div className="gp-sub">
+            Four candidate grantees. Flip one on to see it appear on the map and join the matching tours.
+          </div>
+          {Object.values(window.GRANTEES).map(g => {
+            const on = !!grantees[g.id];
+            const tweakKey = 'grantee' + g.tweakKey.charAt(0).toUpperCase() + g.tweakKey.slice(1);
+            return (
+              <div key={g.id}
+                   className={'gp-row ' + (on ? 'on' : 'off')}
+                   onClick={() => setTweak(tweakKey, !on)}>
+                <div className="gp-swatch" style={{ background: g.color }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="gp-name">{g.label}</div>
+                  <div className="gp-blurb">{g.blurb}</div>
+                </div>
+                <div className="gp-switch" />
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Zoom controls */}
       <div className="zoom-controls">
@@ -518,6 +559,28 @@ function App() {
                          value={tweaks.animateVehicles}
                          onChange={v => setTweak('animateVehicles', v)}
                          help="Money trucks and the job-seeker drive the routes." />
+          </TweakSection>
+          <TweakSection title="Grantees (turn on to integrate)">
+            <div style={{ fontSize: 12, lineHeight: 1.4, color: 'var(--ink-soft)', marginBottom: 6 }}>
+              Four candidate organizations. Off = greyed out on the map.
+              On = full color, plus they appear in matching guided tours with an outcome delta.
+            </div>
+            <TweakToggle label="Per Scholas"
+                         value={tweaks.granteePerScholas}
+                         onChange={v => setTweak('granteePerScholas', v)}
+                         help="Sectoral tech training. Branches into machinist + returnee tours." />
+            <TweakToggle label="SOAR"
+                         value={tweaks.granteeSoar}
+                         onChange={v => setTweak('granteeSoar', v)}
+                         help="Eastern KY regional convener. Branches into machinist + young-apprentice tours." />
+            <TweakToggle label="SkillUp"
+                         value={tweaks.granteeSkillup}
+                         onChange={v => setTweak('granteeSkillup', v)}
+                         help="National navigation layer. Branches into every persona tour." />
+            <TweakToggle label="Empower Work"
+                         value={tweaks.granteeEmpowerWork}
+                         onChange={v => setTweak('granteeEmpowerWork', v)}
+                         help="Text-based peer support. Branches into returning-mom + machinist tours." />
           </TweakSection>
           <TweakSection title="Try clicking">
             <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--ink-soft)' }}>
@@ -615,6 +678,43 @@ function App() {
             <div className="cap-progress"
                  style={{ width: `${tourProgress * 100}%`, background: currentTour.color }} />
           </div>
+
+          {/* Outcome delta card — shows when any active grantee has a ghost
+              path for this tour. Compares baseline vs. enhanced outcome. */}
+          {(() => {
+            if (!currentTour.ghosts || !window.GRANTEES) return null;
+            const activeGhosts = Object.keys(currentTour.ghosts).filter(gid => grantees[gid]);
+            if (activeGhosts.length === 0) return null;
+            return (
+              <div className="outcome-card">
+                <div className="oc-title">If you toggle them on, outcomes shift:</div>
+                {activeGhosts.map(gid => {
+                  const g = window.GRANTEES[gid];
+                  if (!g) return null;
+                  return (
+                    <div key={gid} className="oc-row">
+                      <div className="oc-pip" style={{ background: g.color }} />
+                      <div className="oc-grantee">{g.label}</div>
+                      <div className="oc-deltas">
+                        <div className="oc-base">
+                          <div className="oc-label">{g.outcome.baseline.label}</div>
+                          <div className="oc-value">{g.outcome.baseline.value}</div>
+                        </div>
+                        <div className="oc-arrow">→</div>
+                        <div className="oc-enh" style={{ borderColor: g.color }}>
+                          <div className="oc-label">{g.outcome.enhanced.label}</div>
+                          <div className="oc-value" style={{ color: g.accent }}>
+                            {g.outcome.enhanced.value}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="oc-citation">{g.outcome.citation}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
           <div className="tour-controls">
             <button onClick={() => stepTour(-1)} disabled={tourStep === 0} title="Previous step">◀</button>
             <button className="play" onClick={() => {
