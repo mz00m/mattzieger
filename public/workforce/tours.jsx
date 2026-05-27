@@ -170,6 +170,156 @@ window.TOURS = {
     ],
   },
 
+  'veteran': {
+    kind: 'persona',
+    title: 'The Returning Veteran',
+    sub: 'Sgt. Hank just separated. His DD-214 unlocks priority of service.',
+    color: 'var(--scarry-blue-deep)',
+    sprite: {
+      kind: 'character',
+      species: 'dog', costume: 'var(--scarry-blue-deep)',
+      fur: 'var(--brown)', hat: 'cap', prop: 'resume',
+      size: 1.1,
+    },
+    steps: [
+      {
+        from: { x: 2830, y: 700 }, to: { x: 2830, y: 700 },
+        view: { cx: 2830, cy: 620, scale: 0.9 },
+        caption: 'Hank just separated from the service. The first place he walks into is the jobs office. By federal law, veterans get priority of service in every WIOA program — they get seen first.',
+        focus: ['ajc'],
+        duration: 7000,
+      },
+      {
+        from: { x: 2830, y: 700 }, to: { x: 2830, y: 700 },
+        view: { cx: 2830, cy: 620, scale: 1.1 },
+        caption: 'A DVOP — Disabled Veterans\' Outreach Program specialist — sits inside the AJC. Their salary is paid by JVSG, a separate ~$180 M/yr grant DOL\'s VETS office sends straight to states.',
+        focus: ['ajc', 'vets'],
+        duration: 7500,
+      },
+      {
+        from: { x: 2830, y: 700 }, to: { x: 3500, y: 720 },
+        view: { cx: 3120, cy: 700, scale: 0.7 },
+        caption: 'The DVOP routes Hank into Helmets-to-Hardhats — a national pathway from military service into the building trades. The local union hall is the front door.',
+        focus: ['union'],
+        duration: 7000,
+      },
+      {
+        from: { x: 3500, y: 720 }, to: { x: 2780, y: 940 },
+        view: { cx: 3120, cy: 830, scale: 0.65 },
+        caption: 'Hank starts a Registered Apprenticeship as a millwright. The Post-9/11 GI Bill pays him a monthly housing allowance on top of apprentice wages — a rare double-dip Congress explicitly allowed.',
+        focus: ['apprenticeship'],
+        duration: 7500,
+      },
+      {
+        from: { x: 2780, y: 940 }, to: { x: 3580, y: 700 },
+        view: { cx: 3180, cy: 820, scale: 0.6 },
+        caption: 'Three years on, Hank is a journey-level millwright running a maintenance crew at the regional distribution center — and a nationally credentialed civilian for life.',
+        focus: ['distribution-center', 'apprenticeship'],
+        duration: 7500,
+      },
+    ],
+  },
+
+  'vr-client': {
+    kind: 'persona',
+    title: 'The VR Client',
+    sub: 'Iris opens a Vocational Rehabilitation case for the workplace she has in mind.',
+    color: 'var(--scarry-purple)',
+    sprite: {
+      kind: 'character',
+      species: 'cat', costume: 'var(--scarry-purple)',
+      fur: 'var(--paper-shadow)', prop: 'book',
+      size: 1.1,
+    },
+    steps: [
+      {
+        from: { x: 2930, y: 900 }, to: { x: 2930, y: 900 },
+        view: { cx: 2930, cy: 860, scale: 1.05 },
+        caption: 'Iris has a visual disability. She walks into the local Voc Rehab office. A counselor opens her case and together they sketch an IPE — Individualized Plan for Employment.',
+        focus: ['voc-rehab'],
+        duration: 7500,
+      },
+      {
+        from: { x: 2930, y: 900 }, to: { x: 2930, y: 900 },
+        view: { cx: 2400, cy: 800, scale: 0.55 },
+        caption: 'VR is its own slice of WIOA — Title IV. It runs through Education, not Labor, and the state VR agency is who actually pays for everything in Iris\'s plan.',
+        focus: ['voc-rehab', 'state-vr'],
+        duration: 7500,
+      },
+      {
+        from: { x: 2930, y: 900 }, to: { x: 2605, y: 900 },
+        view: { cx: 2770, cy: 880, scale: 0.95 },
+        caption: 'Step one of the plan: a community-college certificate in medical coding. VR pays tuition, books, and any assistive technology — screen readers, magnification, refreshable braille.',
+        focus: ['community-college'],
+        duration: 7500,
+      },
+      {
+        from: { x: 2605, y: 900 }, to: { x: 2930, y: 900 },
+        view: { cx: 2770, cy: 880, scale: 0.95 },
+        caption: 'During and after training, VR sends a job coach — someone who shows up at the workplace, helps negotiate accommodations, and fades out when Iris is settled.',
+        focus: ['voc-rehab'],
+        duration: 7000,
+      },
+      {
+        from: { x: 2930, y: 900 }, to: { x: 3410, y: 700 },
+        view: { cx: 3160, cy: 800, scale: 0.7 },
+        caption: 'Iris is hired by the hospital as a medical coder, with accommodations in place from day one. After 90 days of stable employment, VR closes the case "26" — a successful employment outcome.',
+        focus: ['employer-hosp'],
+        duration: 7500,
+      },
+    ],
+  },
+
+  'returnee': {
+    kind: 'persona',
+    title: 'The Returning Citizen',
+    sub: 'Rex came home last month. He needs ID, an address, and a job — in that order.',
+    color: 'var(--brown-deep)',
+    sprite: {
+      kind: 'character',
+      species: 'bear', costume: 'var(--brown)',
+      fur: 'var(--brown-deep)', hat: 'cap', prop: 'backpack',
+      size: 1.1,
+    },
+    steps: [
+      {
+        from: { x: 3070, y: 900 }, to: { x: 3070, y: 900 },
+        view: { cx: 3070, cy: 860, scale: 1.05 },
+        caption: 'Rex was released two weeks ago. The reentry CBO is his first stop — they help him replace his ID, find a bed at a halfway house, and write a résumé that doesn\'t hide the gap.',
+        focus: ['cbo'],
+        duration: 7500,
+      },
+      {
+        from: { x: 3070, y: 900 }, to: { x: 2830, y: 700 },
+        view: { cx: 2950, cy: 800, scale: 0.85 },
+        caption: 'The CBO walks him over to the jobs office. WIOA Title I has no carve-out that excludes people with records — and a Second Chance Act grant pays for the CBO\'s staff time inside the AJC.',
+        focus: ['ajc', 'cbo'],
+        duration: 7500,
+      },
+      {
+        from: { x: 2830, y: 700 }, to: { x: 2605, y: 900 },
+        view: { cx: 2720, cy: 800, scale: 0.9 },
+        caption: 'The AJC enrolls Rex in a CDL Class-A program at the community college. The Federal Bonding Program also issues a six-month fidelity bond to reassure his first employer.',
+        focus: ['community-college'],
+        duration: 7500,
+      },
+      {
+        from: { x: 2605, y: 900 }, to: { x: 3580, y: 700 },
+        view: { cx: 3100, cy: 800, scale: 0.55 },
+        caption: 'Twelve weeks later: CDL in hand. The regional distribution center is a fair-chance employer — they hire from this exact pipeline. Rex starts the next Monday.',
+        focus: ['distribution-center'],
+        duration: 8000,
+      },
+      {
+        from: { x: 3580, y: 700 }, to: { x: 3580, y: 700 },
+        view: { cx: 3580, cy: 620, scale: 0.95 },
+        caption: 'One year later, Rex is mentoring two newer hires from the same reentry CBO. The pipeline is starting to run in both directions.',
+        focus: ['distribution-center', 'cbo'],
+        duration: 7000,
+      },
+    ],
+  },
+
   /* ------------------ FUNDING FLOWS ------------------ */
 
   'flow-title1': {
@@ -351,11 +501,101 @@ window.TOURS = {
       },
     ],
   },
+
+  'flow-title4': {
+    kind: 'flow',
+    title: 'WIOA Title IV — Vocational Rehabilitation',
+    sub: '$3.7 B/yr for workers with disabilities, run through Education.',
+    color: 'var(--flow-title4)',
+    sprite: { kind: 'vehicle', type: 'ramp-van' },
+    steps: [
+      {
+        from: { x: 550, y: 540 }, to: { x: 550, y: 540 },
+        view: { cx: 550, cy: 540, scale: 0.95 },
+        caption: 'WIOA Title IV — Vocational Rehabilitation — is the second-biggest workforce stream at about $3.7 billion a year, just behind Title I. It serves only workers with disabilities.',
+        focus: ['congress'],
+        duration: 7000,
+      },
+      {
+        from: { x: 550, y: 540 }, to: { x: 720, y: 660 },
+        view: { cx: 640, cy: 600, scale: 0.9 },
+        caption: 'Title IV is the part of WIOA that lives in the Department of Education, not Labor. That historical accident is part of why workforce-VR alignment is so uneven across states.',
+        focus: ['ed'],
+        duration: 6500,
+      },
+      {
+        from: { x: 720, y: 660 }, to: { x: 870, y: 700 },
+        view: { cx: 800, cy: 660, scale: 1.0 },
+        caption: 'Inside Education sits RSA — the Rehabilitation Services Administration. Small office, very big check. RSA writes the rules and ships the formula to the states.',
+        focus: ['rsa'],
+        duration: 6500,
+      },
+      {
+        from: { x: 870, y: 700 }, to: { x: 1880, y: 700 },
+        view: { cx: 1380, cy: 700, scale: 0.5 },
+        caption: 'The money goes to 50 state VR agencies — and in 24 of those states there\'s also a separate Blind Services agency that gets its own slice.',
+        focus: ['state-vr'],
+        duration: 8000,
+      },
+      {
+        from: { x: 1880, y: 700 }, to: { x: 2930, y: 900 },
+        view: { cx: 2400, cy: 800, scale: 0.5 },
+        caption: 'The state agency funds local Voc Rehab offices — and, through them, training, assistive tech, job coaches, and supported employment for hundreds of thousands of workers each year.',
+        focus: ['voc-rehab'],
+        duration: 8000,
+      },
+    ],
+  },
+
+  'flow-tanf': {
+    kind: 'flow',
+    title: 'TANF — Work-with-Cash-Aid',
+    sub: '$16.5 B block grant, fixed since 1996, run through HHS — not Labor.',
+    color: 'var(--flow-tanf)',
+    sprite: { kind: 'vehicle', type: 'grocery-truck' },
+    steps: [
+      {
+        from: { x: 550, y: 540 }, to: { x: 550, y: 540 },
+        view: { cx: 550, cy: 540, scale: 0.95 },
+        caption: 'Temporary Assistance for Needy Families — TANF — is a $16.5 billion block grant. It has been frozen at that exact number since 1996; inflation has eaten roughly half of it.',
+        focus: ['congress'],
+        duration: 7500,
+      },
+      {
+        from: { x: 550, y: 540 }, to: { x: 920, y: 660 },
+        view: { cx: 740, cy: 600, scale: 0.85 },
+        caption: 'TANF flows through HHS — Health and Human Services — not Labor. The Office of Family Assistance, inside ACF, administers it.',
+        focus: ['hhs'],
+        duration: 6500,
+      },
+      {
+        from: { x: 920, y: 660 }, to: { x: 2110, y: 720 },
+        view: { cx: 1500, cy: 700, scale: 0.5 },
+        caption: 'States get the block grant in a single check. They can spend it on cash aid, child care, work programs, or pre-K — a huge amount of state-level discretion.',
+        focus: ['state-hs'],
+        duration: 8000,
+      },
+      {
+        from: { x: 2110, y: 720 }, to: { x: 3070, y: 900 },
+        view: { cx: 2580, cy: 820, scale: 0.5 },
+        caption: 'Most states contract a community nonprofit to actually run the "work activities" a TANF recipient has to do to keep the cash aid — job search, training, and subsidized work experience.',
+        focus: ['cbo'],
+        duration: 8000,
+      },
+      {
+        from: { x: 3070, y: 900 }, to: { x: 2830, y: 700 },
+        view: { cx: 2950, cy: 800, scale: 0.85 },
+        caption: 'The CBO and the AJC sit on the same street for a reason: a TANF recipient often uses both. The handoff between them is where states win or lose at integration.',
+        focus: ['cbo', 'ajc'],
+        duration: 7500,
+      },
+    ],
+  },
 };
 
 window.TOUR_ORDER = [
-  ['Personas', ['machinist', 'returning-mom', 'young-apprentice']],
-  ['Funding flows', ['flow-title1', 'flow-pell', 'flow-perkins', 'flow-apprent']],
+  ['Personas', ['machinist', 'returning-mom', 'young-apprentice', 'veteran', 'vr-client', 'returnee']],
+  ['Funding flows', ['flow-title1', 'flow-pell', 'flow-perkins', 'flow-apprent', 'flow-title4', 'flow-tanf']],
 ];
 
 /* ============================================================
