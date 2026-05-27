@@ -135,17 +135,6 @@ function GranteeBuilding({ id, grantee, pos, selected, dimmed, onClick, onHover,
       {/* Door */}
       <Door x={W / 2 - 9} y={H - 28} w={18} h={28} color={grantee.accent} />
 
-      {/* OFF badge (visible only when off, hidden via CSS when on) */}
-      <g className="grantee-off-badge" style={{ pointerEvents: 'none' }}>
-        <rect x={W - 44} y={-22} width="44" height="18" rx="3"
-              fill="var(--ink)" opacity="0.85" />
-        <text x={W - 22} y={-9} textAnchor="middle"
-              style={{
-                fontFamily: 'Fraunces, serif', fontSize: 10, fontWeight: 700,
-                fill: 'var(--paper)', letterSpacing: '0.08em', textTransform: 'uppercase',
-              }}>OFF</text>
-      </g>
-
       {/* Sign — the grantee label */}
       <g style={{ pointerEvents: 'none' }}>
         {(() => {
@@ -931,8 +920,9 @@ function SceneLocal({ groundY, hoveredId, selectedId, dimmedSet, onPick, onHover
       )}
 
       {/* ============== GRANTEE ROW (candidate orgs, toggle on/off) ============== */}
-      {/* Each renders with .grantee-off if not in grantees-on map; styles desaturate
-         and dash the outline. .grantee-on adds a soft glow. */}
+      {/* Buildings are completely hidden when off (opacity 0 + pointer-events
+         none). When the matching toggle flips on, the building fades in and
+         rises into place; the dedicated grantee tour auto-starts. */}
       <g id="grantee-row">
         {window.GRANTEES && Object.values(window.GRANTEES).map(g => {
           const e = window.ENTITIES[g.id];
@@ -940,7 +930,8 @@ function SceneLocal({ groundY, hoveredId, selectedId, dimmedSet, onPick, onHover
           const on = !!grantees[g.id];
           return (
             <g key={g.id}
-               className={'grantee-wrap ' + (on ? 'grantee-on' : 'grantee-off')}>
+               className={'grantee-wrap ' + (on ? 'grantee-on' : 'grantee-off')}
+               style={on ? {} : { pointerEvents: 'none' }}>
               <GranteeBuilding
                 id={g.id}
                 grantee={g}

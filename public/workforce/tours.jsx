@@ -433,6 +433,215 @@ window.TOURS = {
     },
   },
 
+  /* ------------------ GRANTEE TOURS ------------------
+     Auto-started when the matching toggle flips on. Each tour walks
+     through (a) where the grantee plugs into the public system,
+     (b) what it specifically adds, and (c) the outcome it claims. */
+
+  'grantee-per-scholas': {
+    kind: 'grantee',
+    granteeId: 'per-scholas',
+    title: 'Per Scholas in the system',
+    sub: 'A sectoral tech-training nonprofit, plugged in via WIOA ITAs.',
+    color: '#2a8a8a',
+    sprite: {
+      kind: 'character',
+      species: 'owl', costume: '#2a8a8a',
+      fur: 'var(--tan)', hat: 'cardigan', prop: 'book',
+      size: 1.1,
+    },
+    steps: [
+      {
+        from: { x: 360, y: 620 }, to: { x: 360, y: 620 },
+        view: { cx: 400, cy: 620, scale: 0.9 },
+        caption: 'The federal money for adult training starts here — at ETA, the Employment and Training Administration. WIOA Title I funds (about $3.6 B/yr) flow from this loading dock out to the states.',
+        focus: ['eta', 'dol'],
+        duration: 7000,
+      },
+      {
+        from: { x: 360, y: 620 }, to: { x: 2810, y: 700 },
+        view: { cx: 1600, cy: 700, scale: 0.4 },
+        caption: 'A laid-off worker walks into the local American Job Center. The counselor opens an Individual Training Account — a WIOA voucher the worker can spend at any provider on the state\'s Eligible Training Provider List.',
+        focus: ['ajc'],
+        duration: 8000,
+      },
+      {
+        from: { x: 2810, y: 700 }, to: { x: 2560, y: 870 },
+        view: { cx: 2680, cy: 800, scale: 0.85 },
+        caption: 'Most ITAs land at the community college — about 1,000 of them nationwide, the largest training partner the system has.',
+        focus: ['community-college'],
+        duration: 7000,
+      },
+      {
+        from: { x: 2560, y: 870 }, to: { x: 2440, y: 1010 },
+        view: { cx: 2500, cy: 950, scale: 1.0 },
+        caption: 'Per Scholas sits right next door. It\'s on the ETPL in many states — so the same WIOA voucher can buy a 14-week tech cohort instead of a 2-year associate. IT support, cybersecurity, AWS, network engineering.',
+        focus: ['per-scholas'],
+        duration: 8000,
+      },
+      {
+        from: { x: 2440, y: 1010 }, to: { x: 3385, y: 700 },
+        view: { cx: 2900, cy: 860, scale: 0.55 },
+        caption: 'Placement is the point. The MDRC 10-year RCT (n=1,143) found Per Scholas graduates earned ~15% more than the control group. Roughly $8 of economic benefit per $1 spent on training.',
+        focus: ['per-scholas', 'employer-hosp', 'employer-mfg'],
+        duration: 9000,
+      },
+    ],
+  },
+
+  'grantee-soar': {
+    kind: 'grantee',
+    granteeId: 'soar',
+    title: 'SOAR in the system',
+    sub: 'A regional convener wrapping the Eastern Kentucky workforce board.',
+    color: '#7a5cb3',
+    sprite: {
+      kind: 'character',
+      species: 'bear', costume: '#7a5cb3',
+      fur: 'var(--brown)', hat: 'cap', prop: 'clipboard',
+      size: 1.1,
+    },
+    steps: [
+      {
+        from: { x: 1010, y: 660 }, to: { x: 1010, y: 660 },
+        view: { cx: 1010, cy: 660, scale: 0.95 },
+        caption: 'Commerce and the EDA fund regional economic development. SOAR is one of six awardees of a $40 M EDA Recompete implementation grant — covering 12 Eastern Kentucky counties.',
+        focus: ['commerce'],
+        duration: 7500,
+      },
+      {
+        from: { x: 1010, y: 660 }, to: { x: 1380, y: 700 },
+        view: { cx: 1200, cy: 680, scale: 0.75 },
+        caption: 'EDA dollars land at the state and regional level — separate from the WIOA pipeline, but braided with it on the ground.',
+        focus: ['state-agency'],
+        duration: 7000,
+      },
+      {
+        from: { x: 1380, y: 700 }, to: { x: 2440, y: 640 },
+        view: { cx: 1900, cy: 680, scale: 0.45 },
+        caption: 'The local workforce board — in Eastern Kentucky\'s case, EKCEP — is SOAR\'s closest partner. EKCEP staffs the Eastern Kentucky WIB and administers WIOA across 23 counties.',
+        focus: ['lwdb'],
+        duration: 8000,
+      },
+      {
+        from: { x: 2440, y: 640 }, to: { x: 2640, y: 1010 },
+        view: { cx: 2540, cy: 820, scale: 0.7 },
+        caption: 'SOAR doesn\'t deliver workforce services itself — it convenes the partners that do. EKCEP, KCTCS, eKAMI, Teleworks USA — the regional plan lives here.',
+        focus: ['soar'],
+        duration: 8000,
+      },
+      {
+        from: { x: 2640, y: 1010 }, to: { x: 2780, y: 940 },
+        view: { cx: 2710, cy: 980, scale: 0.95 },
+        caption: 'Programs SOAR convenes — like eKAMI\'s advanced-manufacturing CNC training — placed former coal miners with employers including Lockheed Martin. The EKY Remote initiative drove ~$11 M in community impact.',
+        focus: ['apprenticeship'],
+        duration: 9000,
+      },
+    ],
+  },
+
+  'grantee-skillup': {
+    kind: 'grantee',
+    granteeId: 'skillup',
+    title: 'SkillUp in the system',
+    sub: 'A national digital navigation layer that sits above the workforce system.',
+    color: '#d9622c',
+    sprite: {
+      kind: 'character',
+      species: 'rabbit', costume: '#d9622c',
+      fur: 'var(--paper-shadow)', prop: 'phone',
+      size: 1.1,
+    },
+    steps: [
+      {
+        from: { x: 3220, y: 700 }, to: { x: 3220, y: 700 },
+        view: { cx: 3220, cy: 640, scale: 0.95 },
+        caption: 'A worker — laid off, switching careers, finishing high school — pulls out their phone. Before they ever walk into the AJC, they\'re looking for what to do.',
+        focus: ['employer-mfg'],
+        duration: 6500,
+      },
+      {
+        from: { x: 3220, y: 700 }, to: { x: 2810, y: 700 },
+        view: { cx: 3020, cy: 660, scale: 0.7 },
+        caption: 'The public answer is the American Job Center — but referrals depend on what a single counselor happens to know about local options.',
+        focus: ['ajc'],
+        duration: 7000,
+      },
+      {
+        from: { x: 2810, y: 700 }, to: { x: 2840, y: 1010 },
+        view: { cx: 2830, cy: 850, scale: 0.85 },
+        caption: 'SkillUp is the layer above all of it. A national digital platform that surfaces training providers, apprenticeships, and jobs — matched to who you are and what you can do.',
+        focus: ['skillup'],
+        duration: 8500,
+      },
+      {
+        from: { x: 2840, y: 1010 }, to: { x: 2560, y: 870 },
+        view: { cx: 2700, cy: 940, scale: 0.85 },
+        caption: 'It routes people to ETPL providers, community colleges, bootcamps, and apprenticeships — without claiming WIOA dollars itself.',
+        focus: ['community-college'],
+        duration: 7000,
+      },
+      {
+        from: { x: 2560, y: 870 }, to: { x: 3260, y: 540 },
+        view: { cx: 2900, cy: 700, scale: 0.55 },
+        caption: 'Self-reported reach (2020–2026): 4.8M+ workers, 277K+ jobs attained, $17.8B+ in additional wages. The navigation function the AJC has never quite delivered on.',
+        focus: ['skillup', 'employer-mfg'],
+        duration: 9000,
+      },
+    ],
+  },
+
+  'grantee-empower-work': {
+    kind: 'grantee',
+    granteeId: 'empower-work',
+    title: 'Empower Work in the system',
+    sub: 'The wraparound layer the workforce system has never had.',
+    color: '#cc4677',
+    sprite: {
+      kind: 'character',
+      species: 'cat', costume: '#cc4677',
+      fur: 'var(--tan)', prop: 'phone',
+      size: 1.1,
+    },
+    steps: [
+      {
+        from: { x: 3220, y: 700 }, to: { x: 3220, y: 700 },
+        view: { cx: 3220, cy: 640, scale: 0.95 },
+        caption: 'A workplace crisis — a layoff, a hostile boss, a panic attack at the start of a training cohort. The public system doesn\'t catch this; people drop out.',
+        focus: ['employer-mfg'],
+        duration: 7000,
+      },
+      {
+        from: { x: 3220, y: 700 }, to: { x: 3040, y: 1010 },
+        view: { cx: 3130, cy: 860, scale: 0.85 },
+        caption: 'Empower Work is a text-based peer counseling line. Trained peers — not therapists — meet workers in distress at the moment it matters.',
+        focus: ['empower-work'],
+        duration: 8000,
+      },
+      {
+        from: { x: 3040, y: 1010 }, to: { x: 2440, y: 1010 },
+        view: { cx: 2740, cy: 1010, scale: 0.75 },
+        caption: 'A 2024 collaboration partnered Empower Work with Per Scholas, SkillUp, NPower, and Year Up — text-based wraparound for workforce alumni at the hard moments of their journey.',
+        focus: ['empower-work', 'per-scholas'],
+        duration: 8500,
+      },
+      {
+        from: { x: 2440, y: 1010 }, to: { x: 3070, y: 860 },
+        view: { cx: 2750, cy: 940, scale: 0.55 },
+        caption: 'It also partners with community nonprofits and the AJC — adding the emotional and navigational support the formal system was never designed to provide.',
+        focus: ['cbo', 'ajc'],
+        duration: 7500,
+      },
+      {
+        from: { x: 3070, y: 860 }, to: { x: 3385, y: 700 },
+        view: { cx: 3230, cy: 800, scale: 0.7 },
+        caption: '92% of workers supported report improved wellbeing. The Connection Protection partnership with Visible: 84% said the program helped, 31% received job offers, 19% accepted a new job.',
+        focus: ['employer-hosp'],
+        duration: 9000,
+      },
+    ],
+  },
+
   /* ------------------ FUNDING FLOWS ------------------ */
 
   'flow-title1': {
