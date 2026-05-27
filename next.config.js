@@ -10,6 +10,10 @@ const nextConfig = {
         source: '/workforce',
         destination: '/workforce/index.html',
       },
+      {
+        source: '/workforce-3d',
+        destination: '/workforce-3d/index.html',
+      },
     ];
   },
 };
