@@ -316,31 +316,21 @@ html, body {
 .flow-highlight { transition: opacity 200ms ease; }
 
 /* ===================== Grantee buildings =====================
-   Off  → desaturated + dashed outline + "OFF" badge visible.
-   On   → full color + soft glow + badge hidden.
-   Transition is animated so flipping the toggle has weight. */
-.grantee-wrap { transition: filter 350ms ease, opacity 350ms ease; }
-.grantee-off  { filter: saturate(0.08) brightness(1.05); opacity: 0.65; }
-.grantee-on   { filter: drop-shadow(0 0 6px rgba(255, 215, 120, 0.55)); }
-
-.grantee-off .grantee-outline {
-  stroke-dasharray: 6 4;
-  stroke-opacity: 0.65;
+   Off  → completely invisible (opacity 0, not clickable).
+   On   → fade in with a soft glow + slight rise. The visibility flip
+   is what advertises that the grantee has joined the system; the
+   dedicated tour kicks in right after. */
+.grantee-wrap {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 450ms ease, transform 450ms ease, filter 350ms ease;
 }
-.grantee-on .grantee-outline {
-  stroke-dasharray: none;
+.grantee-on {
+  opacity: 1;
+  transform: translateY(0);
+  filter: drop-shadow(0 0 6px rgba(255, 215, 120, 0.55));
 }
-
-.grantee-off .grantee-off-badge { opacity: 1; transition: opacity 250ms ease; }
-.grantee-on  .grantee-off-badge { opacity: 0; transition: opacity 250ms ease; }
-
-/* When a grantee is ON, gently pulse the awning to draw the eye */
-@keyframes granteePulse {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-1.5px); }
-}
-.grantee-on .building-group,
-.grantee-on > g { /* harmless if browser doesn't support, no layout break */ }
+.grantee-off { opacity: 0; }
 
 /* ===== Public-facing grantee toggle panel (top-right) =====
    Visible to all users — flips grantees on/off in the map and tours. */

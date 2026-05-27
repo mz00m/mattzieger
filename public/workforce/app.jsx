@@ -467,15 +467,25 @@ function App() {
         <div className="grantee-toggle-panel">
           <div className="gp-title">Imagine in the system</div>
           <div className="gp-sub">
-            Four candidate grantees. Flip one on to see it appear on the map and join the matching tours.
+            Four candidate grantees. Flip one on — its building drops into the town and a tour walks you through where it sits and what it adds.
           </div>
           {Object.values(window.GRANTEES).map(g => {
             const on = !!grantees[g.id];
             const tweakKey = 'grantee' + g.tweakKey.charAt(0).toUpperCase() + g.tweakKey.slice(1);
+            const handleClick = () => {
+              const next = !on;
+              setTweak(tweakKey, next);
+              // On off → on transition, auto-start the grantee's dedicated tour.
+              // Brief delay so the building's fade-in animation has begun before
+              // the camera flies elsewhere for the tour's opening step.
+              if (next && window.TOURS['grantee-' + g.id]) {
+                setTimeout(() => startTour('grantee-' + g.id), 260);
+              }
+            };
             return (
               <div key={g.id}
                    className={'gp-row ' + (on ? 'on' : 'off')}
-                   onClick={() => setTweak(tweakKey, !on)}>
+                   onClick={handleClick}>
                 <div className="gp-swatch" style={{ background: g.color }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="gp-name">{g.label}</div>
