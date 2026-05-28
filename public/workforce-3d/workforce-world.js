@@ -7,12 +7,24 @@
  * Exported API: window.WORKFORCE with entityAt, entities, flows, ready flag.
  */
 
-(function init() {
-  // Poll until the Tiny World Builder app has booted.
+(function init(attempt) {
+  attempt = attempt || 0;
+  // Poll until the Tiny World Builder app has booted. setCell + GRID alone
+  // aren't enough — TWB's internal `world` closure variable only initializes
+  // after the renderer comes up (needs WebGL). We detect that by probing
+  // setCell in a try/catch.
   if (typeof setCell !== 'function' || typeof GRID !== 'number' || GRID <= 0) {
-    return setTimeout(init, 100);
+    if (attempt > 600) return console.warn('[WORKFORCE] gave up waiting for setCell/GRID');
+    return setTimeout(() => init(attempt + 1), 100);
   }
-
+  try {
+    // No-op probe. If `world` isn't ready, this throws
+    // "Cannot access 'world' before initialization".
+    setCell(0, 0, { terrain: 'grass', animate: false, impactDust: false });
+  } catch (e) {
+    if (attempt > 600) return console.warn('[WORKFORCE] gave up waiting for world init:', e.message);
+    return setTimeout(() => init(attempt + 1), 100);
+  }
   buildWorkforceWorld();
 })();
 
