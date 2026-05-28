@@ -35825,5 +35825,18 @@
 
   initAuth();
   </script>
+
+  <!-- ============================================================
+       Workforce Busytown 3D — workforce-specific customization layer.
+       Loads ENTITIES/FLOWS data, then 3 modules that populate the
+       3D world with the U.S. workforce investment system.
+       Each module waits for Tiny World Builder's globals to be ready
+       (setCell, GRID) before doing anything.
+       ============================================================ -->
+  <script src="/workforce/data.js"></script>
+  <script src="workforce-tours-data.js"></script>
+  <script src="workforce-world.js"></script>
+  <script src="workforce-flows.js"></script>
+  <script src="workforce-tours.js"></script>
 </body>
 </html>
