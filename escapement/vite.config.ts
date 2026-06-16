@@ -2,10 +2,13 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// The game is a standalone Vite app. base is relative so the built bundle can be
-// dropped into the parent site under /escapement without rewriting asset URLs.
-export default defineConfig({
-  base: './',
+// The game ships as a static sub-app served under /escapement on the parent site,
+// so the production build uses an absolute base of '/escapement/'. That makes
+// asset URLs work whether the page is hit at '/escapement' or '/escapement/'
+// (a relative base breaks on the no-trailing-slash form). Local dev/preview stay
+// at '/' so `npm run dev` opens the bench at the server root.
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? '/escapement/' : '/',
   plugins: [react()],
   // Prevent Vite from walking up into the parent Next.js site's PostCSS config.
   css: { postcss: {} },
@@ -14,4 +17,4 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
   },
-});
+}));
