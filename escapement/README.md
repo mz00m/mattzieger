@@ -7,8 +7,10 @@ finite-state machine for the escapement, and a damped, impulse-driven torsional
 oscillator for the balance — not thrown at a generic physics engine. Every part,
 name, and behaviour follows Bartosz Ciechanowski's _"Mechanical Watch"_ essay.
 
-This is **Phase 0 + Phase 1**: Bench 1, the time-only manual movement, playable
-through Layers 1–3 (place → run → regulate).
+This is **Phases 0–2**: Bench 1, the time-only manual movement, playable through
+all four layers — place → run → regulate → and now **master** (lubrication,
+positional timing, wear, contamination, and handling damage), with interactive
+explainers and a color-keyed glossary.
 
 ## Quick start
 
@@ -38,6 +40,16 @@ npm run build    # production build into dist/
 4. **Break it on purpose.** Use **Bench checks** to pop the click, reverse the
    pallet fork, or mis-mesh a wheel — then read how the **Diagnosis** panel traces
    the symptom back to the cause.
+5. **Go to Layer 4.** Flip **Realism** (top bar). Now the watch needs the right
+   oil in the right dose at each jewel, keeps different time in each of six
+   positions (regulate across them), wears if you run it dry, collects dust, and
+   can break a balance pivot or bend its hairspring if you knock the bench. The
+   **Care & repair** panel holds the oiler, the position tester, and the
+   clean / re-center / rework / service tools.
+
+The first time you meet the **balance** or the **power** train, the explainer
+includes a hands-on lab: tune a lone torsion spring's stiffness and inertia to
+feel the period change, or wind a lone mainspring and watch its torque decay.
 
 Use the **Cutaway** slider (top right) to fade the bridges and dial and see the
 works underneath, and orbit/zoom with the mouse. **Time scale** (1×–3600×) lets
@@ -55,7 +67,10 @@ src/
     mainspring.ts    Stored torque, decay, the click/ratchet lock
     escapement.ts    Lock → unlock → impulse → relock state machine
     balance.ts       Damped driven oscillator + analytic rate/amplitude/beat-error
-    diagnostics.ts   Causal-chain explanations of why it won't run
+    lubrication.ts   Oil types, doses, per-jewel friction efficiency (Layer 4)
+    positions.ts     Positional amplitude + poise rate variation (Layer 4)
+    condition.ts     Wear, contamination, shock damage, repair (Layer 4)
+    diagnostics.ts   Causal-chain explanations of why it won't run / runs poorly
     movementSim.ts   Orchestrator; owns assembly health, regulation, the clock
   three/      react-three-fiber bench: procedural gears, the live movement
   ui/         React panels: timegrapher, assembly tray, diagnostics, glossary
@@ -80,8 +95,9 @@ src/
 
 ## Tests (Vitest, sim core only)
 
-`npm test` proves the Phase-1 acceptance criteria:
+`npm test` runs **30 tests** proving the acceptance criteria:
 
+Phase 1:
 - barrel→seconds reduction is ~343:1 and fourth→escape is exactly 16:1;
 - the balance oscillates at ~4 Hz (28,800 bph) and amplitude emerges near target;
 - removing the click stops the watch and unwinds the spring;
@@ -90,8 +106,19 @@ src/
   error;
 - a full journey from loose parts to a regulated, running movement.
 
+Phase 2 (Layer 4):
+- lubrication: correct oil + ideal dose ≈ efficiency 1; dry / wrong-oil / flooded
+  all degrade it; a dry train runs at lower amplitude and shorter reserve;
+- positional variance: vertical positions lose amplitude and poise shows as a
+  rate spread across positions; horizontals are unaffected;
+- handling: a hard shock breaks the balance pivot (and stops the watch until
+  reworked); a lighter shock bends the hairspring and adds beat error;
+- a full service clears contamination, wear, and damage and re-oils correctly;
+- realism off leaves all Phase-1 behaviour bit-for-bit unchanged.
+
 ## What's next (later phases)
 
-Layer 4 (lubrication, tolerance, shock, contamination), interactive explainers,
-then the date complication, keyless works, automatic winding, and the repair-order
-master bench. The sim core is structured to grow into each.
+The date complication (Bench 2), keyless works with the three-mode state machine
+and hacking (Bench 3), automatic winding with the reverser (Bench 4), and the
+repair-order master bench with the credit-card scale finale. The sim core is
+structured to grow into each.

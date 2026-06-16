@@ -6,6 +6,7 @@ import { TrainPanel } from './ui/TrainPanel';
 import { Explainer } from './ui/Explainer';
 import { Glossary } from './ui/Glossary';
 import { PartInfo } from './ui/PartInfo';
+import { CarePanel } from './ui/CarePanel';
 import { useGameStore } from './state/gameStore';
 
 const LAYERS = [
@@ -19,6 +20,8 @@ function TopBar() {
   const cutaway = useGameStore((s) => s.cutaway);
   const setCutaway = useGameStore((s) => s.setCutaway);
   const toggleGlossary = useGameStore((s) => s.toggleGlossary);
+  const realism = useGameStore((s) => s.realism);
+  const setRealism = useGameStore((s) => s.setRealism);
 
   return (
     <header className="topbar">
@@ -40,6 +43,10 @@ function TopBar() {
       </div>
 
       <div className="topbar-right">
+        <label className={`realism-toggle ${realism ? 'on' : ''}`}>
+          <input type="checkbox" checked={realism} onChange={(e) => setRealism(e.target.checked)} />
+          Realism
+        </label>
         <label className="cutaway">
           Cutaway
           <input
@@ -75,6 +82,7 @@ export default function App() {
         <aside className="right">
           <Timegrapher />
           <Diagnostics />
+          <CarePanel />
           <TrainPanel />
         </aside>
       </div>

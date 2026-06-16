@@ -6,6 +6,7 @@
 import { useGameStore } from '../state/gameStore';
 import { EXPLAINERS } from '../content/explainers';
 import { GROUP_COLORS } from '../content/parts';
+import { InteractiveExplainer, hasInteractive } from './InteractiveExplainer';
 
 export function Explainer() {
   const group = useGameStore((s) => s.explainerGroup);
@@ -22,6 +23,7 @@ export function Explainer() {
         {ex.body.map((p, i) => (
           <p key={i}>{p}</p>
         ))}
+        {hasInteractive(group) && <InteractiveExplainer group={group} />}
         <p className="try-it">
           <strong>Try it:</strong> {ex.tryIt}
         </p>

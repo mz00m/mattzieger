@@ -544,6 +544,207 @@ button.mini {
   color: #c8ced6;
 }
 
+/* ---------------- realism toggle ---------------- */
+.realism-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--ink-dim);
+}
+.realism-toggle.on {
+  border-color: var(--err);
+  color: var(--err);
+  box-shadow: 0 0 0 1px var(--err) inset;
+}
+.realism-toggle input {
+  accent-color: var(--err);
+}
+
+/* ---------------- reserve line ---------------- */
+.reserve-line {
+  font-size: 11px;
+  color: var(--ink-dim);
+  margin: 8px 0;
+  padding: 6px 8px;
+  background: var(--panel-2);
+  border-radius: 6px;
+}
+
+/* ---------------- positions ---------------- */
+.pos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+.pos-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 4px;
+  font-size: 11px;
+  text-align: center;
+}
+.pos-cell.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pos-label {
+  font-size: 10px;
+  color: var(--ink-dim);
+}
+.pos-cell.active .pos-label {
+  color: var(--accent);
+}
+.pos-rate {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- lubrication table ---------------- */
+.lube-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.lube-row {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+.lube-name {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.lube-controls {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+.lube-controls select {
+  background: var(--panel-2);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px;
+  font-size: 11px;
+}
+.lube-controls input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  text-align: center;
+  border: 1px solid var(--line);
+}
+.badge.ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.badge.warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.badge.err {
+  color: var(--err);
+  border-color: var(--err);
+}
+
+/* ---------------- condition ---------------- */
+.cond-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.cond-bar {
+  display: grid;
+  grid-template-columns: 92px 1fr 48px;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+}
+.cond-bar-track {
+  height: 10px;
+  background: var(--panel-2);
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.cond-bar-track.tall {
+  height: 16px;
+}
+.cond-bar-fill {
+  height: 100%;
+}
+.cond-bar-fill.danger {
+  background: linear-gradient(90deg, #7a3b38, var(--err));
+}
+.cond-bar-fill.good {
+  background: linear-gradient(90deg, #3d7a5a, var(--ok));
+}
+.cond-bar-val {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+.cond-flag {
+  font-size: 12px;
+  margin: 4px 0;
+  font-weight: 600;
+}
+.cond-flag.warn {
+  color: var(--warn);
+}
+.cond-flag.err {
+  color: var(--err);
+}
+.danger-btn {
+  margin-top: 8px;
+  width: 100%;
+  color: var(--warn);
+  border-color: rgba(224, 163, 74, 0.4);
+}
+
+/* ---------------- interactive labs ---------------- */
+.lab {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lab-canvas {
+  align-self: center;
+  border-radius: 8px;
+  background: #0c1118;
+  border: 1px solid var(--line);
+}
+.lab-readout {
+  text-align: center;
+  font-size: 15px;
+}
+.lab-slider {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  gap: 2px;
+}
+.lab-slider input {
+  accent-color: var(--accent);
+}
+
 /* scrollbars */
 ::-webkit-scrollbar {
   width: 9px;

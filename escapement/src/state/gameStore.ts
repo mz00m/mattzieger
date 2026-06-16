@@ -7,8 +7,19 @@
 import { create } from 'zustand';
 import { MovementSim } from '../sim/movementSim';
 import type { PartId, SimSnapshot } from '../sim/types';
+import type { OilType } from '../sim/lubrication';
+import { LUBE_SITES } from '../sim/lubrication';
+import type { WatchPosition } from '../sim/positions';
 import { ASSEMBLY_ORDER, BENCH1_PARTS, PART_BY_ID } from '../content/parts';
 import type { PartGroup } from '../content/parts';
+
+type LubeMirror = Record<string, { oil: OilType; dose: number } | undefined>;
+
+function readLube(sim: MovementSim): LubeMirror {
+  const out: LubeMirror = {};
+  for (const site of LUBE_SITES) out[site.id] = sim.getLube(site.id);
+  return out;
+}
 
 const STORAGE_KEY = 'escapement.bench1.v1';
 
@@ -41,10 +52,15 @@ function savePersisted(p: Persisted): void {
   }
 }
 
-function makeSim(): MovementSim {
+function makeSim(realism: boolean): MovementSim {
   // The watch arrives from the "factory" running fast and slightly out of beat,
   // so regulation is a real task in Layer 3.
-  return new MovementSim({ factoryRateOffset: 48, factoryStudOffset: 5 });
+  return new MovementSim({
+    factoryRateOffset: 48,
+    factoryStudOffset: 5,
+    realism,
+    factoryPoise: 11,
+  });
 }
 
 interface GameState {
@@ -62,6 +78,11 @@ interface GameState {
   clickEngaged: boolean;
   palletOriented: boolean;
   misMeshed: PartId[];
+
+  // Layer 4
+  realism: boolean;
+  position: WatchPosition;
+  lube: LubeMirror;
 
   cutaway: number; // 0 = solid, 1 = fully transparent bridges
   explainerGroup: PartGroup | null;
@@ -82,6 +103,16 @@ interface GameState {
   setClickEngaged: (v: boolean) => void;
   setPalletOriented: (v: boolean) => void;
   setMisMeshed: (parts: PartId[]) => void;
+  // Layer 4 actions
+  setRealism: (v: boolean) => void;
+  setPosition: (p: WatchPosition) => void;
+  applyOil: (siteId: string, oil: OilType, dose: number) => void;
+  oilAllCorrectly: () => void;
+  cleanMovement: () => void;
+  serviceMovement: () => void;
+  recenterHairspring: () => void;
+  reworkBalance: () => void;
+  shockMovement: (severity: number) => void;
   setCutaway: (v: number) => void;
   openExplainer: (g: PartGroup) => void;
   closeExplainer: () => void;
@@ -103,7 +134,7 @@ function deriveLayer(placed: PartId[], snapshot: SimSnapshot): Layer {
 }
 
 export const useGameStore = create<GameState>((set, get) => {
-  const sim = makeSim();
+  const sim = makeSim(false);
   const persisted = loadPersisted();
 
   return {
@@ -118,6 +149,9 @@ export const useGameStore = create<GameState>((set, get) => {
     clickEngaged: true,
     palletOriented: true,
     misMeshed: [],
+    realism: false,
+    position: 'dialUp',
+    lube: readLube(sim),
     cutaway: 0,
     explainerGroup: null,
     seenExplainers: persisted.seenExplainers,
@@ -170,7 +204,8 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     resetBench: () => {
-      const sim2 = makeSim();
+      const realism = get().realism;
+      const sim2 = makeSim(realism);
       set({
         sim: sim2,
         placed: [],
@@ -180,6 +215,8 @@ export const useGameStore = create<GameState>((set, get) => {
         clickEngaged: true,
         palletOriented: true,
         misMeshed: [],
+        position: 'dialUp',
+        lube: readLube(sim2),
         snapshot: sim2.snapshot(),
         layer: 1,
         running: false,
@@ -216,6 +253,51 @@ export const useGameStore = create<GameState>((set, get) => {
     setMisMeshed: (parts) => {
       get().sim.setMisMeshed(parts);
       set({ misMeshed: parts });
+      get().refresh();
+    },
+
+    setRealism: (v) => {
+      get().sim.setRealism(v);
+      set({ realism: v });
+      get().refresh();
+    },
+    setPosition: (p) => {
+      get().sim.setPosition(p);
+      set({ position: p });
+      get().refresh();
+    },
+    applyOil: (siteId, oil, dose) => {
+      const s = get();
+      s.sim.applyOil(siteId, oil, dose);
+      set({ lube: readLube(s.sim) });
+      s.refresh();
+    },
+    oilAllCorrectly: () => {
+      const s = get();
+      s.sim.oilAllCorrectly();
+      set({ lube: readLube(s.sim) });
+      s.refresh();
+    },
+    cleanMovement: () => {
+      get().sim.clean();
+      get().refresh();
+    },
+    serviceMovement: () => {
+      const s = get();
+      s.sim.service();
+      set({ lube: readLube(s.sim) });
+      s.refresh();
+    },
+    recenterHairspring: () => {
+      get().sim.recenterHairspring();
+      get().refresh();
+    },
+    reworkBalance: () => {
+      get().sim.reworkBalance();
+      get().refresh();
+    },
+    shockMovement: (severity) => {
+      get().sim.shock(severity);
       get().refresh();
     },
 

@@ -13,6 +13,7 @@ import {
   BALANCE_PERIOD_S,
   BEATS_PER_SECOND,
   ESCAPE_WHEEL_TEETH,
+  POWER_RESERVE_HOURS,
   SECONDS_PER_DAY,
 } from './constants';
 import { Mainspring, MAX_BARREL_TORQUE } from './mainspring';
@@ -25,6 +26,19 @@ import {
   fourthToEscapeRatio,
 } from './gearTrain';
 import { diagnose, REQUIRED_FOR_RUN, type AssemblyHealth } from './diagnostics';
+import {
+  LUBE_SITES,
+  trainEfficiency,
+  type LubeApplication,
+  type OilType,
+} from './lubrication';
+import { Condition } from './condition';
+import {
+  positionAmplitudeFactor,
+  positionRateOffset,
+  type WatchPosition,
+} from './positions';
+import { lubricationDiagnostics, conditionDiagnostics } from './diagnostics';
 import type { Diagnostic, PartId, SimSnapshot } from './types';
 
 export interface MovementOptions {
@@ -34,6 +48,12 @@ export interface MovementOptions {
   factoryStudOffset?: number;
   /** Start with every part correctly placed (handy for tests). */
   startAssembled?: boolean;
+  /** Enable Layer-4 realism: lubrication, positions, wear, handling damage. */
+  realism?: boolean;
+  /** Factory poise error magnitude, s/day (default 10 when realism on). */
+  factoryPoise?: number;
+  /** Factory poise phase, degrees. */
+  factoryPoisePhase?: number;
 }
 
 export class MovementSim {
@@ -54,6 +74,14 @@ export class MovementSim {
   regulator = 0; // -100..+100
   studOffsetDeg = 0; // player adjustment
 
+  // ---- Layer 4 (realism) ----
+  realism: boolean;
+  position: WatchPosition = 'dialUp';
+  readonly condition = new Condition();
+  private lube: Record<string, LubeApplication | undefined> = {};
+  private poiseMag: number;
+  private poisePhase: number;
+
   // ---- running clock ----
   elapsed = 0; // simulated seconds since start
   /** Accumulated escape-wheel angle used to drive all train wheels + hands. */
@@ -66,6 +94,9 @@ export class MovementSim {
   constructor(opts: MovementOptions = {}) {
     this.factoryRateOffset = opts.factoryRateOffset ?? 0;
     this.factoryStudOffset = opts.factoryStudOffset ?? 0;
+    this.realism = opts.realism ?? false;
+    this.poiseMag = opts.factoryPoise ?? (this.realism ? 10 : 0);
+    this.poisePhase = opts.factoryPoisePhase ?? 35;
     if (opts.startAssembled) {
       for (const p of REQUIRED_FOR_RUN) this.placed.add(p);
       for (const p of ['cannonPinion', 'minuteWheel', 'hourWheel', 'dial', 'handsSet'] as PartId[]) {
@@ -108,6 +139,68 @@ export class MovementSim {
     if (this.clickEngaged) this.mainspring.windTurns(turns);
   }
 
+  // -------------------- Layer 4 API --------------------
+
+  setRealism(on: boolean): void {
+    this.realism = on;
+  }
+  setPosition(pos: WatchPosition): void {
+    this.position = pos;
+  }
+  /** Apply oil at a site. dose 0 (dry) .. ~1.6 (flooded). */
+  applyOil(siteId: string, oil: OilType, dose: number): void {
+    this.lube[siteId] = oil === 'none' ? undefined : { oil, dose: clamp(dose, 0, 2) };
+  }
+  getLube(siteId: string): LubeApplication | undefined {
+    return this.lube[siteId];
+  }
+  /** Oil every site correctly with the ideal dose (a clean, expert service). */
+  oilAllCorrectly(): void {
+    for (const site of LUBE_SITES) this.lube[site.id] = { oil: site.correctOil, dose: 1 };
+  }
+  clean(): void {
+    this.condition.clean();
+  }
+  service(): void {
+    this.condition.service();
+    this.oilAllCorrectly();
+  }
+  recenterHairspring(skill = 0.85): void {
+    this.condition.recenterHairspring(skill);
+  }
+  /** Replace the balance assembly — fixes a broken pivot / hopeless hairspring. */
+  reworkBalance(): void {
+    this.condition.balancePivotBroken = false;
+    this.condition.hairspringBentDeg = 0;
+  }
+  /** A bench knock. severity 0..1. Returns what broke (for UI feedback). */
+  shock(severity: number, rng?: () => number) {
+    if (!this.realism) return { brokePivot: false, bentHairspringDeg: 0 };
+    return this.condition.shock(severity, rng);
+  }
+
+  /** Friction efficiency of the train (lube × contamination × wear), 0..1. */
+  private effectiveEfficiency(): number {
+    if (!this.realism) return 1;
+    return trainEfficiency(this.lube) * this.condition.efficiency();
+  }
+
+  /** Rate this watch would show in a given position (for across-position UI). */
+  positionRate(pos: WatchPosition): number {
+    const amp = this.amplitudeInPosition(pos);
+    return (
+      rateSecPerDay(this.regulator, amp, this.factoryRateOffset) +
+      (this.realism ? positionRateOffset(pos, this.poiseMag, this.poisePhase) : 0) +
+      (this.realism ? this.condition.rateContribution() : 0)
+    );
+  }
+
+  private amplitudeInPosition(pos: WatchPosition): number {
+    const base = steadyStateAmplitudeDeg(this.torqueFraction() * this.effectiveEfficiency());
+    if (!this.realism) return base;
+    return base * positionAmplitudeFactor(pos) * this.condition.amplitudeFactor();
+  }
+
   // -------------------- derived state --------------------
 
   private health(): AssemblyHealth {
@@ -121,12 +214,19 @@ export class MovementSim {
   }
 
   diagnostics(): Diagnostic[] {
-    return diagnose(this.health());
+    const base = diagnose(this.health());
+    if (!this.realism) return base;
+    return [
+      ...base,
+      ...conditionDiagnostics(this.condition),
+      ...lubricationDiagnostics(this.lube),
+    ];
   }
 
   /** A movement runs only with power and no blocking (error) faults. */
   canRun(): boolean {
     if (this.mainspring.torque() <= 0) return false;
+    if (this.realism && this.condition.balancePivotBroken) return false;
     return !this.diagnostics().some((d) => d.severity === 'error');
   }
 
@@ -139,12 +239,19 @@ export class MovementSim {
   }
 
   private currentAmplitudeDeg(): number {
-    return this.canRun() ? steadyStateAmplitudeDeg(this.torqueFraction()) : 0;
+    if (!this.canRun()) return 0;
+    return this.amplitudeInPosition(this.position);
   }
 
   private currentRate(): number {
     if (!this.canRun()) return 0;
-    return rateSecPerDay(this.regulator, this.currentAmplitudeDeg(), this.factoryRateOffset);
+    return this.positionRate(this.position);
+  }
+
+  private currentBeatErrorMs(): number {
+    if (!this.canRun()) return 0;
+    const extra = this.realism ? this.condition.beatErrorContribution() : 0;
+    return beatErrorMs(this.residualStudOffset()) + extra;
   }
 
   // -------------------- simulation step --------------------
@@ -192,6 +299,17 @@ export class MovementSim {
     const fourthTurns = escapeAdvance / (2 * Math.PI) / fourthToEscapeRatio();
     const barrelTurns = fourthTurns / barrelToFourthReduction();
     this.mainspring.drainByBarrelTurns(barrelTurns);
+
+    // Layer 4: poor lubrication wears the pivots; an open movement collects dust.
+    if (this.realism) {
+      this.condition.accumulateWear(simSeconds, this.effectiveEfficiency());
+      this.condition.accumulateContamination(simSeconds, true);
+    }
+  }
+
+  /** Power reserve at the current friction, in hours. */
+  private powerReserveHours(): number {
+    return POWER_RESERVE_HOURS * (this.realism ? this.effectiveEfficiency() : 1);
   }
 
   // -------------------- snapshot --------------------
@@ -204,7 +322,7 @@ export class MovementSim {
       wind: this.mainspring.wind,
       mainspringTorque: this.mainspring.torque(),
       amplitudeDeg: this.currentAmplitudeDeg(),
-      beatErrorMs: this.canRun() ? beatErrorMs(this.residualStudOffset()) : 0,
+      beatErrorMs: this.currentBeatErrorMs(),
       rateSecPerDay: this.currentRate(),
       balanceAngle: this.balance.theta,
       escapementState: this.escapement.state,
@@ -212,6 +330,14 @@ export class MovementSim {
       minutesAngle: fourthTheta / 60,
       hoursAngle: fourthTheta / 720,
       diagnostics: this.diagnostics(),
+      realism: this.realism,
+      trainEfficiency: this.effectiveEfficiency(),
+      powerReserveHours: this.powerReserveHours(),
+      position: this.position,
+      contamination: this.condition.contamination,
+      wear: this.condition.wear,
+      balancePivotBroken: this.condition.balancePivotBroken,
+      hairspringBentDeg: this.condition.hairspringBentDeg,
     };
   }
 

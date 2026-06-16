@@ -5,6 +5,8 @@
  */
 
 import type { Diagnostic, PartId } from './types';
+import { classify, LUBE_SITES, OIL_LABELS, type LubeApplication } from './lubrication';
+import type { Condition } from './condition';
 
 /** Parts that must be present (and correct) for the movement to run. */
 export const REQUIRED_FOR_RUN: PartId[] = [
@@ -131,5 +133,88 @@ export function diagnose(h: AssemblyHealth): Diagnostic[] {
     });
   }
 
+  return out;
+}
+
+/** Layer-4 lubrication problems. Warnings: they degrade, they don't stop. */
+export function lubricationDiagnostics(
+  apps: Record<string, LubeApplication | undefined>,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (const site of LUBE_SITES) {
+    const app = apps[site.id];
+    const fault = classify(app);
+    if (fault === 'ok') continue;
+    if (fault === 'dry') {
+      out.push({
+        code: `LUBE_DRY_${site.id}`,
+        message: `${site.label} are running dry. Friction is high there, so amplitude sags and the pivot wears. Oil with ${OIL_LABELS[site.correctOil]}.`,
+        parts: ['mainplate'],
+        severity: 'warning',
+      });
+    } else if (fault === 'starved') {
+      out.push({
+        code: `LUBE_STARVED_${site.id}`,
+        message: `${site.label} are under-oiled — not enough to fill the bearing. Add a touch more ${OIL_LABELS[site.correctOil]}.`,
+        parts: ['mainplate'],
+        severity: 'warning',
+      });
+    } else if (fault === 'flooded') {
+      out.push({
+        code: `LUBE_FLOODED_${site.id}`,
+        message: `${site.label} are over-oiled. Excess oil spreads off the jewel and the gain is unstable. Wick away the surplus.`,
+        parts: ['mainplate'],
+        severity: 'warning',
+      });
+    } else if (fault === 'wrong-oil') {
+      out.push({
+        code: `LUBE_WRONG_${site.id}`,
+        message: `${site.label} have the wrong oil. They want ${OIL_LABELS[site.correctOil]}; friction is higher than it should be.`,
+        parts: ['mainplate'],
+        severity: 'warning',
+      });
+    }
+  }
+  return out;
+}
+
+/** Layer-4 handling/condition problems. A broken pivot is a hard stop. */
+export function conditionDiagnostics(c: Condition): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  if (c.balancePivotBroken) {
+    out.push({
+      code: 'PIVOT_BROKEN',
+      message:
+        'The balance staff pivot is broken — the balance can no longer turn in its jewels, so the watch is dead. Rework the balance (fit a new staff).',
+      parts: ['balance'],
+      severity: 'error',
+    });
+  }
+  if (c.hairspringBentDeg > 2) {
+    out.push({
+      code: 'HAIRSPRING_BENT',
+      message: `The hairspring is distorted (${c.hairspringBentDeg.toFixed(0)}°). Its coils aren't breathing evenly, so the beat is off and the rate drifts between positions. Re-center it on the bench.`,
+      parts: ['balance'],
+      severity: 'warning',
+    });
+  }
+  if (c.contamination > 0.4) {
+    out.push({
+      code: 'CONTAMINATED',
+      message:
+        'Dust and old oil are dragging on the pivots. Amplitude is down across the board — clean the movement and re-oil.',
+      parts: ['mainplate'],
+      severity: 'warning',
+    });
+  }
+  if (c.wear > 0.4) {
+    out.push({
+      code: 'WORN',
+      message:
+        'The pivots are worn from running under-lubricated. A full service is due to restore amplitude and reserve.',
+      parts: ['mainplate'],
+      severity: 'warning',
+    });
+  }
   return out;
 }

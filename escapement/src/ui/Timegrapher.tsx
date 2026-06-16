@@ -6,9 +6,14 @@
 
 import { useEffect, useRef } from 'react';
 import { useGameStore, RATE_TARGET, BEAT_TARGET } from '../state/gameStore';
+import { POSITIONS, type WatchPosition } from '../sim/positions';
 
 function within(value: number, target: number): boolean {
   return Math.abs(value) <= target;
+}
+
+function posLabel(pos: WatchPosition): string {
+  return POSITIONS.find((p) => p.id === pos)?.label ?? pos;
 }
 
 function BeatTrace() {
@@ -114,6 +119,13 @@ export function Timegrapher() {
           />
         </label>
       </div>
+
+      {snapshot.realism && (
+        <div className="reserve-line">
+          Power reserve ≈ <strong>{snapshot.powerReserveHours.toFixed(0)} h</strong> · efficiency{' '}
+          {(snapshot.trainEfficiency * 100).toFixed(0)}% · {posLabel(snapshot.position)}
+        </div>
+      )}
 
       <div className="target-line">
         Target: within ±{RATE_TARGET} s/day · beat error ≤ {BEAT_TARGET} ms

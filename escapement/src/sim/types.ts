@@ -1,5 +1,7 @@
 /** Shared types for the headless movement simulation. */
 
+import type { WatchPosition } from './positions';
+
 /** Every distinct part the player can place on Bench 1. */
 export type PartId =
   | 'mainplate'
@@ -84,6 +86,24 @@ export interface SimSnapshot {
   hoursAngle: number;
   /** Live diagnostics. Empty means the movement is healthy. */
   diagnostics: Diagnostic[];
+
+  // ---- Layer 4 (realism) state ----
+  /** True when Layer-4 realism (lubrication, positions, handling) is active. */
+  realism: boolean;
+  /** Friction efficiency of the lubricated train, 0..1. */
+  trainEfficiency: number;
+  /** Estimated power reserve at the current friction, hours. */
+  powerReserveHours: number;
+  /** Orientation the watch is being tested in. */
+  position: WatchPosition;
+  /** Dust contamination, 0..1. */
+  contamination: number;
+  /** Accumulated pivot wear, 0..1. */
+  wear: number;
+  /** Balance staff pivot broken — needs rework. */
+  balancePivotBroken: boolean;
+  /** Hairspring distortion, degrees. */
+  hairspringBentDeg: number;
 }
 
 /** Player-adjustable regulation inputs. */
