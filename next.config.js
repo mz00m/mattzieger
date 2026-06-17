@@ -14,6 +14,10 @@ const nextConfig = {
         source: '/workforce-3d',
         destination: '/workforce-3d/index.html',
       },
+      {
+        source: '/escapement',
+        destination: '/escapement/index.html',
+      },
     ];
   },
 };
