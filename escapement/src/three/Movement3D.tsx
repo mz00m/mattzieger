@@ -10,7 +10,15 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../state/gameStore';
 import { BENCH1_PARTS, PART_BY_ID } from '../content/parts';
-import { gearGeometry, discGeometry } from './proceduralGear';
+import {
+  gearGeometry,
+  discGeometry,
+  mainspringGeometry,
+  bridgeGeometry,
+  bridgeScrewOffsets,
+  palletForkGeometry,
+  palletJewelSeats,
+} from './proceduralGear';
 import {
   BENCH1_MESHES,
   BENCH1_NODES,
@@ -20,6 +28,31 @@ import type { PartId } from '../sim/types';
 
 const TRANSPARENT_PARTS: PartId[] = ['trainBridge', 'palletBridge', 'balanceCock', 'dial', 'barrelLid'];
 const TRAIN_NODE_IDS: PartId[] = ['barrel', 'centerWheel', 'thirdWheel', 'fourthWheel', 'escapeWheel'];
+const BRIDGE_PARTS: PartId[] = ['trainBridge', 'palletBridge', 'balanceCock'];
+
+/** A blued-steel screw with a slotted head, set proud of a bridge surface. */
+function Screw({
+  position,
+  r,
+  register,
+}: {
+  position: [number, number, number];
+  r: number;
+  register: (m: THREE.Material | null) => void;
+}) {
+  return (
+    <group position={position}>
+      <mesh castShadow>
+        <cylinderGeometry args={[r, r, r * 0.5, 18]} />
+        <meshStandardMaterial ref={register} color="#aab3c2" metalness={0.95} roughness={0.2} />
+      </mesh>
+      <mesh position={[0, r * 0.26, 0]}>
+        <boxGeometry args={[r * 1.9, r * 0.14, r * 0.34]} />
+        <meshStandardMaterial ref={register} color="#2b3038" metalness={0.5} roughness={0.5} />
+      </mesh>
+    </group>
+  );
+}
 
 /** Mesh count from a wheel back to the escape wheel — sets visual spin sign. */
 const MESHES_FROM_ESCAPE: Partial<Record<PartId, number>> = {
@@ -34,7 +67,12 @@ function PartMesh({ id }: { id: PartId }) {
   const def = PART_BY_ID[id];
   const ref = useRef<THREE.Group>(null);
   const spinRef = useRef<THREE.Mesh>(null);
-  const matRef = useRef<THREE.MeshStandardMaterial>(null);
+  // Every material this part owns (body + screws + jewels), so the cutaway fades
+  // them together. A Set dedupes across re-renders of the ref callbacks.
+  const fadeMats = useRef<Set<THREE.Material>>(new Set());
+  const register = (m: THREE.Material | null) => {
+    if (m) fadeMats.current.add(m);
+  };
   const placedAt = useRef<number>(performance.now());
 
   const geometry = useMemo(() => {
@@ -46,11 +84,45 @@ function PartMesh({ id }: { id: PartId }) {
         lightening: ['centerWheel', 'thirdWheel', 'fourthWheel', 'barrel'].includes(id),
       });
     }
+    if (id === 'mainspring' && def.radius) {
+      return mainspringGeometry({
+        innerRadius: def.radius * 0.22,
+        outerRadius: def.radius * 0.94,
+        turns: 5,
+        ribbon: def.radius * 0.07,
+        height: def.thickness ?? 0.5,
+      });
+    }
+    if (BRIDGE_PARTS.includes(id) && def.radius) {
+      return bridgeGeometry({
+        radius: def.radius,
+        thickness: def.thickness ?? 0.25,
+        elongation: id === 'balanceCock' ? 0.55 : 0.4,
+      });
+    }
+    if (id === 'palletFork' && def.radius) {
+      return palletForkGeometry({ scale: def.radius, thickness: def.thickness ?? 0.15 });
+    }
     if (def.radius) {
       return discGeometry(def.radius, def.thickness ?? 0.2);
     }
     return new THREE.BoxGeometry(0.5, 0.2, 0.5);
   }, [def, id]);
+
+  // The hairspring as a real flat Archimedean spiral coiled above the balance.
+  const hairspringGeo = useMemo(
+    () =>
+      id === 'balance'
+        ? mainspringGeometry({
+            innerRadius: def.radius! * 0.08,
+            outerRadius: def.radius! * 0.52,
+            turns: 9,
+            ribbon: 0.02,
+            height: 0.04,
+          })
+        : null,
+    [id, def],
+  );
 
   // Ratio of this wheel's angle to the escape wheel angle (for spin).
   const ratioToEscape = useMemo(() => {
@@ -90,13 +162,13 @@ function PartMesh({ id }: { id: PartId }) {
       }
     }
 
-    // Cutaway transparency.
-    if (matRef.current) {
-      const isClear = TRANSPARENT_PARTS.includes(id);
-      const target = isClear ? 1 - cutaway * 0.92 : 1;
-      matRef.current.opacity = target;
-      matRef.current.transparent = target < 0.99;
-    }
+    // Cutaway transparency — fade the body and all its detail meshes together.
+    const isClear = TRANSPARENT_PARTS.includes(id);
+    const target = isClear ? 1 - cutaway * 0.92 : 1;
+    fadeMats.current.forEach((m) => {
+      m.opacity = target;
+      m.transparent = target < 0.99;
+    });
   });
 
   const metalness = def.group === 'train' || def.group === 'power' ? 0.85 : 0.5;
@@ -106,32 +178,39 @@ function PartMesh({ id }: { id: PartId }) {
     <group ref={ref} position={[def.pos[0], def.pos[1], def.pos[2]]}>
       <mesh ref={spinRef} geometry={geometry} castShadow receiveShadow>
         <meshStandardMaterial
-          ref={matRef}
+          ref={register}
           color={def.color}
           metalness={metalness}
           roughness={roughness}
         />
       </mesh>
 
-      {/* Ruby jewels on the escapement parts, drawn as small red gems. */}
-      {id === 'palletFork' && (
+      {/* Ruby pallet stones, seated on the fork arms where they meet the escape wheel. */}
+      {id === 'palletFork' &&
+        palletJewelSeats(def.radius!).map(([x, , z], i) => (
+          <mesh key={i} position={[x, (def.thickness ?? 0.15) + 0.04, z]} rotation={[0, Math.PI / 4, 0]}>
+            <boxGeometry args={[0.16, 0.1, 0.16]} />
+            <meshStandardMaterial ref={register} color="#c0143c" emissive="#3a0010" metalness={0.2} roughness={0.1} />
+          </mesh>
+        ))}
+
+      {/* Bridges: a central jewel and two anchoring screws, so the plate reads as fitted. */}
+      {BRIDGE_PARTS.includes(id) && (
         <>
-          <mesh position={[0.55, 0.12, 0.2]}>
-            <octahedronGeometry args={[0.12]} />
-            <meshStandardMaterial color="#c0143c" emissive="#3a0010" metalness={0.2} roughness={0.1} />
+          <mesh position={[0, (def.thickness ?? 0.25) * 0.5, 0]}>
+            <cylinderGeometry args={[def.radius! * 0.15, def.radius! * 0.15, (def.thickness ?? 0.25) * 0.7, 16]} />
+            <meshStandardMaterial ref={register} color="#c0143c" emissive="#3a0010" metalness={0.2} roughness={0.12} />
           </mesh>
-          <mesh position={[-0.55, 0.12, 0.2]}>
-            <octahedronGeometry args={[0.12]} />
-            <meshStandardMaterial color="#c0143c" emissive="#3a0010" metalness={0.2} roughness={0.1} />
-          </mesh>
+          {bridgeScrewOffsets(def.radius!).map((sx, i) => (
+            <Screw key={i} position={[sx, (def.thickness ?? 0.25) * 0.5, 0]} r={def.radius! * 0.1} register={register} />
+          ))}
         </>
       )}
 
-      {/* Hairspring suggestion: a thin coiled ring above the balance. */}
-      {id === 'balance' && (
-        <mesh position={[0, 0.25, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[def.radius! * 0.5, 0.03, 8, 48]} />
-          <meshStandardMaterial color="#9fb7c9" metalness={0.7} roughness={0.3} />
+      {/* Hairspring: a flat Archimedean coil sitting just above the balance wheel. */}
+      {id === 'balance' && hairspringGeo && (
+        <mesh position={[0, 0.25, 0]} geometry={hairspringGeo}>
+          <meshStandardMaterial ref={register} color="#9fb7c9" metalness={0.7} roughness={0.3} />
         </mesh>
       )}
     </group>

@@ -47,8 +47,10 @@ export function Bench() {
         <meshStandardMaterial color="#1b212b" roughness={0.9} metalness={0.1} />
       </mesh>
 
-      {/* Movement holder ring */}
-      <mesh position={[0, -0.35, 0]}>
+      {/* Movement holder ring — lies flat on the worktop, encircling the movement.
+          (Without the rotation a Three.js torus stands up in the XY plane, which
+          drew a giant vertical hoop arcing over the plate.) */}
+      <mesh position={[0, -0.35, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <torusGeometry args={[6.6, 0.4, 16, 64]} />
         <meshStandardMaterial color="#2a3441" roughness={0.6} metalness={0.4} />
       </mesh>
