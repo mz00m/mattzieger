@@ -85,6 +85,7 @@ interface GameState {
   lube: LubeMirror;
 
   cutaway: number; // 0 = solid, 1 = fully transparent bridges
+  soundOn: boolean;
   explainerGroup: PartGroup | null;
   seenExplainers: PartGroup[];
   glossaryOpen: boolean;
@@ -114,6 +115,7 @@ interface GameState {
   reworkBalance: () => void;
   shockMovement: (severity: number) => void;
   setCutaway: (v: number) => void;
+  toggleSound: () => void;
   openExplainer: (g: PartGroup) => void;
   closeExplainer: () => void;
   toggleGlossary: () => void;
@@ -153,6 +155,7 @@ export const useGameStore = create<GameState>((set, get) => {
     position: 'dialUp',
     lube: readLube(sim),
     cutaway: 0,
+    soundOn: true,
     explainerGroup: null,
     seenExplainers: persisted.seenExplainers,
     glossaryOpen: false,
@@ -302,6 +305,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
 
     setCutaway: (v) => set({ cutaway: v }),
+    toggleSound: () => set((s) => ({ soundOn: !s.soundOn })),
     openExplainer: (g) => set({ explainerGroup: g }),
     closeExplainer: () => set({ explainerGroup: null }),
     toggleGlossary: () => set((s) => ({ glossaryOpen: !s.glossaryOpen })),

@@ -1,21 +1,76 @@
 /**
- * The 3D bench: camera, lighting, orbit controls, the watchmaker's worktop, and
- * the movement itself. A hidden SimDriver advances the simulation each frame.
+ * The 3D bench: camera, studio lighting with generated environment reflections
+ * (RoomEnvironment — bundled with three, so no network fetch), the leather
+ * worktop and movement holder, and the movement itself. SimDriver advances the
+ * simulation each frame and plays the escapement's tick in time with the beats.
  */
 
-import { Canvas, useFrame } from '@react-three/fiber';
+import { useEffect, useRef } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, ContactShadows } from '@react-three/drei';
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Movement3D } from './Movement3D';
+import { leatherTexture } from './finishes';
 import { useGameStore } from '../state/gameStore';
+import { tickSound } from '../audio/sound';
 
-/** Pumps real frame time into the sim. Lives inside the Canvas for useFrame. */
+/** Pumps real frame time into the sim; chirps a tick on each escapement beat. */
 function SimDriver() {
-  const tick = useGameStore((s) => s.tickRealDt);
+  const lastBeats = useRef(0);
+  const lastTickAt = useRef(0);
   useFrame((_, delta) => {
-    // Clamp delta so a paused/background tab can't jump the watch forward wildly.
-    tick(Math.min(delta, 0.05));
+    const state = useGameStore.getState();
+    // Clamp delta so a backgrounded tab can't jump the watch forward wildly.
+    state.tickRealDt(Math.min(delta, 0.05));
+    const beats = state.sim.escapement.beats;
+    if (state.soundOn && beats > lastBeats.current) {
+      const now = performance.now();
+      if (now - lastTickAt.current > 90) {
+        tickSound();
+        lastTickAt.current = now;
+      }
+    }
+    lastBeats.current = beats;
   });
   return null;
+}
+
+/** Generated studio reflections so the metals actually gleam. */
+function StudioEnvironment() {
+  const { gl, scene } = useThree();
+  useEffect(() => {
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const env = pmrem.fromScene(new RoomEnvironment(), 0.06).texture;
+    scene.environment = env;
+    return () => {
+      scene.environment = null;
+      env.dispose();
+      pmrem.dispose();
+    };
+  }, [gl, scene]);
+  return null;
+}
+
+function Worktop() {
+  return (
+    <group>
+      {/* Leather bench mat. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.42, 0]} receiveShadow>
+        <circleGeometry args={[15, 64]} />
+        <meshStandardMaterial map={leatherTexture()} roughness={0.92} metalness={0.05} />
+      </mesh>
+      {/* Brushed-steel movement holder. */}
+      <mesh position={[0, -0.28, 0]} receiveShadow>
+        <torusGeometry args={[6.15, 0.32, 20, 96]} />
+        <meshStandardMaterial color="#5b6470" roughness={0.42} metalness={0.85} envMapIntensity={0.7} />
+      </mesh>
+      <mesh position={[0, -0.34, 0]}>
+        <cylinderGeometry args={[6.15, 6.45, 0.14, 96]} />
+        <meshStandardMaterial color="#3a414c" roughness={0.5} metalness={0.8} />
+      </mesh>
+    </group>
+  );
 }
 
 export function Bench() {
@@ -23,46 +78,38 @@ export function Bench() {
     <Canvas
       shadows
       dpr={[1, 2]}
-      camera={{ position: [6, 8, 11], fov: 42 }}
-      gl={{ antialias: true }}
+      camera={{ position: [5.2, 8.2, 10.8], fov: 40 }}
+      gl={{ antialias: true, alpha: true }}
     >
-      <color attach="background" args={['#11151c']} />
-      <fog attach="fog" args={['#11151c', 22, 40]} />
+      <StudioEnvironment />
 
-      {/* Lighting only — no remote HDR, so the bench works fully offline. */}
-      <hemisphereLight args={['#dfe8f5', '#1a1f27', 0.7]} />
-      <ambientLight intensity={0.35} />
+      <ambientLight intensity={0.25} />
+      {/* Key light, warm, like a bench lamp. */}
       <directionalLight
-        position={[8, 14, 6]}
-        intensity={1.8}
+        position={[6, 12, 5]}
+        intensity={1.6}
+        color="#fff2dd"
         castShadow
         shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0002}
       />
-      <directionalLight position={[-8, 6, -4]} intensity={0.55} color="#9fc6ff" />
-      <pointLight position={[0, 6, 4]} intensity={0.4} />
+      {/* Cool fill from the window side. */}
+      <directionalLight position={[-9, 7, -5]} intensity={0.45} color="#a9c2e8" />
+      <spotLight position={[0, 11, 2]} angle={0.55} penumbra={0.9} intensity={0.6} color="#ffe9c4" />
 
-      {/* Worktop */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.4, 0]} receiveShadow>
-        <circleGeometry args={[16, 64]} />
-        <meshStandardMaterial color="#1b212b" roughness={0.9} metalness={0.1} />
-      </mesh>
-
-      {/* Movement holder ring */}
-      <mesh position={[0, -0.35, 0]}>
-        <torusGeometry args={[6.6, 0.4, 16, 64]} />
-        <meshStandardMaterial color="#2a3441" roughness={0.6} metalness={0.4} />
-      </mesh>
-
+      <Worktop />
       <Movement3D />
 
-      <ContactShadows position={[0, -0.34, 0]} opacity={0.5} scale={26} blur={2.2} far={10} />
+      <ContactShadows position={[0, -0.4, 0]} opacity={0.55} scale={26} blur={2.4} far={9} />
 
       <OrbitControls
         enablePan={false}
-        minDistance={6}
-        maxDistance={26}
-        maxPolarAngle={Math.PI / 2.05}
-        target={[0, 0.8, 1]}
+        enableDamping
+        dampingFactor={0.08}
+        minDistance={4.5}
+        maxDistance={24}
+        maxPolarAngle={Math.PI / 2.08}
+        target={[0.4, 0.7, 1.2]}
       />
 
       <SimDriver />

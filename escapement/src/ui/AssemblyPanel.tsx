@@ -1,28 +1,21 @@
 /**
- * Assembly + bench controls. The tray lists every part in build order; the next
- * one is highlighted. Placing parts is forgiving (Layer 1). Below the tray are
- * the running controls — wind, time scale — and the "bench checks" that let the
- * player experience the escapement faults the diagnostics explain.
+ * The parts tray. Every part in build order — the next one glows, matching the
+ * glowing socket on the bench. Click a name to learn what it is; place from here
+ * or by clicking the socket in 3D. Bench checks (the deliberate faults) live in
+ * a fold-out so the tray stays a tray.
  */
 
 import { useGameStore } from '../state/gameStore';
 import { ASSEMBLY_ORDER, GROUP_COLORS, PART_BY_ID } from '../content/parts';
+import { ensureAudio, placeSound } from '../audio/sound';
 import type { PartId } from '../sim/types';
-
-const TIME_SCALES = [1, 60, 600, 3600];
 
 export function AssemblyPanel() {
   const placed = useGameStore((s) => s.placed);
   const placePart = useGameStore((s) => s.placePart);
   const removePart = useGameStore((s) => s.removePart);
-  const placeNext = useGameStore((s) => s.placeNext);
   const resetBench = useGameStore((s) => s.resetBench);
   const setInfoPart = useGameStore((s) => s.setInfoPart);
-
-  const wind = useGameStore((s) => s.wind);
-  const snapshot = useGameStore((s) => s.snapshot);
-  const timeScale = useGameStore((s) => s.timeScale);
-  const setTimeScale = useGameStore((s) => s.setTimeScale);
 
   const clickEngaged = useGameStore((s) => s.clickEngaged);
   const setClickEngaged = useGameStore((s) => s.setClickEngaged);
@@ -32,7 +25,12 @@ export function AssemblyPanel() {
   const setMisMeshed = useGameStore((s) => s.setMisMeshed);
 
   const nextPart = ASSEMBLY_ORDER.find((p) => !placed.includes(p));
-  const allPlaced = !nextPart;
+
+  const place = (id: PartId) => {
+    ensureAudio();
+    placePart(id);
+    placeSound();
+  };
 
   return (
     <div className="panel assembly">
@@ -54,7 +52,7 @@ export function AssemblyPanel() {
                   remove
                 </button>
               ) : (
-                <button className="mini" onClick={() => placePart(id)}>
+                <button className={`mini ${isNext ? 'glow' : ''}`} onClick={() => place(id)}>
                   place
                 </button>
               )}
@@ -64,13 +62,13 @@ export function AssemblyPanel() {
       </div>
 
       <div className="row gap">
-        {!allPlaced ? (
-          <button className="primary" onClick={placeNext}>
-            Place next: {PART_BY_ID[nextPart!].label}
+        {nextPart ? (
+          <button className="primary" onClick={() => place(nextPart)}>
+            Place next: {PART_BY_ID[nextPart].label}
           </button>
         ) : (
           <button className="primary" disabled>
-            Fully assembled
+            Fully assembled ✓
           </button>
         )}
         <button className="ghost" onClick={resetBench}>
@@ -78,35 +76,8 @@ export function AssemblyPanel() {
         </button>
       </div>
 
-      <div className="control-block">
-        <div className="control-head">Power</div>
-        <div className="wind-bar">
-          <div className="wind-fill" style={{ width: `${Math.round(snapshot.wind * 100)}%` }} />
-          <span>{Math.round(snapshot.wind * 100)}% wound</span>
-        </div>
-        <div className="row gap">
-          <button onClick={() => wind(1)}>Wind +1 turn</button>
-          <button onClick={() => wind(7)}>Full wind</button>
-        </div>
-      </div>
-
-      <div className="control-block">
-        <div className="control-head">Time scale</div>
-        <div className="row gap">
-          {TIME_SCALES.map((ts) => (
-            <button
-              key={ts}
-              className={timeScale === ts ? 'active' : ''}
-              onClick={() => setTimeScale(ts)}
-            >
-              {ts}×
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="control-block">
-        <div className="control-head">Bench checks</div>
+      <details className="bench-checks">
+        <summary>Bench checks — break it on purpose</summary>
         <label className="check">
           <input
             type="checkbox"
@@ -136,9 +107,9 @@ export function AssemblyPanel() {
           </select>
         </label>
         <p className="hint small">
-          Toggle these to break the movement and read how the diagnosis traces the cause.
+          Toggle these to stop the movement, then read how the diagnosis traces the cause.
         </p>
-      </div>
+      </details>
     </div>
   );
 }

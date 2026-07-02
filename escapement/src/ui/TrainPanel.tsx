@@ -14,8 +14,7 @@ export function TrainPanel() {
   let running = 1;
 
   return (
-    <div className="panel train-panel">
-      <div className="panel-title">Going train</div>
+    <div className="train-panel">
       <table className="ratio-table">
         <tbody>
           {BENCH1_MESHES.map((m) => {

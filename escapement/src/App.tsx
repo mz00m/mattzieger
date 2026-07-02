@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Bench } from './three/Bench';
 import { AssemblyPanel } from './ui/AssemblyPanel';
 import { Timegrapher } from './ui/Timegrapher';
@@ -7,12 +8,14 @@ import { Explainer } from './ui/Explainer';
 import { Glossary } from './ui/Glossary';
 import { PartInfo } from './ui/PartInfo';
 import { CarePanel } from './ui/CarePanel';
+import { ObjectiveBanner, ControlBar, Celebration } from './ui/Hud';
+import { ensureAudio } from './audio/sound';
 import { useGameStore } from './state/gameStore';
 
 const LAYERS = [
-  { n: 1, label: 'Placement', desc: 'Learn the parts and where they live.' },
-  { n: 2, label: 'Mechanism', desc: 'Make power flow — get it running.' },
-  { n: 3, label: 'Regulation', desc: 'Tune it to time on the timegrapher.' },
+  { n: 1, label: 'Placement' },
+  { n: 2, label: 'Mechanism' },
+  { n: 3, label: 'Regulation' },
 ] as const;
 
 function TopBar() {
@@ -27,19 +30,23 @@ function TopBar() {
     <header className="topbar">
       <div className="brand">
         <span className="brand-mark">◷</span> Escapement
-        <span className="brand-sub">learn the craft of the mechanical watch</span>
+        <span className="brand-sub">the craft of the mechanical watch</span>
       </div>
 
       <div className="layers">
         {LAYERS.map((l) => (
-          <div key={l.n} className={`layer-pip ${layer === l.n ? 'active' : layer > l.n ? 'done' : ''}`}>
+          <div
+            key={l.n}
+            className={`layer-pip ${layer === l.n && !realism ? 'active' : layer > l.n || realism ? 'done' : ''}`}
+          >
             <span className="layer-n">{l.n}</span>
-            <div className="layer-text">
-              <strong>{l.label}</strong>
-              <em>{l.desc}</em>
-            </div>
+            <strong>{l.label}</strong>
           </div>
         ))}
+        <div className={`layer-pip mastery ${realism ? 'active' : ''}`}>
+          <span className="layer-n">4</span>
+          <strong>Mastery</strong>
+        </div>
       </div>
 
       <div className="topbar-right">
@@ -67,6 +74,13 @@ function TopBar() {
 }
 
 export default function App() {
+  // Browsers require a user gesture before audio can play — arm it once.
+  useEffect(() => {
+    const arm = () => ensureAudio();
+    window.addEventListener('pointerdown', arm, { once: true });
+    return () => window.removeEventListener('pointerdown', arm);
+  }, []);
+
   return (
     <div className="app">
       <TopBar />
@@ -77,19 +91,25 @@ export default function App() {
 
         <main className="canvas-wrap">
           <Bench />
+          <ObjectiveBanner />
+          <ControlBar />
         </main>
 
         <aside className="right">
           <Timegrapher />
           <Diagnostics />
           <CarePanel />
-          <TrainPanel />
+          <details className="panel collapsible">
+            <summary>Going train — the ratios</summary>
+            <TrainPanel />
+          </details>
         </aside>
       </div>
 
       <Explainer />
       <Glossary />
       <PartInfo />
+      <Celebration />
     </div>
   );
 }
