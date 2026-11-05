@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, tooLarge } from '@/lib/rateLimit';
 import { findFigureById } from '@/lib/customFigures';
 import { quickResearch, deepResearch } from '@/lib/researchAgent';
 import { getFromServerCache, setInServerCache } from '@/lib/researchCache';
 
 // Research a SINGLE figure — called once per guest by the client
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'research') ?? tooLarge(request, 2000);
+  if (limited) return limited;
+
   try {
     const body = await request.json();
     const { figureId, depth = 'quick' } = body as {

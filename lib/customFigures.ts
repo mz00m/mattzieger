@@ -13,6 +13,8 @@ export function getAllFigures(): HistoricalFigure[] {
   return [...FIGURES, ...customFigures];
 }
 
+const MAX_CUSTOM_FIGURES = 200;
+
 export function addCustomFigure(figure: HistoricalFigure): void {
   // Don't add duplicates
   if (
@@ -21,6 +23,9 @@ export function addCustomFigure(figure: HistoricalFigure): void {
   ) {
     return;
   }
+  // Anyone can register figures, and the list is shared across visitors on
+  // this instance; keep it bounded.
+  if (customFigures.length >= MAX_CUSTOM_FIGURES) customFigures.shift();
   customFigures.push(figure);
 }
 
