@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, tooLarge } from '@/lib/rateLimit';
 import { matchVoicesForFigures, type FigureVoiceRequest } from '@/lib/voiceDiscovery';
 
 /**
@@ -9,6 +10,9 @@ import { matchVoicesForFigures, type FigureVoiceRequest } from '@/lib/voiceDisco
  * curated library/collections).
  */
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'voices') ?? tooLarge(request, 50000);
+  if (limited) return limited;
+
   try {
     const body = await request.json();
     const { figures, forceRematch } = body as { figures: FigureVoiceRequest[]; forceRematch?: boolean };
@@ -21,6 +25,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Always force re-match for fresh sessions to use improved matching
+    if (figures.length > 12) {
+      return NextResponse.json({ error: 'At most 12 figures' }, { status: 400 });
+    }
+
     const assignments = await matchVoicesForFigures(figures, forceRematch ?? true);
 
     return NextResponse.json({

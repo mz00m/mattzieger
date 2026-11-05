@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, tooLarge } from '@/lib/rateLimit';
 import type { HistoricalFigure } from '@/lib/figures';
 import {
   generateCustomFigure,
@@ -14,6 +15,9 @@ export async function GET() {
 
 // PUT: Register an already-created custom figure (e.g. from session storage)
 export async function PUT(request: NextRequest) {
+  const limited = rateLimit(request, 'customFigure') ?? tooLarge(request, 20_000);
+  if (limited) return limited;
+
   try {
     const body = await request.json();
     const { figure } = body as { figure: HistoricalFigure };
@@ -38,11 +42,14 @@ export async function PUT(request: NextRequest) {
 
 // POST: Create a new custom figure
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'customFigure') ?? tooLarge(request, 2_000);
+  if (limited) return limited;
+
   try {
     const body = await request.json();
     const { name } = body as { name: string };
 
-    if (!name || name.trim().length < 2) {
+    if (!name || name.trim().length < 2 || name.length > 100) {
       return NextResponse.json(
         { error: 'Please provide a valid name' },
         { status: 400 }
